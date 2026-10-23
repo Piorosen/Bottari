@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import AVFoundation
 import BottariCore
 import BottariSFTP
 import BottariTransfer
@@ -72,6 +73,7 @@ enum SnapshotRenderer {
         await renderTransfers(into: directory)
         await renderGallery(into: directory)
         await renderEditor(into: directory)
+        await renderPlayer(into: directory)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -192,6 +194,78 @@ enum SnapshotRenderer {
         await model.save()
         check("saves again without a clash", model.conflict == nil && ((try? String(contentsOf: file, encoding: .utf8)) ?? "").hasSuffix("# more\n"))
         try? report.joined(separator: "\n").write(to: directory.appending(path: "editor-check.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// The player on a generated movie, plus player-check.txt with what mpv reported
+    /// while drawing into an off-screen Metal layer.
+    private static func renderPlayer(into directory: URL) async {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bottari-player-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let movie = folder.appending(path: "sample.mp4")
+        await makeMovie(at: movie)
+        try? "1\n00:00:00,000 --> 00:00:02,000\n안녕하세요\n".write(to: folder.appending(path: "sample.srt"), atomically: true, encoding: .utf8)
+        let server = PreviewServer("nas", bytesPerSecond: 50_000_000)
+        guard let items = try? await server.list(RemotePath(folder.path)), let item = items.first(where: { $0.name == "sample.mp4" }) else { return }
+        let context = ViewerContext(provider: server, site: nil, item: item, siblings: items)
+
+        let model = PlayerModel(context: context)
+        let window = NSWindow(contentRect: CGRect(x: -20_000, y: -20_000, width: 640, height: 360), styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        let host = NSView(frame: CGRect(x: 0, y: 0, width: 640, height: 360))
+        let layer = CAMetalLayer()
+        layer.drawableSize = CGSize(width: 1280, height: 720)
+        host.layer = layer
+        host.wantsLayer = true
+        window.contentView = host
+        window.orderFrontRegardless()
+        model.attach(to: layer)
+        try? await Task.sleep(for: .seconds(2.5))
+        let state = model.state
+        let lines = [
+            "duration \(state.duration)",
+            "position \(state.position)",
+            "paused \(state.isPaused)",
+            "hwdec \(state.hardwareDecoder ?? "nil")",
+            "codec \(state.videoCodec ?? "nil")",
+            "size \(state.videoSize.map { "\(Int($0.width))x\(Int($0.height))" } ?? "nil")",
+            "tracks \(state.tracks.map { "\($0.kind.rawValue):\($0.label)\($0.isSelected ? "*" : "")" })",
+            "reads \(model.reads.map(\.offset))",
+            "error \(state.error ?? model.failure ?? "none")",
+        ]
+        try? lines.joined(separator: "\n").write(to: directory.appending(path: "player-check.txt"), atomically: true, encoding: .utf8)
+        model.close()
+        window.close()
+
+        let id = Viewers.register(context)
+        await render(PlayerWindow(contextID: id), size: CGSize(width: 900, height: 520), appearance: .darkAqua,
+                     to: directory.appending(path: "player-dark.png"))
+    }
+
+    /// A short H.264 movie, so the player has something to open.
+    private static func makeMovie(at url: URL) async {
+        guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 640, AVVideoHeightKey: 360])
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: 640, kCVPixelBufferHeightKey as String: 360,
+        ])
+        writer.add(input)
+        writer.startWriting()
+        writer.startSession(atSourceTime: .zero)
+        for frame in 0..<90 {
+            while !input.isReadyForMoreMediaData { try? await Task.sleep(for: .milliseconds(5)) }
+            var buffer: CVPixelBuffer?
+            guard let pool = adaptor.pixelBufferPool else { break }
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
+            guard let buffer else { continue }
+            CVPixelBufferLockBaseAddress(buffer, [])
+            memset(CVPixelBufferGetBaseAddress(buffer), Int32(frame * 3 % 255), CVPixelBufferGetDataSize(buffer))
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(frame), timescale: 30))
+        }
+        input.markAsFinished()
+        await writer.finishWriting()
     }
 
     private static func sampleFolder() -> URL {

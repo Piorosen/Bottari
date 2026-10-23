@@ -143,7 +143,9 @@ final class Workspace {
             openViewer("gallery", for: item, in: pane)
         case .text where (item.size ?? 0) <= EditorModel.sizeLimit:
             openViewer("editor", for: item, in: pane)
-        case .text, .video, .other:
+        case .video:
+            openViewer("player", for: item, in: pane)
+        case .text, .other:
             pane.selection = [item.id]
             pane.toggleQuickLook()
         }
