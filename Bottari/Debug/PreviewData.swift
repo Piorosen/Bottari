@@ -70,6 +70,30 @@ extension SavedSite {
             proxyJump: ["bastion"],
             readOnly: true
         ),
+        SavedSite(
+            name: "Google Drive",
+            endpoint: SFTPEndpoint(host: "", username: ""),
+            authentication: .password,
+            tag: .personal,
+            kind: .googleDrive({
+                var drive = SavedSite.DriveSettings()
+                drive.clientID = "1234567890-bottari.apps.googleusercontent.com"
+                drive.account = "me@example.com"
+                return drive
+            }())
+        ),
+        SavedSite(
+            name: "s3-assets",
+            endpoint: SFTPEndpoint(host: "", username: ""),
+            authentication: .password,
+            kind: .s3({
+                var s3 = SavedSite.S3Settings()
+                s3.bucket = "bottari-assets"
+                s3.region = "ap-northeast-2"
+                s3.accessKey = "AKIAEXAMPLE"
+                return s3
+            }())
+        ),
     ]
 }
 

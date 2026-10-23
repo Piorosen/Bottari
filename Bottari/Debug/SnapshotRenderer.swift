@@ -32,12 +32,17 @@ enum SnapshotRenderer {
         let folder = sampleFolder()
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             await render(
-                SiteManagerSheet(library: library, initialSelection: prod.id) { _, _ in },
+                SiteManagerSheet(library: library, initialSelection: prod.id) { (_: any FileProvider, _: SavedSite) in },
                 size: CGSize(width: 880, height: 1060), appearance: appearance,
                 to: directory.appending(path: "sites-prod-\(name).png")
             )
             await render(
-                SiteManagerSheet(library: library, initialSelection: nas.id, initialError: SiteConnectError.passwordMissing(site: nas.name)) { _, _ in },
+                SiteManagerSheet(library: library, initialSelection: library.sites[4].id) { (_: any FileProvider, _: SavedSite) in },
+                size: CGSize(width: 880, height: 760), appearance: appearance,
+                to: directory.appending(path: "sites-drive-\(name).png")
+            )
+            await render(
+                SiteManagerSheet(library: library, initialSelection: nas.id, initialError: SiteConnectError.passwordMissing(site: nas.name)) { (_: any FileProvider, _: SavedSite) in },
                 size: CGSize(width: 880, height: 640), appearance: appearance,
                 to: directory.appending(path: "sites-password-\(name).png")
             )

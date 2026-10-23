@@ -2,6 +2,15 @@
   "originHash" : "cb2306a522fc557bee357d93668a17e4226fcf9a548fc0f766b358c4eda98ece",
   "pins" : [
     {
+      "identity" : "appauth-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/openid/AppAuth-iOS.git",
+      "state" : {
+        "revision" : "a7caeda164dc5108bf4649472b28a5af65dc6f33",
+        "version" : "2.1.0"
+      }
+    },
+    {
       "identity" : "bigint",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/attaswift/BigInt.git",

@@ -13,6 +13,7 @@
 		B0771A0000000000000000A4 /* BottariEditor in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C4 /* BottariEditor */; };
 		B0771A0000000000000000A5 /* BottariPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C5 /* BottariPlayer */; };
 		B0771A0000000000000000A6 /* BottariRemote in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C6 /* BottariRemote */; };
+		B0771A0000000000000000A7 /* BottariCloud in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C7 /* BottariCloud */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +39,7 @@
 				B0771A0000000000000000A4 /* BottariEditor in Frameworks */,
 				B0771A0000000000000000A5 /* BottariPlayer in Frameworks */,
 				B0771A0000000000000000A6 /* BottariRemote in Frameworks */,
+				B0771A0000000000000000A7 /* BottariCloud in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,6 +88,7 @@
 				B0771A0000000000000000C4 /* BottariEditor */,
 				B0771A0000000000000000C5 /* BottariPlayer */,
 				B0771A0000000000000000C6 /* BottariRemote */,
+				B0771A0000000000000000C7 /* BottariCloud */,
 			);
 			productName = Bottari;
 			productReference = B0771A000000000000000010 /* Bottari.app */;
@@ -312,6 +315,10 @@
 		B0771A0000000000000000C6 /* BottariRemote */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BottariRemote;
+		};
+		B0771A0000000000000000C7 /* BottariCloud */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BottariCloud;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

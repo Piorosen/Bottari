@@ -24,12 +24,25 @@ extension SavedSite.Tag {
 }
 
 extension SavedSite {
-    /// `user@host:port via jump`, as the site list shows it.
+    /// `user@host:port via jump` (or the bucket, or the Google account), as the site list shows it.
     var summary: String {
+        switch kind {
+        case .s3(let settings): return "s3://\(settings.bucket)"
+        case .googleDrive(let settings): return settings.account.isEmpty ? "로그인 필요" : settings.account
+        case .sftp: break
+        }
         var text = "\(endpoint.username)@\(endpoint.host)"
         if endpoint.port != 22 { text += ":\(endpoint.port)" }
         if !proxyJump.isEmpty { text += " via \(proxyJump.joined(separator: ", "))" }
         return text
+    }
+
+    var symbol: String {
+        switch kind {
+        case .sftp: "server.rack"
+        case .s3: "cylinder"
+        case .googleDrive: "cloud"
+        }
     }
 }
 

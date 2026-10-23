@@ -25,6 +25,7 @@ let package = Package(
         .package(url: "https://github.com/mpvkit/MPVKit.git", exact: "1.0.0"),
         // 1.12 and later need the separately installed Metal toolchain; 1.19 and later
         // also run a build plugin that Xcode makes you approve first.
+        .package(url: "https://github.com/openid/AppAuth-iOS.git", from: "2.0.0"),
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", .upToNextMinor(from: "1.11.2")),
         // 1.1.0, pinned by commit: it depends on a CryptoSwift branch, which a version requirement refuses.
         .package(url: "https://github.com/royalapplications/royalvnc.git", revision: "8e9d3bb9cd041266df0659651f646fef251b4c71"),
@@ -46,7 +47,11 @@ let package = Package(
         .target(name: "BottariTransfer", dependencies: ["BottariCore"]),
         .target(name: "BottariEditor", dependencies: [.product(name: "Highlightr", package: "Highlightr")]),
         .target(name: "BottariPlayer", dependencies: ["BottariCore", .product(name: "MPVKit", package: "MPVKit")]),
-        .target(name: "BottariCloud", dependencies: ["BottariCore", .product(name: "Crypto", package: "swift-crypto")]),
+        .target(name: "BottariCloud", dependencies: [
+            "BottariCore",
+            .product(name: "Crypto", package: "swift-crypto"),
+            .product(name: "AppAuth", package: "AppAuth-iOS"),
+        ]),
         .testTarget(name: "BottariCloudTests", dependencies: ["BottariCore", "BottariCloud"]),
         .target(name: "BottariRemote", dependencies: [
             .product(name: "SwiftTerm", package: "SwiftTerm"),

@@ -1,4 +1,5 @@
 import AppKit
+import BottariCore
 import BottariSFTP
 import SwiftUI
 
@@ -8,7 +9,7 @@ import SwiftUI
 struct SiteManagerSheet: View {
     let library: SiteLibrary
     /// Called with the open connection and the site it belongs to.
-    let onOpen: (SFTPFileProvider, SavedSite) -> Void
+    let onOpen: (any FileProvider, SavedSite) -> Void
 
     private enum Activity {
         case testing, opening
@@ -28,6 +29,7 @@ struct SiteManagerSheet: View {
     @State private var outcome: Outcome?
     @State private var pendingDelete: SavedSite?
     @FocusState private var secretFocused: Bool
+    @State private var isSigningIn = false
 
     /// `initialError` is why opening `initialSelection` from the pane menu
     /// failed, shown straight away.
@@ -35,7 +37,7 @@ struct SiteManagerSheet: View {
         library: SiteLibrary,
         initialSelection: SavedSite.ID? = nil,
         initialError: (any Error)? = nil,
-        onOpen: @escaping (SFTPFileProvider, SavedSite) -> Void
+        onOpen: @escaping (any FileProvider, SavedSite) -> Void
     ) {
         self.library = library
         self.onOpen = onOpen
@@ -112,14 +114,17 @@ struct SiteManagerSheet: View {
                     .padding([.horizontal, .top], 10)
             }
             List(selection: $selection) {
-                if !library.sites.isEmpty {
-                    Section("서버") {
-                        ForEach(library.sites) { site in
-                            SiteRow(site: site, isNew: library.recentlyImported.contains(site.id))
-                                .tag(site.id as SavedSite.ID?)
-                                .contextMenu {
-                                    Button("지우기…", role: .destructive) { pendingDelete = site }
-                                }
+                ForEach([("서버", true), ("클라우드", false)], id: \.0) { title, servers in
+                    let group = library.sites.filter { $0.isSFTP == servers }
+                    if !group.isEmpty {
+                        Section(title) {
+                            ForEach(group) { site in
+                                SiteRow(site: site, isNew: library.recentlyImported.contains(site.id))
+                                    .tag(site.id as SavedSite.ID?)
+                                    .contextMenu {
+                                        Button("지우기…", role: .destructive) { pendingDelete = site }
+                                    }
+                            }
                         }
                     }
                 }
@@ -193,7 +198,10 @@ struct SiteManagerSheet: View {
                 password: $password,
                 passphrase: $passphrase,
                 jumpHostNames: library.jumpHostNames,
-                secretFocused: $secretFocused
+                secretFocused: $secretFocused,
+                isSigningIn: isSigningIn,
+                signIn: { Task { await signIn(id) } },
+                signOut: { if let site = library.site(id) { library.signOutOfGoogle(site) } }
             )
             .disabled(activity != nil)
             .onChange(of: library.site(id)) {
@@ -254,6 +262,14 @@ struct SiteManagerSheet: View {
 
     private var canConnect: Bool {
         guard let site = current else { return false }
+        switch site.kind {
+        case .s3(let settings):
+            return !settings.bucket.isEmpty && !settings.accessKey.isEmpty
+        case .googleDrive(let settings):
+            return !settings.clientID.isEmpty && !settings.account.isEmpty
+        case .sftp:
+            break
+        }
         let endpoint = site.endpoint
         guard !endpoint.host.trimmingCharacters(in: .whitespaces).isEmpty,
               !endpoint.username.trimmingCharacters(in: .whitespaces).isEmpty,
@@ -268,8 +284,12 @@ struct SiteManagerSheet: View {
     private func run(_ kind: Activity) async {
         guard let site = current else { return }
         var typed: [String: String] = [:]
-        if !password.isEmpty { typed[site.passwordKey] = password }
-        if !passphrase.isEmpty { typed[site.passphraseKey] = passphrase }
+        if case .s3 = site.kind {
+            if !password.isEmpty { typed[site.s3SecretKey] = password }
+        } else {
+            if !password.isEmpty { typed[site.passwordKey] = password }
+            if !passphrase.isEmpty { typed[site.passphraseKey] = passphrase }
+        }
         activity = kind
         lastActivity = kind
         outcome = nil
@@ -283,12 +303,19 @@ struct SiteManagerSheet: View {
             case .testing:
                 let elapsed = (ContinuousClock.now - started).components
                 let milliseconds = elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
-                var parts = ["연결 성공", "홈 \(provider.home.string)"]
-                if !site.proxyJump.isEmpty { parts.append("\(site.proxyJump.joined(separator: " → ")) 경유") }
-                parts.append(provider.canRunCommands ? "명령 실행 가능" : "SFTP 전용")
-                parts.append("\(milliseconds) ms")
+                var parts = ["연결 성공"]
+                if let server = provider as? SFTPFileProvider {
+                    parts.append("홈 \(server.home.string)")
+                    if !site.proxyJump.isEmpty { parts.append("\(site.proxyJump.joined(separator: " → ")) 경유") }
+                    parts.append(server.canRunCommands ? "명령 실행 가능" : "SFTP 전용")
+                    parts.append("\(milliseconds) ms")
+                    await server.disconnect()
+                } else {
+                    let count = (try? await provider.list(.root).count) ?? 0
+                    parts.append("맨 위에 항목 \(count)개")
+                    parts.append("\(milliseconds) ms")
+                }
                 outcome = .success(parts.joined(separator: " · "))
-                await provider.disconnect()
             case .opening:
                 onOpen(provider, site)
                 dismiss()
@@ -296,6 +323,19 @@ struct SiteManagerSheet: View {
         } catch {
             outcome = Self.failure(error)
             if case .failure(_, _, true) = outcome { secretFocused = true }
+        }
+    }
+
+    private func signIn(_ id: SavedSite.ID) async {
+        guard let site = library.site(id) else { return }
+        isSigningIn = true
+        defer { isSigningIn = false }
+        do {
+            try await library.signInToGoogle(site, clientSecret: passphrase)
+            passphrase = ""
+            outcome = .success("Google 계정으로 로그인했어요")
+        } catch {
+            outcome = Self.failure(error)
         }
     }
 
@@ -401,8 +441,136 @@ private struct SiteForm: View {
     let jumpHostNames: [String]
     var secretFocused: FocusState<Bool>.Binding
 
+    let isSigningIn: Bool
+    let signIn: () -> Void
+    let signOut: () -> Void
+
     var body: some View {
         Form {
+            Section {
+                Picker("종류", selection: kindChoice) {
+                    Label("SFTP", systemImage: "server.rack").tag(0)
+                    Label("S3", systemImage: "cylinder").tag(1)
+                    Label("Google Drive", systemImage: "cloud").tag(2)
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(kindHint)
+                    .foregroundStyle(.secondary)
+            }
+            switch site.kind {
+            case .sftp:
+                sftpSections
+            case .s3:
+                s3Section
+            case .googleDrive:
+                driveSection
+            }
+            safetySection
+        }
+        .formStyle(.grouped)
+    }
+
+    private var kindHint: String {
+        switch site.kind {
+        case .sftp: "SSH 서버 · 터미널과 원격 화면도 이 연결로 열어요."
+        case .s3: "AWS · Cloudflare R2 · MinIO 같은 S3 호환 저장소"
+        case .googleDrive: "OAuth 로그인 · 공유 드라이브 포함"
+        }
+    }
+
+    private var kindChoice: Binding<Int> {
+        Binding(
+            get: {
+                switch site.kind {
+                case .sftp: 0
+                case .s3: 1
+                case .googleDrive: 2
+                }
+            },
+            set: { choice in
+                switch (choice, site.kind) {
+                case (0, .sftp), (1, .s3), (2, .googleDrive): break
+                case (1, _): site.kind = .s3(SavedSite.S3Settings())
+                case (2, _): site.kind = .googleDrive(SavedSite.DriveSettings())
+                default: site.kind = .sftp
+                }
+            }
+        )
+    }
+
+    private var s3: Binding<SavedSite.S3Settings> {
+        Binding(
+            get: { if case .s3(let settings) = site.kind { settings } else { SavedSite.S3Settings() } },
+            set: { site.kind = .s3($0) }
+        )
+    }
+
+    private var drive: Binding<SavedSite.DriveSettings> {
+        Binding(
+            get: { if case .googleDrive(let settings) = site.kind { settings } else { SavedSite.DriveSettings() } },
+            set: { site.kind = .googleDrive($0) }
+        )
+    }
+
+    @ViewBuilder
+    private var s3Section: some View {
+        Section {
+            TextField("이름", text: $site.name)
+            TextField("버킷", text: s3.bucket)
+            TextField("리전", text: s3.region, prompt: Text("us-east-1"))
+            TextField("엔드포인트", text: s3.endpoint, prompt: Text("AWS 기본값"))
+            Toggle("경로 방식 주소 (MinIO)", isOn: s3.usesPathStyle)
+            TextField("액세스 키", text: s3.accessKey)
+            SecureField("비밀 키", text: $password, prompt: Text("비워 두면 저장된 키를 써요"))
+                .focused(secretFocused)
+        } header: {
+            Text("S3")
+        } footer: {
+            Text("MinIO, R2 같은 S3 호환 저장소도 주소만 바꾸면 돼요. 비밀 키는 연결에 성공하면 키체인에 저장해요.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var driveSection: some View {
+        Section {
+            TextField("이름", text: $site.name)
+            LabeledContent {
+                if isSigningIn {
+                    ProgressView().controlSize(.small)
+                } else if drive.wrappedValue.account.isEmpty {
+                    Button("Google 계정으로 로그인", action: signIn)
+                        .disabled(drive.wrappedValue.clientID.isEmpty)
+                } else {
+                    Button("로그아웃", action: signOut)
+                }
+            } label: {
+                Text(drive.wrappedValue.account.isEmpty ? "연결된 Google 계정이 없어요" : "로그인됨 · \(drive.wrappedValue.account)")
+                Text(drive.wrappedValue.account.isEmpty ? "브라우저에서 Google 로그인 창이 열려요" : "토큰은 키체인에 있어요 · 공유 드라이브 포함")
+            }
+            TextField("OAuth 클라이언트 ID", text: drive.clientID, prompt: Text("…apps.googleusercontent.com"))
+            SecureField("클라이언트 보안 비밀", text: $passphrase, prompt: Text("데스크톱 앱 클라이언트의 secret · 키체인에 저장"))
+        } header: {
+            Text("Google Drive")
+        } footer: {
+            Text("직접 만든 Google Cloud 클라이언트(데스크톱 앱)를 써요. 테스트 상태면 7일마다 다시 로그인해야 해요.")
+                .foregroundStyle(.secondary)
+        }
+        Section {
+            Picker("Google 문서를 받을 때 형식", selection: drive.exportFormat) {
+                Text("DOCX / XLSX / PPTX").tag("office")
+                Text("PDF").tag("pdf")
+                Text("ODT / ODS / ODP").tag("openDocument")
+            }
+        } footer: {
+            Text("문서 · 스프레드시트 · 프레젠테이션은 실제 파일이 아니라서 변환해서 받아요. Drive는 한 폴더에 같은 이름을 허용해서, 목록에서는 “이름 (2)”처럼 구분해 보여줘요.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var sftpSections: some View {
             Section("서버") {
                 TextField("이름", text: $site.name)
                 TextField("호스트", text: $site.endpoint.host, prompt: Text("example.com"))
@@ -469,7 +637,9 @@ private struct SiteForm: View {
                 Text(screenHint)
                     .foregroundStyle(.secondary)
             }
+    }
 
+    private var safetySection: some View {
             Section {
                 LabeledContent("색 태그") {
                     TagPicker(tag: tag)
@@ -488,8 +658,6 @@ private struct SiteForm: View {
                 Text("PROD 로 지정하면 패인 위에 띠가 생기고, 파일을 쓰기 전에 항상 확인해요.")
                     .foregroundStyle(.secondary)
             }
-        }
-        .formStyle(.grouped)
     }
 
     private var screenKind: Binding<SavedSite.RemoteScreen.Kind?> {

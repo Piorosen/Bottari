@@ -152,7 +152,7 @@ final class TunnelStore {
             return
         }
         do {
-            let provider = try await AppServices.sites.connect(site, takingDetours: false)
+            let provider = try await AppServices.sites.connectSFTP(site, takingDetours: false)
             guard runtimes[id]?.stopping == false else {
                 await provider.disconnect()
                 return

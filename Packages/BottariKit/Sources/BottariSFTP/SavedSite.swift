@@ -17,6 +17,36 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         case prod, staging, dev, personal
     }
 
+    /// What kind of place this is. Cloud sites keep only their own settings;
+    /// the SFTP fields are unused for them.
+    public enum Kind: Codable, Hashable, Sendable {
+        case sftp
+        case s3(S3Settings)
+        case googleDrive(DriveSettings)
+    }
+
+    public struct S3Settings: Codable, Hashable, Sendable {
+        public var bucket = ""
+        public var region = "us-east-1"
+        /// Empty for AWS; the address of R2, MinIO and the like otherwise.
+        public var endpoint = ""
+        public var accessKey = ""
+        public var usesPathStyle = false
+
+        public init() {}
+    }
+
+    public struct DriveSettings: Codable, Hashable, Sendable {
+        /// The user's own Google Cloud OAuth client (desktop app).
+        public var clientID = ""
+        /// "office", "pdf" or "openDocument": how Google Docs come down.
+        public var exportFormat = "office"
+        /// The signed-in account's email; empty until signed in.
+        public var account = ""
+
+        public init() {}
+    }
+
     /// A remote screen on the same machine.
     public struct RemoteScreen: Codable, Hashable, Sendable {
         public enum Kind: String, Codable, CaseIterable, Sendable {
@@ -54,6 +84,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     /// Ask before copying onto, overwriting or deleting on this server. PROD sites start with it on.
     public var confirmsWrites: Bool
     public var remoteScreen: RemoteScreen?
+    public var kind: Kind
 
     public init(
         id: UUID = UUID(),
@@ -66,7 +97,8 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         sshConfigAlias: String? = nil,
         readOnly: Bool = false,
         confirmsWrites: Bool? = nil,
-        remoteScreen: RemoteScreen? = nil
+        remoteScreen: RemoteScreen? = nil,
+        kind: Kind = .sftp
     ) {
         self.id = id
         self.name = name
@@ -79,6 +111,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         self.readOnly = readOnly
         self.confirmsWrites = confirmsWrites ?? (tag == .prod)
         self.remoteScreen = remoteScreen
+        self.kind = kind
     }
 
     /// Settings added later get their defaults when an older sites.json lacks them.
@@ -95,6 +128,11 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         readOnly = try values.decodeIfPresent(Bool.self, forKey: .readOnly) ?? false
         confirmsWrites = try values.decodeIfPresent(Bool.self, forKey: .confirmsWrites) ?? (tag == .prod)
         remoteScreen = try values.decodeIfPresent(RemoteScreen.self, forKey: .remoteScreen)
+        kind = try values.decodeIfPresent(Kind.self, forKey: .kind) ?? .sftp
+    }
+
+    public var isSFTP: Bool {
+        if case .sftp = kind { true } else { false }
     }
 
     /// A site for an `~/.ssh/config` host: its IdentityAgent if set, otherwise its
@@ -132,6 +170,10 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public var passphraseKey: String { "site.\(id.uuidString).passphrase" }
     /// The VNC or Screen Sharing password.
     public var screenPasswordKey: String { "site.\(id.uuidString).screen" }
+    public var s3SecretKey: String { "site.\(id.uuidString).s3secret" }
+    /// The archived Google sign-in, base64.
+    public var googleSignInKey: String { "site.\(id.uuidString).google" }
+    public var googleClientSecretKey: String { "site.\(id.uuidString).googleClientSecret" }
 }
 
 /// Saved sites as a JSON file.

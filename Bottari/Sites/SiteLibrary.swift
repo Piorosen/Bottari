@@ -1,3 +1,6 @@
+import AppKit
+import BottariCloud
+import BottariCore
 import BottariSFTP
 import Foundation
 import Observation
@@ -80,8 +83,9 @@ final class SiteLibrary {
         guard let site = site(id) else { return }
         sites.removeAll { $0.id == id }
         recentlyImported.remove(id)
-        try? secrets.setSecret(nil, for: site.passwordKey)
-        try? secrets.setSecret(nil, for: site.passphraseKey)
+        for key in [site.passwordKey, site.passphraseKey, site.screenPasswordKey, site.s3SecretKey, site.googleSignInKey, site.googleClientSecretKey] {
+            try? secrets.setSecret(nil, for: key)
+        }
         persist()
         reloadSSHConfig()
     }
@@ -89,9 +93,85 @@ final class SiteLibrary {
     /// Opens an SFTP connection to `site`. `typedSecrets` (Keychain key → value)
     /// were just typed by the user: they win over stored ones, and are stored
     /// once the connection works.
+    /// Opens whatever the site is: an SFTP server, an S3 bucket or a Google Drive.
+    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:]) async throws -> any FileProvider {
+        switch site.kind {
+        case .sftp:
+            return try await connectSFTP(site, typedSecrets: typedSecrets)
+        case .s3(let settings):
+            return try await connectS3(site, settings, typedSecrets: typedSecrets)
+        case .googleDrive(let settings):
+            return try await connectDrive(site, settings)
+        }
+    }
+
+    private func connectS3(_ site: SavedSite, _ settings: SavedSite.S3Settings, typedSecrets: [String: String]) async throws -> S3Provider {
+        let stored = secrets
+        let key = site.s3SecretKey
+        let secret = try await Task.detached { try typedSecrets[key] ?? stored.secret(for: key) }.value
+        guard let secret, !secret.isEmpty else { throw CloudConnectError("S3 비밀 키가 저장되어 있지 않아요.") }
+        let provider = S3Provider(
+            configuration: S3Configuration(bucket: settings.bucket, region: settings.region, endpoint: settings.endpoint, accessKey: settings.accessKey, usesPathStyle: settings.usesPathStyle),
+            secretKey: secret,
+            displayName: site.name
+        )
+        // Fail here, with the reason, rather than in an empty pane.
+        _ = try await provider.list(.root)
+        if let typed = typedSecrets[key] {
+            await Task.detached { try? stored.setSecret(typed, for: key) }.value
+        }
+        return provider
+    }
+
+    private func connectDrive(_ site: SavedSite, _ settings: SavedSite.DriveSettings) async throws -> GoogleDriveProvider {
+        let stored = secrets
+        let key = site.googleSignInKey
+        guard let saved = try await Task.detached(operation: { try stored.secret(for: key) }).value, let archived = Data(base64Encoded: saved) else {
+            throw CloudConnectError("Google 계정으로 로그인해 주세요. 연결 관리에서 로그인할 수 있어요.")
+        }
+        let authorization = try GoogleAuthorization(archived: archived)
+        let provider = GoogleDriveProvider(
+            account: settings.account.isEmpty ? authorization.account : settings.account,
+            tokens: authorization,
+            exportFormat: DriveExportFormat(rawValue: settings.exportFormat) ?? .office,
+            displayName: site.name
+        )
+        _ = try await provider.list(.root)
+        // Tokens may have been refreshed; keep the newest.
+        let fresh = authorization.archived.base64EncodedString()
+        await Task.detached { try? stored.setSecret(fresh, for: key) }.value
+        return provider
+    }
+
+    /// Opens Google's sign-in page and keeps the result in the Keychain.
+    func signInToGoogle(_ site: SavedSite, clientSecret: String?) async throws {
+        guard case .googleDrive(var settings) = site.kind else { return }
+        let window = NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible } ?? NSWindow()
+        let storedSecret = try? secrets.secret(for: site.googleClientSecretKey)
+        let secret = clientSecret?.isEmpty == false ? clientSecret : storedSecret
+        let authorization = try await GoogleAuthorization.signIn(clientID: settings.clientID, clientSecret: secret, presentingWindow: window)
+        try secrets.setSecret(authorization.archived.base64EncodedString(), for: site.googleSignInKey)
+        if let clientSecret, !clientSecret.isEmpty {
+            try? secrets.setSecret(clientSecret, for: site.googleClientSecretKey)
+        }
+        settings.account = authorization.account
+        var signedIn = site
+        signedIn.kind = .googleDrive(settings)
+        update(signedIn)
+    }
+
+    func signOutOfGoogle(_ site: SavedSite) {
+        guard case .googleDrive(var settings) = site.kind else { return }
+        try? secrets.setSecret(nil, for: site.googleSignInKey)
+        settings.account = ""
+        var signedOut = site
+        signedOut.kind = .googleDrive(settings)
+        update(signedOut)
+    }
+
     /// A running Bottari-only tunnel that covers the site's host adds its
     /// server as the first jump, unless `takingDetours` is false (the tunnel's own connection).
-    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:], takingDetours: Bool = true) async throws -> SFTPFileProvider {
+    func connectSFTP(_ site: SavedSite, typedSecrets: [String: String] = [:], takingDetours: Bool = true) async throws -> SFTPFileProvider {
         let sites = sites
         let sshConfig = sshConfig
         let stored = secrets
@@ -146,4 +226,10 @@ private struct TypedSecrets: SecretStore {
     func setSecret(_ value: String?, for key: String) throws {
         try stored.setSecret(value, for: key)
     }
+}
+
+struct CloudConnectError: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
 }

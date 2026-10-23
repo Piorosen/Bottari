@@ -103,7 +103,7 @@ struct PaneView: View {
                             Button {
                                 Task { await open(site) }
                             } label: {
-                                Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, systemImage: "server.rack")
+                                Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, systemImage: site.symbol)
                             }
                         }
                     }

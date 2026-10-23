@@ -82,6 +82,17 @@ import Testing
         #expect(sites.first?.readOnly == false)
         #expect(sites.first?.confirmsWrites == true)
         #expect(sites.first?.remoteScreen == nil)
+        #expect(sites.first?.isSFTP == true)
+    }
+
+    @Test func cloudSitesRoundTrip() throws {
+        var s3 = SavedSite.S3Settings()
+        s3.bucket = "assets"
+        s3.endpoint = "https://acct.r2.cloudflarestorage.com"
+        let site = SavedSite(name: "r2", endpoint: SFTPEndpoint(host: "", username: ""), authentication: .password, kind: .s3(s3))
+        let decoded = try JSONDecoder().decode(SavedSite.self, from: JSONEncoder().encode(site))
+        #expect(decoded == site)
+        #expect(!decoded.isSFTP)
     }
 
     @Test func prodSitesConfirmWritesByDefault() {

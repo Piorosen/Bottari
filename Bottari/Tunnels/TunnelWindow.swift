@@ -151,7 +151,7 @@ private struct TunnelDetail: View {
                 }
                 Picker("거쳐 갈 서버", selection: $profile.siteID) {
                     Text("고르세요").tag(SavedSite.ID?.none)
-                    ForEach(AppServices.sites.sites) { site in
+                    ForEach(AppServices.sites.sites.filter(\.isSFTP)) { site in
                         Text("\(site.name) · \(site.summary)").tag(SavedSite.ID?.some(site.id))
                     }
                 }
