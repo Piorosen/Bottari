@@ -13,6 +13,9 @@ struct BottariApp: App {
             }
         }
         .defaultSize(width: 1280, height: 800)
+        .commands {
+            FileCommands()
+        }
     }
 }
 

@@ -1,15 +1,26 @@
 import BottariCore
 import BottariSFTP
+import BottariTransfer
 import SwiftUI
 
 /// A Finder-style list of one folder, with history buttons and a clickable path.
 struct PaneView: View {
+    let workspace: Workspace
+    let side: PaneSide
     @Bindable var model: PaneModel
-    let isActive: Bool
-    let becomeActive: () -> Void
 
     @FocusState private var listFocused: Bool
     @State private var siteManager: SiteManagerRequest?
+    @State private var isDropTarget = false
+
+    init(workspace: Workspace, side: PaneSide) {
+        self.workspace = workspace
+        self.side = side
+        self.model = workspace.pane(side)
+    }
+
+    private var isActive: Bool { workspace.activeSide == side }
+    private var otherPane: PaneModel { workspace.pane(side.other) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,13 +39,25 @@ struct PaneView: View {
                 .fill(isProd ? SavedSite.Tag.prod.color : isActive ? Color.accentColor : .clear)
                 .frame(height: isProd ? 3 : 2)
         }
+        .overlay {
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .background(Color.accentColor.opacity(0.06))
+                    .allowsHitTesting(false)
+            }
+        }
         .frame(minWidth: 360)
         .task { await model.start() }
         .onDisappear {
             Task { await model.disconnect() }
         }
         .onChange(of: listFocused) { _, focused in
-            if focused { becomeActive() }
+            if focused { workspace.activeSide = side }
+        }
+        .focusedValue(\.paneFocus, PaneFocus(workspace: workspace, side: side))
+        .onReceive(NotificationCenter.default.publisher(for: .transfersChanged)) { _ in
+            model.refreshAfterTransfers(AppServices.transfers.jobs)
         }
         .sheet(item: $siteManager) { request in
             SiteManagerSheet(library: model.library, initialSelection: request.selection, initialError: request.error) { provider, site in
@@ -142,7 +165,7 @@ struct PaneView: View {
     }
 
     private var fileTable: some View {
-        Table(model.visibleItems, selection: $model.selection) {
+        Table(of: FileItem.self, selection: $model.selection) {
             TableColumn("이름") { item in
                 HStack(spacing: 6) {
                     FileIcon.image(for: item, isLocal: model.isLocal)
@@ -172,9 +195,14 @@ struct PaneView: View {
                     .foregroundStyle(.secondary)
             }
             .width(min: 80, ideal: 90, max: 110)
+        } rows: {
+            ForEach(model.visibleItems) { item in
+                TableRow(item)
+                    .itemProvider { workspace.dragProvider(for: item, from: side) }
+            }
         }
-        .contextMenu(forSelectionType: FileItem.ID.self) { _ in
-            EmptyView()
+        .contextMenu(forSelectionType: FileItem.ID.self) { ids in
+            contextMenu(for: model.items.filter { ids.contains($0.id) })
         } primaryAction: { ids in
             guard ids.count == 1, let item = model.items.first(where: { ids.contains($0.id) }) else { return }
             Task { await model.activate(item) }
@@ -184,10 +212,46 @@ struct PaneView: View {
             Task { await model.goBack() }
             return .handled
         }
+        .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
+            workspace.drop(providers, onto: side)
+        }
         .overlay {
             if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
                 ContentUnavailableView("비어 있어요", systemImage: "folder")
             }
+        }
+    }
+
+    /// Copy and move toward the other pane, the clipboard, and paste. Actions that
+    /// would write to a read-only site are left out.
+    @ViewBuilder
+    private func contextMenu(for items: [FileItem]) -> some View {
+        let readOnlyHere = model.site?.readOnly == true
+        let readOnlyThere = otherPane.site?.readOnly == true
+        let otherName = otherPane.provider.displayName
+        if items.isEmpty {
+            let count = AppServices.clipboard.content?.items.count
+            if !readOnlyHere {
+                Button(count.map { "붙여넣기 (\($0)개)" } ?? "붙여넣기") { workspace.paste(into: side, kind: .copy) }
+                    .disabled(count == nil)
+                Button("이동해서 붙여넣기") { workspace.paste(into: side, kind: .move) }
+                    .disabled(count == nil)
+                Divider()
+            }
+            Button("새로고침") { Task { await model.reload() } }
+        } else {
+            if items.count == 1, let item = items.first, item.isDirectory {
+                Button("열기") { Task { await model.activate(item) } }
+                Divider()
+            }
+            if !readOnlyThere {
+                Button("\(otherName)에 복사") { workspace.send(items, from: side, kind: .copy) }
+                if !readOnlyHere {
+                    Button("\(otherName)(으)로 이동") { workspace.send(items, from: side, kind: .move) }
+                }
+                Divider()
+            }
+            Button("복사") { AppServices.clipboard.copy(items, from: model.provider, site: model.site) }
         }
     }
 

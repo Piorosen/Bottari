@@ -1,5 +1,6 @@
 import BottariCore
 import BottariSFTP
+import BottariTransfer
 import Foundation
 import Observation
 
@@ -21,6 +22,8 @@ final class PaneModel {
     private var forwardStack: [RemotePath] = []
     private var siteID: SavedSite.ID?
     @ObservationIgnored private var loadGeneration = 0
+    /// Ended transfers this pane has already reloaded for.
+    @ObservationIgnored private var seenTransfers: Set<TransferJob.ID> = []
     @ObservationIgnored private var hasStarted = false
 
     init(provider: any FileProvider, start: RemotePath? = nil, library: SiteLibrary = AppServices.sites) {
@@ -72,15 +75,31 @@ final class PaneModel {
         if await !load(start), start != newProvider.home, await load(newProvider.home) {
             errorMessage = "시작 폴더를 열지 못해서 홈 폴더를 열었어요: \(start.string)"
         }
-        if let previous = previous as? SFTPFileProvider {
-            await previous.disconnect()
-        }
+        await AppServices.connections.release(previous)
     }
 
-    /// Closes the pane's connection, e.g. when its window closes.
+    /// Lets go of the pane's connection, e.g. when its window closes. It stays
+    /// open while a transfer still uses it.
     func disconnect() async {
-        if let remote = provider as? SFTPFileProvider {
-            await remote.disconnect()
+        await AppServices.connections.release(provider)
+    }
+
+    func selectAll() {
+        selection = Set(visibleItems.map(\.id))
+    }
+
+    /// Reloads if a transfer that just ended wrote into this folder or moved files out of it.
+    func refreshAfterTransfers(_ jobs: [TransferJob]) {
+        let here = provider.locationID
+        var touched = false
+        for job in jobs where job.state.hasEnded && !seenTransfers.contains(job.id) {
+            seenTransfers.insert(job.id)
+            let wroteHere = job.destination.provider.locationID == here && job.destinationFolder == path
+            let movedOut = job.kind == .move && job.source.provider.locationID == here && job.items.contains { $0.path.parent == path }
+            touched = touched || wroteHere || movedOut
+        }
+        if touched {
+            Task { await reload() }
         }
     }
 

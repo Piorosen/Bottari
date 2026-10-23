@@ -2,6 +2,7 @@
 import AppKit
 import BottariCore
 import BottariSFTP
+import BottariTransfer
 import SwiftUI
 
 /// Draws screens with sample data into PNG files without showing anything or
@@ -44,18 +45,72 @@ enum SnapshotRenderer {
             var site = prod
             site.startPath = folder.path
             await pane.switchProvider(to: LocalFileProvider(), site: site)
+            let workspace = Workspace(left: pane, right: PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path), library: library))
+            workspace.activeSide = .right
             await render(
                 HStack(spacing: 0) {
-                    PaneView(model: pane, isActive: false) {}
+                    PaneView(workspace: workspace, side: .left)
                     Divider()
-                    PaneView(model: PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path), library: library), isActive: true) {}
+                    PaneView(workspace: workspace, side: .right)
                 },
                 size: CGSize(width: 1100, height: 360), appearance: appearance,
                 to: directory.appending(path: "pane-prod-\(name).png")
             )
         }
+        await renderTransfers(into: directory)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
+    }
+
+    /// The transfer bar and list with one job each: in flight between two servers,
+    /// waiting on a name clash, failed, and finished.
+    private static func renderTransfers(into directory: URL) async {
+        let base = FileManager.default.temporaryDirectory.appending(path: "bottari-transfers-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let fm = FileManager.default
+        for folder in ["src/site/img", "src/clash", "src/logs", "dst-server", "dst-mac", "dst-nas"] {
+            try? fm.createDirectory(at: base.appending(path: folder), withIntermediateDirectories: true)
+        }
+        for index in 0..<40 {
+            try? Data(count: 200_000).write(to: base.appending(path: "src/site/img/photo-\(index).jpg"))
+        }
+        try? "new".write(to: base.appending(path: "src/clash/index.html"), atomically: true, encoding: .utf8)
+        try? "old".write(to: base.appending(path: "dst-mac/index.html"), atomically: true, encoding: .utf8)
+        try? Data(count: 64_000).write(to: base.appending(path: "src/logs/app.log"))
+        try? Data(count: 38_000_000).write(to: base.appending(path: "src/Bottari.app.zip"))
+
+        let mac = LocalFileProvider()
+        let prod = PreviewServer("prod-web", bytesPerSecond: 250_000)
+        let dev = PreviewServer("dev-api")
+        let nas = PreviewServer("home-nas", bytesPerSecond: .max)
+        let queue = AppServices.transfers
+        queue.maxConcurrentTransfers = 6
+        func item(_ path: String) async -> [FileItem] {
+            (try? await mac.stat(RemotePath(base.appending(path: path).path))).map { [$0] } ?? []
+        }
+        func folder(_ path: String) -> RemotePath { RemotePath(base.appending(path: path).path) }
+
+        queue.enqueue(.move, await item("src/logs"), from: TransferEndpoint(dev), to: TransferEndpoint(mac), into: folder("missing"))
+        let done = queue.enqueue(.copy, await item("src/Bottari.app.zip"), from: TransferEndpoint(mac), to: TransferEndpoint(nas), into: folder("dst-nas"))
+        queue.enqueue(.copy, await item("src/site"), from: TransferEndpoint(prod), to: TransferEndpoint(dev), into: folder("dst-server"))
+        queue.enqueue(.copy, await item("src/clash/index.html"), from: TransferEndpoint(prod), to: TransferEndpoint(mac), into: folder("dst-mac"))
+        try? await Task.sleep(for: .milliseconds(1500))
+        _ = done
+
+        let workspace = Workspace()
+        workspace.showsTransfers = true
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(
+                VStack(spacing: 0) {
+                    TransferPanel(workspace: workspace)
+                    Divider()
+                    TransferBar(workspace: workspace)
+                },
+                size: CGSize(width: 1180, height: 430), appearance: appearance,
+                to: directory.appending(path: "transfers-\(name).png")
+            )
+        }
+        queue.jobs.forEach(queue.cancel)
     }
 
     private static func sampleFolder() -> URL {

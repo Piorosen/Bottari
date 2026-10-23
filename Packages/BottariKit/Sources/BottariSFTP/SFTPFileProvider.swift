@@ -50,6 +50,9 @@ public struct SFTPFileProvider: FileProvider {
         await connection.close()
     }
 
+    /// The same for every copy of this provider, different for each connection.
+    public var connectionID: ObjectIdentifier { ObjectIdentifier(connection) }
+
     // MARK: - FileProvider
 
     public func list(_ path: RemotePath) async throws -> [FileItem] {

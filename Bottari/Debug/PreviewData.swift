@@ -1,4 +1,5 @@
 #if DEBUG
+import BottariCore
 import BottariSFTP
 import Foundation
 
@@ -70,5 +71,52 @@ extension SavedSite {
             readOnly: true
         ),
     ]
+}
+
+/// A local folder posing as a server with slow reads, so previews can show
+/// transfers in flight.
+struct PreviewServer: FileProvider {
+    let displayName: String
+    var bytesPerSecond = 1_000_000
+    private let local = LocalFileProvider()
+
+    init(_ name: String, bytesPerSecond: Int = 1_000_000) {
+        displayName = name
+        self.bytesPerSecond = bytesPerSecond
+    }
+
+    var locationID: String { "preview://\(displayName)" }
+    var capabilities: ProviderCapabilities { [.rangeRead] }
+    var home: RemotePath { local.home }
+
+    func list(_ path: RemotePath) async throws -> [FileItem] { try await local.list(path) }
+    func stat(_ path: RemotePath) async throws -> FileItem { try await local.stat(path) }
+    func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws { try await local.write(path, from: data) }
+    func makeDirectory(_ path: RemotePath) async throws { try await local.makeDirectory(path) }
+    func move(_ from: RemotePath, to: RemotePath) async throws { try await local.move(from, to: to) }
+    func delete(_ path: RemotePath) async throws { try await local.delete(path) }
+
+    func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
+        let source = Chunks(local.read(path, range: range))
+        let rate = Double(bytesPerSecond)
+        return AsyncThrowingStream(unfolding: {
+            guard let chunk = try await source.next() else { return nil }
+            try await Task.sleep(for: .seconds(Double(chunk.count) / rate))
+            return chunk
+        })
+    }
+
+    /// The stream asks from one task at a time, which makes sharing the iterator safe.
+    private final class Chunks: @unchecked Sendable {
+        private var iterator: AsyncThrowingStream<Data, any Error>.Iterator
+
+        init(_ stream: AsyncThrowingStream<Data, any Error>) {
+            iterator = stream.makeAsyncIterator()
+        }
+
+        func next() async throws -> Data? {
+            try await iterator.next()
+        }
+    }
 }
 #endif

@@ -1,21 +1,44 @@
 import BottariCore
 import SwiftUI
 
-/// Two panes side by side, each browsing the Mac or an SFTP server.
+/// Two panes side by side, each browsing the Mac or a server, with transfers below.
 struct MainWindow: View {
-    @State private var left = PaneModel(provider: LocalFileProvider())
-    @State private var right = PaneModel(provider: LocalFileProvider())
-    @State private var activeSide: PaneSide = .left
+    @State private var workspace = Workspace()
 
     var body: some View {
-        HSplitView {
-            PaneView(model: left, isActive: activeSide == .left) { activeSide = .left }
-            PaneView(model: right, isActive: activeSide == .right) { activeSide = .right }
+        VStack(spacing: 0) {
+            HSplitView {
+                PaneView(workspace: workspace, side: .left)
+                PaneView(workspace: workspace, side: .right)
+            }
+            if workspace.showsTransfers {
+                Divider()
+                TransferPanel(workspace: workspace)
+            }
+            Divider()
+            TransferBar(workspace: workspace)
         }
-        .frame(minWidth: 820, minHeight: 480)
+        .frame(minWidth: 900, minHeight: 520)
+        .sheet(item: $workspace.pendingConfirmation) { request in
+            WriteConfirmationSheet(request: request) {
+                workspace.confirm(request)
+            }
+        }
+        .alert(
+            "보낼 수 없어요",
+            isPresented: Binding(get: { workspace.refusal != nil }, set: { if !$0 { workspace.refusal = nil } })
+        ) {
+            Button("확인") {}
+        } message: {
+            Text(workspace.refusal ?? "")
+        }
+        .onChange(of: hasPendingConflict) {
+            // A clash needs an answer; show where to give it.
+            if hasPendingConflict { workspace.showsTransfers = true }
+        }
     }
-}
 
-enum PaneSide {
-    case left, right
+    private var hasPendingConflict: Bool {
+        AppServices.transfers.jobs.contains { $0.pendingConflict != nil }
+    }
 }

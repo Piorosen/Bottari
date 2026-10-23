@@ -1,4 +1,5 @@
 import BottariSFTP
+import BottariTransfer
 import Foundation
 
 /// App-wide services shared by every window.
@@ -12,4 +13,23 @@ enum AppServices {
         store: SiteStore(fileURL: supportDirectory.appending(path: "sites.json")),
         secrets: KeychainSecretStore(service: "io.github.piorosen.bottari")
     )
+
+    static let transfers: TransferQueue = {
+        let queue = TransferQueue()
+        queue.maxConcurrentTransfers = TransferSettings.maxConcurrentTransfers
+        queue.onJobsChanged = {
+            connections.closeUnused()
+            NotificationCenter.default.post(name: .transfersChanged, object: nil)
+        }
+        return queue
+    }()
+
+    static let connections = ConnectionKeeper()
+
+    static let clipboard = FileClipboard()
+}
+
+extension Notification.Name {
+    /// A transfer ended or was removed; panes showing its folders reload.
+    static let transfersChanged = Notification.Name("BottariTransfersChanged")
 }
