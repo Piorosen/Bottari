@@ -17,6 +17,12 @@ public struct ProviderCapabilities: OptionSet, Hashable, Sendable {
     public static let serverSideCopy = ProviderCapabilities(rawValue: 1 << 2)
     /// Has a trash that `trash(_:)` moves items into.
     public static let trash = ProviderCapabilities(rawValue: 1 << 3)
+    /// Computes a file's SHA-256 where the file lives, without sending it over.
+    public static let checksum = ProviderCapabilities(rawValue: 1 << 4)
+    /// Continues a write that was cut off, from its partial file.
+    public static let resumableWrite = ProviderCapabilities(rawValue: 1 << 5)
+    /// Sets a file's modification time.
+    public static let modificationTime = ProviderCapabilities(rawValue: 1 << 6)
 }
 
 /// One place files live: the Mac, an SFTP server, a cloud drive.
@@ -41,8 +47,18 @@ public protocol FileProvider: Sendable {
     /// file up in memory.
     func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error>
     /// Writes the streamed bytes to `path`. If anything fails, an existing file
-    /// at `path` must be left untouched.
+    /// at `path` must be left untouched; what was written so far may stay in
+    /// `path.partialWritePath` for a later resume.
     func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws
+    /// Continues an interrupted write to `path` whose partial file already holds
+    /// the first `offset` bytes. Requires `.resumableWrite`.
+    func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws
+    /// Removes what an interrupted write to `path` left behind.
+    func discardPartialWrite(to path: RemotePath) async
+    /// The file's SHA-256 as lowercase hex. Requires `.checksum`.
+    func checksum(_ path: RemotePath) async throws -> String
+    /// Requires `.modificationTime`.
+    func setModified(_ date: Date, at path: RemotePath) async throws
     func makeDirectory(_ path: RemotePath) async throws
     /// Renames or moves an item. Fails with `.alreadyExists` instead of overwriting.
     func move(_ from: RemotePath, to: RemotePath) async throws
@@ -63,6 +79,23 @@ extension FileProvider {
 
     public func trash(_ path: RemotePath) async throws {
         throw ProviderError.unsupported("휴지통")
+    }
+
+    public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
+        guard offset == 0 else { throw ProviderError.unsupported("이어서 쓰기") }
+        try await write(path, from: data)
+    }
+
+    public func discardPartialWrite(to path: RemotePath) async {
+        try? await delete(path.partialWritePath)
+    }
+
+    public func checksum(_ path: RemotePath) async throws -> String {
+        throw ProviderError.unsupported("체크섬")
+    }
+
+    public func setModified(_ date: Date, at path: RemotePath) async throws {
+        throw ProviderError.unsupported("수정 시각 바꾸기")
     }
 
     /// Reads a whole file, or a range of it, into memory. Meant for small files

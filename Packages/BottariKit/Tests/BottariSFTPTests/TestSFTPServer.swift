@@ -34,7 +34,8 @@ final class TestSFTPServer {
     }
 
     /// With `forwarding`, the server also opens direct-tcpip channels, so it can act as a jump host.
-    static func start(port fixedPort: Int? = nil, forwarding: Bool = false) async throws -> TestSFTPServer {
+    /// With `commands`, it runs exec requests (see `ShellExecDelegate`).
+    static func start(port fixedPort: Int? = nil, forwarding: Bool = false, commands: Bool = false) async throws -> TestSFTPServer {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("BottariSFTP-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let clientKey = Curve25519.Signing.PrivateKey()
@@ -56,6 +57,9 @@ final class TestSFTPServer {
                 server.enableSFTP(withDelegate: LocalDirectorySFTPDelegate(root: root))
                 if forwarding {
                     server.enableDirectTCPIP(withDelegate: ForwardingDelegate())
+                }
+                if commands {
+                    server.enableExec(withDelegate: ShellExecDelegate(root: root))
                 }
                 return TestSFTPServer(root: root, port: port, clientKey: clientKey, server: server)
             } catch {
@@ -283,6 +287,14 @@ private struct LocalDirectorySFTPDelegate: SFTPDelegate {
         if let permissions = attributes.permissions {
             try FileManager.default.setAttributes([.posixPermissions: Int(permissions & 0o7777)], ofItemAtPath: url(path).path)
         }
+        if let times = attributes.accessModificationTime {
+            try FileManager.default.setAttributes([.modificationDate: times.modificationTime], ofItemAtPath: url(path).path)
+        }
+        if let size = attributes.size {
+            let handle = try FileHandle(forWritingTo: url(path))
+            try handle.truncate(atOffset: size)
+            try handle.close()
+        }
         return .ok
     }
 
@@ -344,4 +356,41 @@ private final class LocalFile: SFTPFileHandle {
     }
 
     func setFileAttributes(to attributes: SFTPFileAttributes) async throws {}
+}
+
+/// Runs exec requests with /bin/sh as if the test root were the server's `/`.
+/// Bottari single-quotes every absolute path it puts in a command, so turning
+/// `'/` into `'<root>/` is enough.
+private final class ShellExecDelegate: ExecDelegate {
+    let root: URL
+
+    init(root: URL) {
+        self.root = root
+    }
+
+    func start(command: String, outputHandler: ExecOutputHandler) async throws -> ExecCommandContext {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command.replacingOccurrences(of: "'/", with: "'\(root.path)/")]
+        process.currentDirectoryURL = root
+        process.standardInput = outputHandler.stdinPipe
+        process.standardOutput = outputHandler.stdoutPipe
+        process.standardError = outputHandler.stderrPipe
+        let handler = UncheckedSendable(outputHandler)
+        process.terminationHandler = { process in
+            handler.value.succeed(exitCode: Int(process.terminationStatus))
+        }
+        try process.run()
+        return ProcessContext(process: UncheckedSendable(process))
+    }
+
+    func setEnvironmentValue(_ value: String, forKey key: String) async throws {}
+
+    private struct ProcessContext: ExecCommandContext {
+        let process: UncheckedSendable<Process>
+
+        func terminate() async throws {
+            if process.value.isRunning { process.value.terminate() }
+        }
+    }
 }

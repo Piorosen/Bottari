@@ -224,7 +224,8 @@ import Testing
             }
 
             #expect(try server.contents("/nginx.conf") == "original")
-            #expect(try server.names(in: .root) == ["nginx.conf"])
+            // What was sent so far waits in the partial file for a resume.
+            #expect(try server.names(in: .root) == [".nginx.conf.bottari-part", "nginx.conf"])
         }
     }
 

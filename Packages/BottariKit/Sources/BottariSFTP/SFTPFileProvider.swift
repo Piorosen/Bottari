@@ -2,12 +2,16 @@ import BottariCore
 import Citadel
 import Foundation
 import NIOCore
+import Synchronization
 
 /// Browses one SFTP server over a single SSH connection.
 public struct SFTPFileProvider: FileProvider {
     public let displayName: String
     public let home: RemotePath
     public let endpoint: SFTPEndpoint
+    /// Whether this account may run commands. Most may; SFTP-only accounts
+    /// (chroot jails, many NAS boxes) may not.
+    public let canRunCommands: Bool
     let connection: SFTPConnection
 
     /// Bytes asked for per read request. Servers may answer with less.
@@ -19,7 +23,13 @@ public struct SFTPFileProvider: FileProvider {
     /// Bytes per write request; bigger SSH packets trip swift-nio-ssh (apple/swift-nio-ssh#99).
     static let writeSliceSize = 32_000
 
-    public var capabilities: ProviderCapabilities { [.rangeRead] }
+    public var capabilities: ProviderCapabilities {
+        var capabilities: ProviderCapabilities = [.rangeRead, .resumableWrite, .modificationTime]
+        if canRunCommands {
+            capabilities.formUnion([.exec, .serverSideCopy, .checksum])
+        }
+        return capabilities
+    }
     public var locationID: String { "sftp://\(endpoint.username)@\(endpoint.hostKeyID)" }
 
     private var sftp: SFTPClient { connection.sftp }
@@ -38,6 +48,7 @@ public struct SFTPFileProvider: FileProvider {
                 displayName: displayName ?? endpoint.host,
                 home: home,
                 endpoint: endpoint,
+                canRunCommands: await probeCommands(on: connection),
                 connection: connection
             )
         } catch {
@@ -95,23 +106,129 @@ public struct SFTPFileProvider: FileProvider {
     }
 
     public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws {
+        try await write(path, from: data, resumingAt: 0)
+    }
+
+    public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
         guard let parent = path.parent else { throw ProviderError.permissionDenied(path) }
         // Upload next to the target and swap it in at the end, so a dropped
         // connection never leaves a half-written file where the original was.
-        let temp = parent.appending(".\(path.name).bottari-part")
+        // What was written stays in the partial file so a retry can resume.
+        let temp = path.partialWritePath
         do {
-            let file = try await sftp.openFile(filePath: temp.string, flags: [.write, .create, .truncate])
+            if offset > 0 {
+                // Drop anything past the point the caller resumes from.
+                try await sftp.setAttributes(at: temp.string, to: SFTPFileAttributes(size: UInt64(offset)))
+            }
+            let file = try await sftp.openFile(filePath: temp.string, flags: offset > 0 ? [.write] : [.write, .create, .truncate])
             do {
-                try await Self.write(UncheckedSendable(file), from: data)
+                try await Self.write(UncheckedSendable(file), from: data, startingAt: UInt64(offset))
                 try await file.close()
             } catch {
                 try? await file.close()
                 throw error
             }
+        } catch {
+            throw Self.translate(error, path)
+        }
+        do {
             try await swapIntoPlace(temp, path, backup: parent.appending(".\(path.name).bottari-old"))
         } catch {
+            // Everything was written; what went wrong is the destination itself
+            // (a folder in the way, no permission), so a resume would not help.
             try? await sftp.remove(at: temp.string)
             throw Self.translate(error, path)
+        }
+    }
+
+    public func setModified(_ date: Date, at path: RemotePath) async throws {
+        do {
+            try await sftp.setAttributes(at: path.string, to: SFTPFileAttributes(accessModificationTime: .init(accessTime: date, modificationTime: date)))
+        } catch {
+            throw Self.translate(error, path)
+        }
+    }
+
+    // MARK: - Commands
+
+    /// Runs a shell command on the server and returns what it printed.
+    public func run(_ command: String) async throws -> String {
+        try await Self.run(command, on: connection)
+    }
+
+    /// `cp -a`, so nothing passes through the Mac.
+    public func copy(_ from: RemotePath, to: RemotePath) async throws {
+        guard canRunCommands else { throw ProviderError.unsupported("서버 안에서 복사") }
+        _ = try await run("cp -a -- \(Self.quote(from.string)) \(Self.quote(to.string))")
+    }
+
+    public func checksum(_ path: RemotePath) async throws -> String {
+        guard canRunCommands else { throw ProviderError.unsupported("체크섬") }
+        let file = Self.quote(path.string)
+        let output = try await run("sha256sum -- \(file) 2>/dev/null || shasum -a 256 -- \(file)")
+        guard let hash = output.split(whereSeparator: \.isWhitespace).first, hash.count == 64 else {
+            throw ProviderError.io("체크섬을 읽지 못했어요: \(output)")
+        }
+        return hash.lowercased()
+    }
+
+    /// Packs items of one folder into a .tar.gz `archive` in that folder.
+    public func compress(_ items: [RemotePath], into archive: RemotePath) async throws {
+        guard let folder = archive.parent else { throw ProviderError.permissionDenied(archive) }
+        let names = items.map { Self.quote($0.name) }.joined(separator: " ")
+        _ = try await run("cd \(Self.quote(folder.string)) && tar -czf \(Self.quote(archive.name)) -- \(names)")
+    }
+
+    /// Unpacks a tar archive (gzip, bzip2 and xz too) or a .zip into a new folder,
+    /// so nothing already there gets overwritten.
+    public func extract(_ archive: RemotePath, into folder: RemotePath) async throws {
+        let unpack = archive.pathExtension.lowercased() == "zip"
+            ? "unzip -q \(Self.quote(archive.string)) -d \(Self.quote(folder.string))"
+            : "tar -xf \(Self.quote(archive.string)) -C \(Self.quote(folder.string))"
+        _ = try await run("mkdir -- \(Self.quote(folder.string)) && \(unpack)")
+    }
+
+    /// Single-quotes `text` for a POSIX shell.
+    static func quote(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    static func run(_ command: String, on connection: SFTPConnection) async throws -> String {
+        var output = ByteBuffer()
+        var errors = ByteBuffer()
+        do {
+            for try await chunk in try await connection.client.executeCommandStream(command) {
+                switch chunk {
+                case .stdout(let buffer): output.writeImmutableBuffer(buffer)
+                case .stderr(let buffer): errors.writeImmutableBuffer(buffer)
+                }
+            }
+        } catch let failed as SSHClient.CommandFailed {
+            let message = String(buffer: errors).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ProviderError.io("서버 명령이 실패했어요 (종료 코드 \(failed.exitCode))" + (message.isEmpty ? "" : ": \(message)"))
+        }
+        return String(buffer: output)
+    }
+
+    /// Tries `echo` once at connect. A server that refuses or ignores exec
+    /// requests gets three seconds before Bottari stops waiting.
+    static func probeCommands(on connection: SFTPConnection) async -> Bool {
+        let answered = Mutex(false)
+        return await withCheckedContinuation { continuation in
+            func answer(_ value: Bool) {
+                let first = answered.withLock { done in
+                    defer { done = true }
+                    return !done
+                }
+                if first { continuation.resume(returning: value) }
+            }
+            Task {
+                answer((try? await run("echo bottari", on: connection))?.hasPrefix("bottari") == true)
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                answer(false)
+            }
         }
     }
 
@@ -155,10 +272,10 @@ public struct SFTPFileProvider: FileProvider {
 
     // MARK: - Pipelining
 
-    /// Writes the stream from offset 0 with several requests in flight.
-    static func write(_ file: UncheckedSendable<SFTPFile>, from data: AsyncThrowingStream<Data, any Error>) async throws {
+    /// Writes the stream from `start` with several requests in flight.
+    static func write(_ file: UncheckedSendable<SFTPFile>, from data: AsyncThrowingStream<Data, any Error>, startingAt start: UInt64 = 0) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
-            var offset: UInt64 = 0
+            var offset = start
             var inFlight = 0
             for try await chunk in data {
                 var rest = ByteBuffer(bytes: chunk)

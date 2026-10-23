@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// The Mac's own disk. A `RemotePath` is simply the absolute file path.
@@ -17,7 +18,7 @@ public struct LocalFileProvider: FileProvider {
         self.privacy = privacy
     }
 
-    public var capabilities: ProviderCapabilities { [.rangeRead, .serverSideCopy, .trash] }
+    public var capabilities: ProviderCapabilities { [.rangeRead, .serverSideCopy, .trash, .checksum, .resumableWrite, .modificationTime] }
 
     public func list(_ path: RemotePath) async throws -> [FileItem] {
         try requireDirectory(path)
@@ -83,15 +84,24 @@ public struct LocalFileProvider: FileProvider {
     }
 
     public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws {
+        try await write(path, from: data, resumingAt: 0)
+    }
+
+    public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
         guard let parent = path.parent else { throw ProviderError.permissionDenied(path) }
         try requireDirectory(parent)
         let fm = FileManager.default
         // Write next to the destination and swap it in at the end, so a failed
         // transfer never leaves a half-written file where the original was.
-        let temp = parent.appending(".\(path.name).bottari-part")
+        // What was written stays in the partial file so a retry can resume.
+        let temp = path.partialWritePath
         do {
-            try mapErrors(parent) { try Data().write(to: url(temp)) }
+            if offset == 0 {
+                try mapErrors(parent) { try Data().write(to: url(temp)) }
+            }
             let handle = try FileHandle(forWritingTo: url(temp))
+            try handle.truncate(atOffset: UInt64(offset))
+            try handle.seek(toOffset: UInt64(offset))
             do {
                 for try await chunk in data {
                     try handle.write(contentsOf: chunk)
@@ -101,6 +111,10 @@ public struct LocalFileProvider: FileProvider {
                 try? handle.close()
                 throw error
             }
+        } catch {
+            throw Self.translate(error, path)
+        }
+        do {
             if let existing = try? fm.attributesOfItem(atPath: path.string),
                let mode = existing[.posixPermissions] {
                 try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: temp.string)
@@ -109,8 +123,24 @@ public struct LocalFileProvider: FileProvider {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
         } catch {
+            // Everything was written; the destination itself is the problem
+            // (a folder in the way, no permission), so a resume would not help.
             try? fm.removeItem(atPath: temp.string)
             throw Self.translate(error, path)
+        }
+    }
+
+    public func checksum(_ path: RemotePath) async throws -> String {
+        var hash = SHA256()
+        for try await chunk in read(path, range: nil) {
+            hash.update(data: chunk)
+        }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    public func setModified(_ date: Date, at path: RemotePath) async throws {
+        try mapErrors(path) {
+            try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: path.string)
         }
     }
 

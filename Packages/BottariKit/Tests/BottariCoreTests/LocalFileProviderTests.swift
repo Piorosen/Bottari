@@ -104,7 +104,44 @@ import Testing
         }
 
         #expect(try await provider.readData(file) == Data("original".utf8))
+        // The bytes written so far wait in the partial file for a resume.
+        #expect(try await provider.list(dir).map(\.name) == [".nginx.conf.bottari-part", "nginx.conf"])
+        await provider.discardPartialWrite(to: file)
         #expect(try await provider.list(dir).map(\.name) == ["nginx.conf"])
+    }
+
+    @Test func aCutOffWriteResumesFromItsPartialFile() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let file = dir.appending("video.mp4")
+        struct Dropped: Error {}
+        let firstHalf = AsyncThrowingStream<Data, any Error> { continuation in
+            continuation.yield(Data("01234".utf8))
+            continuation.finish(throwing: Dropped())
+        }
+        await #expect(throws: (any Error).self) { try await provider.write(file, from: firstHalf) }
+        let partial = try await provider.stat(file.partialWritePath)
+        #expect(partial.size == 5)
+
+        try await provider.write(file, from: AsyncThrowingStream { continuation in
+            continuation.yield(Data("56789".utf8))
+            continuation.finish()
+        }, resumingAt: 5)
+
+        #expect(try await provider.readData(file) == Data("0123456789".utf8))
+        #expect(try await provider.list(dir).map(\.name) == ["video.mp4"])
+    }
+
+    @Test func checksumAndModificationTime() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let file = dir.appending("hello.txt")
+        try await provider.write(file, data: Data("hello\n".utf8))
+
+        #expect(try await provider.checksum(file) == "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03")
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        try await provider.setModified(date, at: file)
+        #expect(try await provider.stat(file).modified == date)
     }
 
     @Test func makeDirectoryTwiceThrowsAlreadyExists() async throws {

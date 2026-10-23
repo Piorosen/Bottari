@@ -56,6 +56,11 @@ public struct RemotePath: Hashable, Sendable {
         RemotePath(string + "/" + relative)
     }
 
+    /// Where an unfinished write to this path keeps its bytes until it is swapped into place.
+    public var partialWritePath: RemotePath {
+        (parent ?? .root).appending(".\(name).bottari-part")
+    }
+
     public func isAncestor(of other: RemotePath) -> Bool {
         other.components.count > components.count && other.components.starts(with: components)
     }
