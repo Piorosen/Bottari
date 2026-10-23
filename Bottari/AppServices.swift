@@ -27,6 +27,11 @@ enum AppServices {
 
     static let connections = ConnectionKeeper()
 
+    /// Local copies of server files for previews, viewers and editors.
+    static let fileCache = FileCache(
+        directory: URL.cachesDirectory.appending(path: "io.github.piorosen.bottari/files")
+    )
+
     static let clipboard = FileClipboard()
 }
 

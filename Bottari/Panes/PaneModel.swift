@@ -19,6 +19,12 @@ final class PaneModel {
     var showsHiddenFiles = false
     /// The row whose name is being edited in place.
     var renaming: FileItem.ID?
+    /// What Quick Look shows (Space), and the files it can step through.
+    var quickLookURL: URL?
+    private(set) var quickLookURLs: [URL] = []
+    /// "미리보기 받는 중 · 12 MB / 40 MB" while a server file downloads for a preview.
+    private(set) var downloadStatus: String?
+    @ObservationIgnored private var previewDownload: Task<Void, Never>?
 
     private var backStack: [RemotePath] = []
     private var forwardStack: [RemotePath] = []
@@ -169,6 +175,56 @@ final class PaneModel {
 
     func dismissError() {
         errorMessage = nil
+    }
+
+    // MARK: - Quick Look
+
+    /// Space: previews the selection, or closes the preview. Files on a server
+    /// are downloaded to the cache first; Space again stops the download.
+    func toggleQuickLook() {
+        if quickLookURL != nil {
+            quickLookURL = nil
+            return
+        }
+        if let download = previewDownload {
+            download.cancel()
+            previewDownload = nil
+            downloadStatus = nil
+            return
+        }
+        let chosen = selectedItems
+        guard let first = chosen.first else { return }
+        if provider.isLocal {
+            quickLookURLs = chosen.map { URL(fileURLWithPath: $0.path.string) }
+            quickLookURL = quickLookURLs.first
+            return
+        }
+        guard !first.isDirectory else { return }
+        previewDownload = Task {
+            defer { previewDownload = nil }
+            do {
+                let url = try await download(first)
+                guard !Task.isCancelled else { return }
+                quickLookURLs = [url]
+                quickLookURL = url
+            } catch is CancellationError {
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// A local copy of a server file through the cache, reporting progress in the footer.
+    func download(_ item: FileItem) async throws -> URL {
+        let total = item.size.map { $0.formatted(.byteCount(style: .file)) }
+        downloadStatus = "받는 중…"
+        defer { downloadStatus = nil }
+        return try await AppServices.fileCache.localURL(for: item, from: provider) { [weak self] received in
+            let text = "받는 중 · \(received.formatted(.byteCount(style: .file)))" + (total.map { " / \($0)" } ?? "")
+            Task { @MainActor in
+                if self?.downloadStatus != nil { self?.downloadStatus = text }
+            }
+        }
     }
 
     // MARK: - File operations

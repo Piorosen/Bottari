@@ -1,6 +1,7 @@
 import BottariCore
 import BottariSFTP
 import BottariTransfer
+import QuickLook
 import SwiftUI
 
 /// A Finder-style list of one folder, with history buttons and a clickable path.
@@ -222,6 +223,12 @@ struct PaneView: View {
             Task { await model.goBack() }
             return .handled
         }
+        .onKeyPress(.space) {
+            guard model.renaming == nil else { return .ignored }
+            model.toggleQuickLook()
+            return .handled
+        }
+        .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
         .onKeyPress(.return) {
             guard model.renaming == nil, model.selection.count == 1 else { return .ignored }
             workspace.beginRenaming(in: side)
@@ -299,7 +306,7 @@ struct PaneView: View {
 
     private var footer: some View {
         HStack {
-            Text(summary)
+            Text(model.downloadStatus ?? summary)
             Spacer()
             Text(model.remoteAddress.map { "\($0):\(model.path.string)" } ?? model.path.string)
                 .font(.system(.caption, design: .monospaced))
