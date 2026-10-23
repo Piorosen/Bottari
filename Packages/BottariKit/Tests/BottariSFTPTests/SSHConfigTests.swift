@@ -1,0 +1,130 @@
+import Testing
+@testable import BottariSFTP
+
+@Suite struct SSHConfigTests {
+    func config(_ text: String, files: [String: String] = [:]) -> SSHConfig {
+        SSHConfig(text: text, directory: "/Users/me/.ssh", home: "/Users/me", localUser: "me") { files[$0] }
+    }
+
+    @Test func listsConcreteHostsWithTheirSettings() {
+        let parsed = config("""
+        # Work
+        Host prod-web
+          HostName 203.0.113.10
+          User deploy
+          IdentityFile ~/.ssh/id_ed25519
+
+        Host dev-api staging-web
+          HostName %h.internal
+          Port 2222
+
+        Host *.internal !secret.internal
+          User ops
+        """)
+
+        #expect(parsed.aliases == ["prod-web", "dev-api", "staging-web"])
+        let prod = parsed.resolve("prod-web")
+        #expect(prod.hostName == "203.0.113.10")
+        #expect(prod.user == "deploy")
+        #expect(prod.port == 22)
+        #expect(prod.identityFiles == ["/Users/me/.ssh/id_ed25519"])
+        let dev = parsed.resolve("dev-api")
+        #expect(dev.hostName == "dev-api.internal")
+        #expect(dev.port == 2222)
+        #expect(dev.user == nil)
+    }
+
+    @Test func firstValueWinsButIdentityFilesAccumulate() {
+        let parsed = config("""
+        Host gpu-box
+          User ml
+          IdentityFile ~/.ssh/gpu
+        Host *
+          User nobody
+          Port 22
+          IdentityFile ~/.ssh/id_ed25519
+        """)
+
+        let gpu = parsed.resolve("gpu-box")
+        #expect(gpu.user == "ml")
+        #expect(gpu.identityFiles == ["/Users/me/.ssh/gpu", "/Users/me/.ssh/id_ed25519"])
+        #expect(parsed.resolve("anything-else").user == "nobody")
+    }
+
+    @Test func settingsBeforeTheFirstHostApplyEverywhere() {
+        let parsed = config("""
+        User early
+        Host box
+          User late
+        """)
+        #expect(parsed.resolve("box").user == "early")
+    }
+
+    @Test func wildcardsAndNegation() {
+        #expect(SSHConfig.matches("db.internal", patterns: ["*.internal"]))
+        #expect(SSHConfig.matches("web1", patterns: ["web?"]))
+        #expect(!SSHConfig.matches("secret.internal", patterns: ["*.internal", "!secret.internal"]))
+        #expect(!SSHConfig.matches("other", patterns: ["!secret"]))
+    }
+
+    @Test func proxyJumpListsHopsAndNoneClearsThem() {
+        let parsed = config("""
+        Host inside
+          ProxyJump bastion, admin@relay.example.com:2200
+        Host direct
+          ProxyJump none
+        Host *
+          ProxyJump bastion
+        """)
+        #expect(parsed.resolve("inside").proxyJump == ["bastion", "admin@relay.example.com:2200"])
+        #expect(parsed.resolve("direct").proxyJump.isEmpty)
+        #expect(parsed.resolve("other").proxyJump == ["bastion"])
+    }
+
+    @Test func equalsSignsQuotesAndComments() {
+        let parsed = config("""
+        Host=quoted
+          HostName="203.0.113.5" # trailing comment
+          IdentityFile "~/Library/My Keys/id_ed25519"
+          IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+        """)
+        let host = parsed.resolve("quoted")
+        #expect(host.hostName == "203.0.113.5")
+        #expect(host.identityFiles == ["/Users/me/Library/My Keys/id_ed25519"])
+        #expect(host.identityAgent == "/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock")
+    }
+
+    @Test func percentTokensExpandInIdentityFiles() {
+        let parsed = config("""
+        Host box
+          HostName box.example.com
+          User admin
+          IdentityFile %d/.ssh/%r@%h
+        """)
+        #expect(parsed.resolve("box").identityFiles == ["/Users/me/.ssh/admin@box.example.com"])
+    }
+
+    @Test func includeInlinesOtherFilesRelativeToSshDirectory() {
+        let parsed = config(
+            """
+            Include orbstack/config
+            Host mine
+              User me
+            """,
+            files: ["/Users/me/.ssh/orbstack/config": "Host orb\n  HostName localhost\n  Port 32222\n"]
+        )
+        #expect(parsed.aliases == ["orb", "mine"])
+        #expect(parsed.resolve("orb").port == 32222)
+    }
+
+    @Test func matchBlocksAreSkipped() {
+        let parsed = config("""
+        Match exec "true"
+          User fromMatch
+        Host box
+          HostName box.example.com
+        """)
+        #expect(parsed.resolve("box").user == nil)
+        #expect(parsed.aliases == ["box"])
+    }
+}
