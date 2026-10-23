@@ -200,8 +200,35 @@ public struct LocalFileProvider: FileProvider {
             size: kind == .directory ? nil : (attributes[.size] as? NSNumber)?.int64Value,
             modified: attributes[.modificationDate] as? Date,
             permissions: (attributes[.posixPermissions] as? NSNumber).map { UInt16(truncatingIfNeeded: $0.intValue) },
-            owner: attributes[.ownerAccountName] as? String
+            owner: attributes[.ownerAccountName] as? String,
+            cloud: kind == .file && isInICloud(path) ? cloudState(path) : nil
         )
+    }
+
+    private func isInICloud(_ path: RemotePath) -> Bool {
+        path.string.contains("/Library/Mobile Documents/")
+    }
+
+    private func cloudState(_ path: RemotePath) -> FileItem.CloudState? {
+        let values = try? url(path).resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey, .ubiquitousItemIsDownloadingKey])
+        guard values?.isUbiquitousItem == true else { return nil }
+        if values?.ubiquitousItemIsDownloading == true { return .downloading }
+        return values?.ubiquitousItemDownloadingStatus == .current ? .downloaded : .inCloud
+    }
+
+    /// Asks iCloud to bring the file down.
+    public func downloadFromICloud(_ path: RemotePath) throws {
+        try FileManager.default.startDownloadingUbiquitousItem(at: url(path))
+    }
+
+    /// Frees the space a downloaded iCloud file takes; it stays in iCloud.
+    public func removeLocalCopy(_ path: RemotePath) throws {
+        try FileManager.default.evictUbiquitousItem(at: url(path))
+    }
+
+    public static var iCloudDrive: RemotePath? {
+        let path = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
+        return FileManager.default.fileExists(atPath: path) ? RemotePath(path) : nil
     }
 
     /// Reading the link itself is fine; only its target is guarded.

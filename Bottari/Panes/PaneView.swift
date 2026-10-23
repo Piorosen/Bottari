@@ -190,6 +190,11 @@ struct PaneView: View {
                         Text(item.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        if let cloud = item.cloud, cloud != .downloaded {
+                            Image(systemName: cloud == .downloading ? "icloud.and.arrow.down" : "icloud")
+                                .foregroundStyle(.secondary)
+                                .help(cloud == .downloading ? "받는 중" : "iCloud에만 있어요 · 열면 받아요")
+                        }
                     }
                 }
             }
@@ -320,6 +325,27 @@ struct PaneView: View {
                 }
                 Divider()
             }
+            Button("보따리에 담기") { workspace.addToBundle(from: side, items: items) }
+            if items.count == 1, let item = items.first, item.isDirectory {
+                Button("사이드바에 추가") { workspace.addFavorite(item, in: side) }
+            }
+            if let local = model.provider as? LocalFileProvider {
+                let inCloud = items.filter { $0.cloud == .inCloud }
+                let downloaded = items.filter { $0.cloud == .downloaded }
+                if !inCloud.isEmpty {
+                    Button("지금 다운로드") {
+                        inCloud.forEach { try? local.downloadFromICloud($0.path) }
+                        Task { await model.reload() }
+                    }
+                }
+                if !downloaded.isEmpty {
+                    Button("로컬 사본 제거") {
+                        downloaded.forEach { try? local.removeLocalCopy($0.path) }
+                        Task { await model.reload() }
+                    }
+                }
+            }
+            Divider()
             Button("복사") { AppServices.clipboard.copy(items, from: model.provider, site: model.site) }
             Button("경로 복사") {
                 model.selection = Set(items.map(\.id))

@@ -7,19 +7,24 @@ struct MainWindow: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(spacing: 0) {
-            HSplitView {
-                PaneView(workspace: workspace, side: .left)
-                PaneView(workspace: workspace, side: .right)
-            }
-            if workspace.showsTransfers {
+        NavigationSplitView {
+            Sidebar(workspace: workspace)
+                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
+        } detail: {
+            VStack(spacing: 0) {
+                HSplitView {
+                    PaneView(workspace: workspace, side: .left)
+                    PaneView(workspace: workspace, side: .right)
+                }
+                if workspace.showsTransfers {
+                    Divider()
+                    TransferPanel(workspace: workspace)
+                }
                 Divider()
-                TransferPanel(workspace: workspace)
+                TransferBar(workspace: workspace)
             }
-            Divider()
-            TransferBar(workspace: workspace)
         }
-        .frame(minWidth: 900, minHeight: 520)
+        .frame(minWidth: 1000, minHeight: 520)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 TunnelStatusButton()

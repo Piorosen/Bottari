@@ -81,6 +81,7 @@ enum SnapshotRenderer {
         await renderPlayer(into: directory)
         await checkScreen(into: directory)
         await renderTunnels(into: directory, library: library)
+        await renderSidebar(into: directory, folder: folder)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -296,6 +297,20 @@ enum SnapshotRenderer {
             await render(TunnelWindow(), size: CGSize(width: 1100, height: 1500), appearance: appearance,
                          to: directory.appending(path: "tunnels-\(name).png"))
         }
+    }
+
+    /// The sidebar with a few things in the bundle.
+    private static func renderSidebar(into directory: URL, folder: URL) async {
+        let local = LocalFileProvider()
+        if let items = try? await local.list(RemotePath(folder.path)) {
+            BottariBundle.shared.add(Array(items.prefix(3)), from: local, site: nil)
+        }
+        let workspace = Workspace()
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(Sidebar(workspace: workspace), size: CGSize(width: 260, height: 620), appearance: appearance,
+                         to: directory.appending(path: "sidebar-\(name).png"))
+        }
+        BottariBundle.shared.clear()
     }
 
     /// A short H.264 movie, so the player has something to open.

@@ -128,6 +128,58 @@ final class Workspace {
         }
     }
 
+    // MARK: - Places
+
+    /// Opens a folder on the Mac in the active pane.
+    func openOnMac(_ path: RemotePath) {
+        let pane = pane(activeSide)
+        Task {
+            if !pane.provider.isLocal {
+                await pane.switchProvider(to: LocalFileProvider())
+            }
+            await pane.open(path)
+        }
+    }
+
+    /// Connects the active pane to a saved site.
+    func open(_ site: SavedSite) {
+        let pane = pane(activeSide)
+        Task {
+            do {
+                try await pane.connect(to: site)
+            } catch {
+                refusal = "\(site.name)에 연결하지 못했어요: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func open(_ favorite: Favorites.Favorite) {
+        guard let siteID = favorite.siteID else { return openOnMac(favorite.path) }
+        guard let site = AppServices.sites.site(siteID) else { return }
+        let pane = pane(activeSide)
+        Task {
+            do {
+                if pane.site?.id != siteID { try await pane.connect(to: site) }
+                await pane.open(favorite.path)
+            } catch {
+                refusal = "\(site.name)에 연결하지 못했어요: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func isOpen(_ site: SavedSite) -> Bool {
+        left.site?.id == site.id || right.site?.id == site.id
+    }
+
+    func addToBundle(from side: PaneSide, items: [FileItem]? = nil) {
+        let pane = pane(side)
+        BottariBundle.shared.add(items ?? pane.selectedItems, from: pane.provider, site: pane.site)
+    }
+
+    func addFavorite(_ item: FileItem, in side: PaneSide) {
+        Favorites.shared.add(item.path, site: pane(side).site)
+    }
+
     // MARK: - Opening files
 
     /// Double-click, Return-less open (⌘↓): folders open in the pane, images in
@@ -285,6 +337,25 @@ final class Workspace {
                 destinationSite: destination.site,
                 folder: destination.path
             ))
+        }
+        return true
+    }
+
+    /// Items dragged from a pane or Finder onto the bundle.
+    func dropIntoBundle(_ providers: [NSItemProvider]) -> Bool {
+        Task {
+            let texts = await Self.loadStrings(from: providers)
+            if texts.contains(where: { $0.hasPrefix(Self.dragTokenPrefix) }), let drag = Self.currentDrag {
+                Self.currentDrag = nil
+                BottariBundle.shared.add(drag.items, from: drag.pane.provider, site: drag.pane.site)
+                return
+            }
+            let local = LocalFileProvider()
+            var items: [FileItem] = []
+            for url in await Self.loadFileURLs(from: providers) {
+                if let item = try? await local.stat(RemotePath(url.path)) { items.append(item) }
+            }
+            BottariBundle.shared.add(items, from: local, site: nil)
         }
         return true
     }

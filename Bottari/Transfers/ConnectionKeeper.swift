@@ -32,6 +32,6 @@ final class ConnectionKeeper {
         }
         let transferring = AppServices.transfers.unfinishedJobs.contains { uses($0.source.provider) || uses($0.destination.provider) }
         let onClipboard = AppServices.clipboard.content.map { uses($0.provider) } ?? false
-        return transferring || onClipboard || ExternalEdits.shared.uses(server)
+        return transferring || onClipboard || ExternalEdits.shared.uses(server) || BottariBundle.shared.uses(server)
     }
 }

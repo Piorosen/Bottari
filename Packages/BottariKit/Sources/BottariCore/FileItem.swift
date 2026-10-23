@@ -19,6 +19,15 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     /// POSIX mode bits, e.g. `0o755`. Nil when the provider has no such concept.
     public let permissions: UInt16?
     public let owner: String?
+    /// For files in iCloud Drive: whether the bytes are on this Mac.
+    public let cloud: CloudState?
+
+    public enum CloudState: Hashable, Sendable {
+        case downloaded
+        /// Only in iCloud; opening it downloads it.
+        case inCloud
+        case downloading
+    }
 
     public init(
         path: RemotePath,
@@ -27,7 +36,8 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         size: Int64? = nil,
         modified: Date? = nil,
         permissions: UInt16? = nil,
-        owner: String? = nil
+        owner: String? = nil,
+        cloud: CloudState? = nil
     ) {
         self.path = path
         self.kind = kind
@@ -36,6 +46,7 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         self.modified = modified
         self.permissions = permissions
         self.owner = owner
+        self.cloud = cloud
     }
 
     public var name: String { path.name }

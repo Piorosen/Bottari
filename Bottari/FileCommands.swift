@@ -52,6 +52,11 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("a")
             Divider()
+            Button("보따리에 담기") {
+                if let focus { focus.workspace.addToBundle(from: focus.side) }
+            }
+            .keyboardShortcut("b")
+            .disabled(focus?.pane.selection.isEmpty ?? true)
             Button("경로 복사") {
                 if let focus { focus.workspace.copyPaths(from: focus.side) }
             }
