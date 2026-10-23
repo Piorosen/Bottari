@@ -39,6 +39,8 @@ final class Workspace {
     /// Why the last transfer was refused, e.g. a read-only site.
     var refusal: String?
     var showsTransfers = false
+    /// Opens viewer windows; the main window sets it, since only views can open windows.
+    @ObservationIgnored var viewerOpener: ViewerOpener?
 
     init(left: PaneModel = PaneModel(provider: LocalFileProvider()), right: PaneModel = PaneModel(provider: LocalFileProvider())) {
         self.left = left
@@ -124,6 +126,31 @@ final class Workspace {
         if request.clearsClipboard {
             AppServices.clipboard.clear()
         }
+    }
+
+    // MARK: - Opening files
+
+    /// Double-click, Return-less open (⌘↓): folders open in the pane, images in
+    /// the gallery, anything else in Quick Look.
+    func open(_ item: FileItem, in side: PaneSide) {
+        let pane = pane(side)
+        if item.isDirectory || (item.isSymbolicLink && item.kind == .other) {
+            Task { await pane.activate(item) }
+            return
+        }
+        switch FileKind(item) {
+        case .image:
+            openViewer("gallery", for: item, in: pane)
+        case .text, .video, .other:
+            pane.selection = [item.id]
+            pane.toggleQuickLook()
+        }
+    }
+
+    private func openViewer(_ windowID: String, for item: FileItem, in pane: PaneModel) {
+        guard let opener = viewerOpener else { return }
+        let context = ViewerContext(provider: pane.provider, site: pane.site, item: item, siblings: pane.visibleItems)
+        opener.open(windowID, Viewers.register(context))
     }
 
     // MARK: - File operations

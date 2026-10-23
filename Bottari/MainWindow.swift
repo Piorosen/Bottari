@@ -4,6 +4,7 @@ import SwiftUI
 /// Two panes side by side, each browsing the Mac or a server, with transfers below.
 struct MainWindow: View {
     @State private var workspace = Workspace()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,6 +37,11 @@ struct MainWindow: View {
             Button("확인") {}
         } message: {
             Text(workspace.refusal ?? "")
+        }
+        .onAppear {
+            workspace.viewerOpener = ViewerOpener { windowID, context in
+                openWindow(id: windowID, value: context)
+            }
         }
         .onChange(of: hasPendingConflict) {
             // A clash needs an answer; show where to give it.

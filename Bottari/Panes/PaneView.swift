@@ -214,7 +214,7 @@ struct PaneView: View {
             contextMenu(for: model.items.filter { ids.contains($0.id) })
         } primaryAction: { ids in
             guard ids.count == 1, let item = model.items.first(where: { ids.contains($0.id) }) else { return }
-            Task { await model.activate(item) }
+            workspace.open(item, in: side)
         }
         .focused($listFocused)
         // While a name is being edited, keys belong to the text field.
@@ -264,8 +264,16 @@ struct PaneView: View {
             }
             Button("새로고침") { Task { await model.reload() } }
         } else {
-            if items.count == 1, let item = items.first, item.isDirectory {
-                Button("열기") { Task { await model.activate(item) } }
+            if items.count == 1, let item = items.first {
+                Button(item.isDirectory ? "열기" : FileKind(item) == .image ? "이미지 뷰어로 열기" : "열기") {
+                    workspace.open(item, in: side)
+                }
+                if !item.isDirectory {
+                    Button("빠른 미리보기") {
+                        model.selection = [item.id]
+                        model.toggleQuickLook()
+                    }
+                }
                 Divider()
             }
             if !readOnlyThere {

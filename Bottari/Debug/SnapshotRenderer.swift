@@ -70,6 +70,7 @@ enum SnapshotRenderer {
             )
         }
         await renderTransfers(into: directory)
+        await renderGallery(into: directory)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -123,6 +124,30 @@ enum SnapshotRenderer {
             )
         }
         queue.jobs.forEach(queue.cancel)
+    }
+
+    /// The image viewer on a folder of generated pictures.
+    private static func renderGallery(into directory: URL) async {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bottari-gallery-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let colors: [(NSColor, NSColor)] = [(.systemTeal, .systemIndigo), (.systemOrange, .systemPink), (.systemGreen, .systemBlue), (.systemPurple, .systemRed), (.systemYellow, .systemOrange), (.systemMint, .systemTeal)]
+        for (index, pair) in colors.enumerated() {
+            let image = NSImage(size: NSSize(width: 1600, height: 1000), flipped: false) { rect in
+                NSGradient(starting: pair.0, ending: pair.1)?.draw(in: rect, angle: 35)
+                return true
+            }
+            if let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: folder.appending(path: "photo-\(index + 1).png"))
+            }
+        }
+        let local = LocalFileProvider()
+        guard let items = try? await local.list(RemotePath(folder.path)), items.count > 2 else { return }
+        let id = Viewers.register(ViewerContext(provider: local, site: nil, item: items[2], siblings: items))
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(GalleryWindow(contextID: id), size: CGSize(width: 1000, height: 640), appearance: appearance,
+                         to: directory.appending(path: "gallery-\(name).png"))
+        }
     }
 
     private static func sampleFolder() -> URL {

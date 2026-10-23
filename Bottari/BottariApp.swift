@@ -16,6 +16,13 @@ struct BottariApp: App {
         .commands {
             FileCommands()
         }
+
+        WindowGroup("이미지", id: "gallery", for: UUID.self) { $id in
+            if let id {
+                GalleryWindow(contextID: id)
+            }
+        }
+        .defaultSize(width: 1100, height: 760)
     }
 }
 

@@ -73,10 +73,8 @@ struct FileCommands: Commands {
                 Button("상위 폴더") { run { await $0.goUp() } }
                     .keyboardShortcut(.upArrow)
                 Button("열기") {
-                    run { pane in
-                        if pane.selectedItems.count == 1, let item = pane.selectedItems.first {
-                            await pane.activate(item)
-                        }
+                    if let focus, focus.pane.selectedItems.count == 1, let item = focus.pane.selectedItems.first {
+                        focus.workspace.open(item, in: focus.side)
                     }
                 }
                 .keyboardShortcut(.downArrow)
