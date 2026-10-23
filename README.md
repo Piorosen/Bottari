@@ -27,6 +27,7 @@ Xcode에서 테스트를 돌리려면 `Packages/BottariKit/Package.swift`를 열
 Bottari/                macOS 앱 (SwiftUI)
 Packages/BottariKit/    앱과 분리된 핵심 로직
   BottariCore           RemotePath, FileItem, FileProvider, LocalFileProvider
+  BottariSFTP           SFTPFileProvider (Citadel), 호스트 키 기억(TOFU)
 ```
 
 - 모든 패인은 `FileProvider` 프로토콜로만 파일을 다뤄요. 서버 간 전송은 한쪽의 `read` 스트림을 다른 쪽 `write`에 이어 붙이는 것으로 끝나요.
@@ -37,7 +38,8 @@ Packages/BottariKit/    앱과 분리된 핵심 로직
 ## 진행 상황
 
 - [x] 프로젝트 골격, 로컬 듀얼 패인
-- [ ] SFTP (Citadel)
+- [x] SFTP 연결과 탐색 (Citadel) — 키 파일 · 비밀번호, 호스트 키 확인
+- [ ] 저장된 사이트 · 키체인 · ssh-agent · `~/.ssh/config` 가져오기
 - [ ] 전송 큐 · 서버 간 전송
 - [ ] Google Drive · S3 (rclone)
 - [ ] 원격 편집, 이미지 뷰어, 영상 재생 (libmpv)
