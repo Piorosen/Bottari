@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "BottariCore", targets: ["BottariCore"]),
         .library(name: "BottariSFTP", targets: ["BottariSFTP"]),
+        .library(name: "BottariTransfer", targets: ["BottariTransfer"]),
     ],
     dependencies: [
         .package(url: "https://github.com/orlandos-nl/Citadel.git", from: "0.12.1"),
@@ -30,12 +31,15 @@ let package = Package(
                 .product(name: "KeychainAccess", package: "KeychainAccess"),
             ]
         ),
+        .target(name: "BottariTransfer", dependencies: ["BottariCore"]),
         .testTarget(name: "BottariCoreTests", dependencies: ["BottariCore"]),
+        .testTarget(name: "BottariTransferTests", dependencies: ["BottariCore", "BottariTransfer"]),
         .testTarget(
             name: "BottariSFTPTests",
             dependencies: [
                 "BottariCore",
                 "BottariSFTP",
+                "BottariTransfer",
                 .product(name: "Citadel", package: "Citadel"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
