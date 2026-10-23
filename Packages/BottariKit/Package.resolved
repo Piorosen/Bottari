@@ -1,5 +1,5 @@
 {
-  "originHash" : "72692e729f09a91f1fb54e12bc113c8677fde2e1944c895993fed70b9ac8f5b3",
+  "originHash" : "2a5c39cf182e176aac0162e0c2a54aa8d61755b8db0ded5c6c209e8de94af273",
   "pins" : [
     {
       "identity" : "bigint",
@@ -17,6 +17,24 @@
       "state" : {
         "revision" : "ae8562f895de06ccb86fdb1cbb65fd99c8976e12",
         "version" : "0.12.1"
+      }
+    },
+    {
+      "identity" : "cryptoswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/royalapplications/CryptoSwift.git",
+      "state" : {
+        "branch" : "foundationessentials",
+        "revision" : "a59b4d91ebb22011656c830f874fe7152e183a57"
+      }
+    },
+    {
+      "identity" : "h",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rarestype/h",
+      "state" : {
+        "revision" : "aa3626829160917d4378330617971977cbd78f5b",
+        "version" : "1.0.1"
       }
     },
     {
@@ -44,6 +62,24 @@
       "state" : {
         "revision" : "288527dffbc6d3e63cce147fc7b520c64a791603",
         "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "royalvnc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/royalapplications/royalvnc.git",
+      "state" : {
+        "branch" : "8e9d3bb9cd041266df0659651f646fef251b4c71",
+        "revision" : "92d4427c73817d8f849bb289ff190aa4b40c44ea"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
       }
     },
     {
@@ -83,6 +119,15 @@
       }
     },
     {
+      "identity" : "swift-jpeg",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tayloraswift/swift-jpeg",
+      "state" : {
+        "revision" : "07c12729a5650a56e1f54b9841cb7eb68449440a",
+        "version" : "2.1.0"
+      }
+    },
+    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
@@ -110,12 +155,30 @@
       }
     },
     {
+      "identity" : "swift-png",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tayloraswift/swift-png",
+      "state" : {
+        "revision" : "8a0bcd4df5e4b307c804937776a56dd6ecdf6396",
+        "version" : "4.5.1"
+      }
+    },
+    {
       "identity" : "swift-system",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-system.git",
       "state" : {
         "revision" : "869129b7bf4ecc57b97d0193ad29690ca2134750",
         "version" : "1.8.1"
+      }
+    },
+    {
+      "identity" : "swiftterm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/migueldeicaza/SwiftTerm.git",
+      "state" : {
+        "revision" : "b1262db5b6bea699a8260a8c66999436c508ca56",
+        "version" : "1.11.2"
       }
     }
   ],

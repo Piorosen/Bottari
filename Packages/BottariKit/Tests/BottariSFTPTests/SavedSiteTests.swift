@@ -62,13 +62,26 @@ import Testing
 
         let sites = [
             SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "203.0.113.10", username: "deploy"), authentication: .agent(socket: nil), tag: .prod),
-            SavedSite(name: "nas", endpoint: SFTPEndpoint(host: "nas.local", port: 2222, username: "admin"), authentication: .password, startPath: "/volume1", readOnly: true),
+            SavedSite(name: "nas", endpoint: SFTPEndpoint(host: "nas.local", port: 2222, username: "admin"), authentication: .password, startPath: "/volume1", readOnly: true,
+                      remoteScreen: .init(kind: .appleScreenSharing)),
         ]
         try store.save(sites)
 
         #expect(try store.load() == sites)
         let json = try String(contentsOf: url, encoding: .utf8)
         #expect(!json.contains("password\":\""))
+    }
+
+    @Test func olderSiteFilesStillLoad() throws {
+        let json = """
+        [{"id":"8C9F4C0A-3E69-4B0B-9F6B-2C1E5B9A7D10","name":"old","endpoint":{"host":"h","port":22,"username":"u"},
+          "authentication":{"password":{}},"tag":"prod"}]
+        """
+        let sites = try JSONDecoder().decode([SavedSite].self, from: Data(json.utf8))
+        #expect(sites.first?.proxyJump == [])
+        #expect(sites.first?.readOnly == false)
+        #expect(sites.first?.confirmsWrites == true)
+        #expect(sites.first?.remoteScreen == nil)
     }
 
     @Test func prodSitesConfirmWritesByDefault() {

@@ -151,6 +151,20 @@ final class Workspace {
         }
     }
 
+    /// A shell on the pane's server, starting in the folder it shows.
+    func openTerminal(in side: PaneSide) {
+        let pane = pane(side)
+        guard pane.provider is SFTPFileProvider else { return }
+        openViewer("terminal", for: FileItem(path: pane.path, kind: .directory), in: pane)
+    }
+
+    /// The site's VNC or Screen Sharing session.
+    func openScreen(in side: PaneSide) {
+        let pane = pane(side)
+        guard pane.provider is SFTPFileProvider, pane.site?.remoteScreen != nil else { return }
+        openViewer("screen", for: FileItem(path: pane.path, kind: .directory), in: pane)
+    }
+
     func openInEditor(_ item: FileItem, in side: PaneSide) {
         openViewer("editor", for: item, in: pane(side))
     }

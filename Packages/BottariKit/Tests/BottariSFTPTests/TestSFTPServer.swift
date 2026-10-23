@@ -34,7 +34,8 @@ final class TestSFTPServer {
     }
 
     /// With `forwarding`, the server also opens direct-tcpip channels, so it can act as a jump host.
-    /// With `commands`, it runs exec requests (see `ShellExecDelegate`).
+    /// With `commands`, it runs exec requests (see `ShellExecDelegate`) and offers
+    /// an interactive "shell" that answers each line in capitals.
     static func start(port fixedPort: Int? = nil, forwarding: Bool = false, commands: Bool = false) async throws -> TestSFTPServer {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("BottariSFTP-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -60,6 +61,7 @@ final class TestSFTPServer {
                 }
                 if commands {
                     server.enableExec(withDelegate: ShellExecDelegate(root: root))
+                    server.enableShell(withDelegate: ShoutingShell())
                 }
                 return TestSFTPServer(root: root, port: port, clientKey: clientKey, server: server)
             } catch {
@@ -391,6 +393,26 @@ private final class ShellExecDelegate: ExecDelegate {
 
         func terminate() async throws {
             if process.value.isRunning { process.value.terminate() }
+        }
+    }
+}
+
+/// An interactive shell that prints a prompt and answers each line in capitals.
+private struct ShoutingShell: ShellDelegate {
+    func startShell(inbound: AsyncStream<ShellClientEvent>, outbound: ShellOutboundWriter, context: SSHShellContext) async throws {
+        outbound.write("$ ")
+        var line = ""
+        for await event in inbound {
+            guard case .stdin(let buffer) = event else { continue }
+            for character in String(buffer: buffer) {
+                if character == "\n" || character == "\r" {
+                    if line == "exit" { return }
+                    outbound.write(line.uppercased() + "\r\n$ ")
+                    line = ""
+                } else {
+                    line.append(character)
+                }
+            }
         }
     }
 }

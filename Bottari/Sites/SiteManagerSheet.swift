@@ -448,6 +448,29 @@ private struct SiteForm: View {
             }
 
             Section {
+                Picker("원격 화면", selection: screenKind) {
+                    Text("사용 안 함").tag(SavedSite.RemoteScreen.Kind?.none)
+                    Text("VNC").tag(SavedSite.RemoteScreen.Kind?.some(.vnc))
+                    Text("macOS 화면 공유").tag(SavedSite.RemoteScreen.Kind?.some(.appleScreenSharing))
+                }
+                .pickerStyle(.segmented)
+                if site.remoteScreen != nil {
+                    TextField("화면 포트", value: screenPort, format: .number.grouping(.never))
+                    Toggle(isOn: screenTunnel) {
+                        Text("SSH 터널로 연결 (추천)")
+                        Text(site.remoteScreen?.throughTunnel == true
+                             ? "SSH 연결 안으로 화면을 보내요 · 서버 방화벽에 포트를 열 필요 없어요"
+                             : "직접 연결 · VNC는 암호화가 약해서 추천하지 않아요")
+                    }
+                }
+            } header: {
+                Text("원격 제어")
+            } footer: {
+                Text(screenHint)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 LabeledContent("색 태그") {
                     TagPicker(tag: tag)
                 }
@@ -467,6 +490,37 @@ private struct SiteForm: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var screenKind: Binding<SavedSite.RemoteScreen.Kind?> {
+        Binding(
+            get: { site.remoteScreen?.kind },
+            set: { kind in
+                if let kind {
+                    var screen = site.remoteScreen ?? SavedSite.RemoteScreen(kind: kind)
+                    screen.kind = kind
+                    site.remoteScreen = screen
+                } else {
+                    site.remoteScreen = nil
+                }
+            }
+        )
+    }
+
+    private var screenPort: Binding<Int> {
+        Binding(get: { site.remoteScreen?.port ?? 5900 }, set: { site.remoteScreen?.port = $0 })
+    }
+
+    private var screenTunnel: Binding<Bool> {
+        Binding(get: { site.remoteScreen?.throughTunnel ?? true }, set: { site.remoteScreen?.throughTunnel = $0 })
+    }
+
+    private var screenHint: String {
+        switch site.remoteScreen?.kind {
+        case nil: "SSH 터미널은 언제든 쓸 수 있어요. 화면이 필요한 컴퓨터만 켜세요."
+        case .vnc: "Linux · 라즈베리파이처럼 VNC 서버(TigerVNC, x11vnc)가 돌고 있으면 돼요. 비밀번호는 처음 연결할 때 묻고 키체인에 저장해요."
+        case .appleScreenSharing: "Mac의 시스템 설정 › 일반 › 공유 › 화면 공유를 켜 두면 macOS 계정으로 접속해요."
+        }
     }
 
     /// A text field for an optional setting, where empty means unset.

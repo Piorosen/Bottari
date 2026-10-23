@@ -31,6 +31,20 @@ struct BottariApp: App {
         }
         .defaultSize(width: 1100, height: 700)
 
+        WindowGroup("터미널", id: "terminal", for: UUID.self) { $id in
+            if let id {
+                TerminalWindow(contextID: id)
+            }
+        }
+        .defaultSize(width: 1000, height: 640)
+
+        WindowGroup("원격 화면", id: "screen", for: UUID.self) { $id in
+            if let id {
+                ScreenWindow(contextID: id)
+            }
+        }
+        .defaultSize(width: 1280, height: 820)
+
         WindowGroup("편집기", id: "editor", for: UUID.self) { $id in
             if let id {
                 EditorWindow(contextID: id)

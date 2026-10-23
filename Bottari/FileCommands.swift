@@ -1,4 +1,5 @@
 import AppKit
+import BottariSFTP
 import BottariTransfer
 import SwiftUI
 
@@ -81,6 +82,12 @@ struct FileCommands: Commands {
                 Divider()
                 Button("새로고침") { run { await $0.reload() } }
                     .keyboardShortcut("r")
+                Divider()
+                Button("SSH 터미널") {
+                    if let focus { focus.workspace.openTerminal(in: focus.side) }
+                }
+                .keyboardShortcut("`", modifiers: .control)
+                .disabled(!(focus?.pane.provider is SFTPFileProvider))
             }
             .disabled(focus == nil)
         }

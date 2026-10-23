@@ -108,6 +108,14 @@ struct PaneView: View {
                         }
                     }
                 }
+                if model.provider is SFTPFileProvider {
+                    Section("이 서버") {
+                        Button("SSH 터미널 열기", systemImage: "terminal") { workspace.openTerminal(in: side) }
+                        if model.site?.remoteScreen != nil {
+                            Button("원격 화면 열기", systemImage: "display") { workspace.openScreen(in: side) }
+                        }
+                    }
+                }
                 Divider()
                 Button("연결 관리…", systemImage: "list.bullet.rectangle") {
                     siteManager = SiteManagerRequest(selection: model.site?.id)
@@ -262,6 +270,14 @@ struct PaneView: View {
                     .disabled(count == nil)
                 Divider()
             }
+            if model.provider is SFTPFileProvider {
+                Divider()
+                Button("여기서 터미널 열기") { workspace.openTerminal(in: side) }
+                if model.site?.remoteScreen != nil {
+                    Button("원격 화면 열기") { workspace.openScreen(in: side) }
+                }
+            }
+            Divider()
             Button("새로고침") { Task { await model.reload() } }
         } else {
             if items.count == 1, let item = items.first {

@@ -77,8 +77,12 @@ public final class TerminalSession: Sendable {
                     }
                 }
                 output.yield(.closed(nil))
+            } catch ChannelError.alreadyClosed {
+                // The server closed the channel when the shell exited; Citadel then
+                // tries to close it again.
+                output.yield(.closed(nil))
             } catch {
-                output.yield(.closed(SFTPConnectError.wrap(error).localizedDescription))
+                output.yield(.closed(error.localizedDescription))
             }
             output.finish()
         }

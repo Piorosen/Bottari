@@ -17,6 +17,28 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         case prod, staging, dev, personal
     }
 
+    /// A remote screen on the same machine.
+    public struct RemoteScreen: Codable, Hashable, Sendable {
+        public enum Kind: String, Codable, CaseIterable, Sendable {
+            /// A VNC server such as TigerVNC or x11vnc.
+            case vnc
+            /// macOS Screen Sharing, which signs in with a macOS account.
+            case appleScreenSharing
+        }
+
+        public var kind: Kind
+        public var port: Int
+        /// Over the site's SSH connection, so the screen port need not be open on
+        /// the server's firewall and VNC's weak encryption never crosses the network.
+        public var throughTunnel: Bool
+
+        public init(kind: Kind, port: Int = 5900, throughTunnel: Bool = true) {
+            self.kind = kind
+            self.port = port
+            self.throughTunnel = throughTunnel
+        }
+    }
+
     public var id: UUID
     public var name: String
     public var endpoint: SFTPEndpoint
@@ -31,6 +53,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public var readOnly: Bool
     /// Ask before copying onto, overwriting or deleting on this server. PROD sites start with it on.
     public var confirmsWrites: Bool
+    public var remoteScreen: RemoteScreen?
 
     public init(
         id: UUID = UUID(),
@@ -42,7 +65,8 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         startPath: String? = nil,
         sshConfigAlias: String? = nil,
         readOnly: Bool = false,
-        confirmsWrites: Bool? = nil
+        confirmsWrites: Bool? = nil,
+        remoteScreen: RemoteScreen? = nil
     ) {
         self.id = id
         self.name = name
@@ -54,6 +78,23 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         self.sshConfigAlias = sshConfigAlias
         self.readOnly = readOnly
         self.confirmsWrites = confirmsWrites ?? (tag == .prod)
+        self.remoteScreen = remoteScreen
+    }
+
+    /// Settings added later get their defaults when an older sites.json lacks them.
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        endpoint = try values.decode(SFTPEndpoint.self, forKey: .endpoint)
+        authentication = try values.decode(Authentication.self, forKey: .authentication)
+        proxyJump = try values.decodeIfPresent([String].self, forKey: .proxyJump) ?? []
+        tag = try values.decodeIfPresent(Tag.self, forKey: .tag)
+        startPath = try values.decodeIfPresent(String.self, forKey: .startPath)
+        sshConfigAlias = try values.decodeIfPresent(String.self, forKey: .sshConfigAlias)
+        readOnly = try values.decodeIfPresent(Bool.self, forKey: .readOnly) ?? false
+        confirmsWrites = try values.decodeIfPresent(Bool.self, forKey: .confirmsWrites) ?? (tag == .prod)
+        remoteScreen = try values.decodeIfPresent(RemoteScreen.self, forKey: .remoteScreen)
     }
 
     /// A site for an `~/.ssh/config` host: its IdentityAgent if set, otherwise its
@@ -89,6 +130,8 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
 
     public var passwordKey: String { "site.\(id.uuidString).password" }
     public var passphraseKey: String { "site.\(id.uuidString).passphrase" }
+    /// The VNC or Screen Sharing password.
+    public var screenPasswordKey: String { "site.\(id.uuidString).screen" }
 }
 
 /// Saved sites as a JSON file.

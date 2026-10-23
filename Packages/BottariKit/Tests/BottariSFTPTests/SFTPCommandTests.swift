@@ -109,3 +109,34 @@ import Testing
         #expect(SFTPFileProvider.quote("it's") == #"'it'\''s'"#)
     }
 }
+
+@Suite(.timeLimit(.minutes(1))) struct TerminalSessionTests {
+    @Test func typesIntoAShellAndSeesItsAnswers() async throws {
+        let server = try await TestSFTPServer.start(commands: true)
+        let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .password(TestSFTPServer.password), hostKeys: .acceptAnything)
+        let terminal = provider.openTerminal(columns: 80, rows: 24)
+        var seen = ""
+        var sent = false
+        var ended: String??
+        for await event in terminal.events {
+            switch event {
+            case .output(let data):
+                seen += String(decoding: data, as: UTF8.self)
+                if !sent, seen.contains("$ ") {
+                    sent = true
+                    terminal.resize(columns: 100, rows: 30)
+                    terminal.send("hello bottari\n")
+                }
+                if seen.contains("HELLO BOTTARI") {
+                    terminal.send("exit\n")
+                }
+            case .closed(let reason):
+                ended = .some(reason)
+            }
+        }
+        #expect(seen.contains("HELLO BOTTARI"))
+        #expect(ended == .some(nil), "\(String(describing: ended))")
+        await provider.disconnect()
+        await server.stop()
+    }
+}

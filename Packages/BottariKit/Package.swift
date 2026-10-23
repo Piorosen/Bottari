@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "BottariTransfer", targets: ["BottariTransfer"]),
         .library(name: "BottariEditor", targets: ["BottariEditor"]),
         .library(name: "BottariPlayer", targets: ["BottariPlayer"]),
+        .library(name: "BottariRemote", targets: ["BottariRemote"]),
     ],
     dependencies: [
         .package(url: "https://github.com/orlandos-nl/Citadel.git", from: "0.12.1"),
@@ -21,6 +22,11 @@ let package = Package(
         .package(url: "https://github.com/raspu/Highlightr.git", from: "2.3.0"),
         // libmpv with FFmpeg (LGPL build) as prebuilt xcframeworks.
         .package(url: "https://github.com/mpvkit/MPVKit.git", exact: "1.0.0"),
+        // 1.12 and later need the separately installed Metal toolchain; 1.19 and later
+        // also run a build plugin that Xcode makes you approve first.
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", .upToNextMinor(from: "1.11.2")),
+        // 1.1.0, pinned by commit: it depends on a CryptoSwift branch, which a version requirement refuses.
+        .package(url: "https://github.com/royalapplications/royalvnc.git", revision: "8e9d3bb9cd041266df0659651f646fef251b4c71"),
     ],
     targets: [
         .target(name: "BottariCore"),
@@ -39,6 +45,10 @@ let package = Package(
         .target(name: "BottariTransfer", dependencies: ["BottariCore"]),
         .target(name: "BottariEditor", dependencies: [.product(name: "Highlightr", package: "Highlightr")]),
         .target(name: "BottariPlayer", dependencies: ["BottariCore", .product(name: "MPVKit", package: "MPVKit")]),
+        .target(name: "BottariRemote", dependencies: [
+            .product(name: "SwiftTerm", package: "SwiftTerm"),
+            .product(name: "RoyalVNCKit", package: "royalvnc"),
+        ]),
         .testTarget(name: "BottariCoreTests", dependencies: ["BottariCore"]),
         .testTarget(name: "BottariTransferTests", dependencies: ["BottariCore", "BottariTransfer"]),
         .testTarget(name: "BottariEditorTests", dependencies: ["BottariEditor"]),

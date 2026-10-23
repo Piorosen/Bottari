@@ -74,6 +74,7 @@ enum SnapshotRenderer {
         await renderGallery(into: directory)
         await renderEditor(into: directory)
         await renderPlayer(into: directory)
+        await checkScreen(into: directory)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -241,6 +242,33 @@ enum SnapshotRenderer {
         let id = Viewers.register(context)
         await render(PlayerWindow(contextID: id), size: CGSize(width: 900, height: 520), appearance: .darkAqua,
                      to: directory.appending(path: "player-dark.png"))
+    }
+
+    /// The remote screen against a tiny local VNC server: does RoyalVNC get
+    /// through the handshake and hand over a framebuffer? Written to screen-check.txt.
+    private static func checkScreen(into directory: URL) async {
+        guard let server = try? FakeVNCServer() else { return }
+        let port = await server.start()
+        defer { server.stop() }
+        let site = SavedSite(
+            name: "test-vnc",
+            endpoint: SFTPEndpoint(host: "127.0.0.1", username: "me"),
+            authentication: .agent(socket: nil),
+            remoteScreen: .init(kind: .vnc, port: Int(port), throughTunnel: false)
+        )
+        let model = ScreenModel(provider: nil, site: site, screen: site.remoteScreen!)
+        await model.connect()
+        let deadline = Date().addingTimeInterval(8)
+        while model.framebufferView == nil, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let lines = [
+            "connected \(model.isConnected)",
+            "status \(model.status)",
+            "framebuffer \(model.framebufferView.map { "\(Int($0.framebufferSize.width))x\(Int($0.framebufferSize.height))" } ?? "none")",
+        ]
+        try? lines.joined(separator: "\n").write(to: directory.appending(path: "screen-check.txt"), atomically: true, encoding: .utf8)
+        model.disconnect()
     }
 
     /// A short H.264 movie, so the player has something to open.

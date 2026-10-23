@@ -189,7 +189,7 @@ public struct SFTPFileProvider: FileProvider {
     }
 
     /// Single-quotes `text` for a POSIX shell.
-    static func quote(_ text: String) -> String {
+    public static func quote(_ text: String) -> String {
         "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
