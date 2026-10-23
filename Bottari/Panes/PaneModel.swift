@@ -230,6 +230,45 @@ final class PaneModel {
         await reload()
     }
 
+    /// Packs items into "<name>.tar.gz" (or "보관함.tar.gz" for several) on the server.
+    func compressOnServer(_ chosen: [FileItem]) async {
+        guard let server = provider as? SFTPFileProvider, let first = chosen.first else { return }
+        let base = chosen.count == 1 ? first.name : "보관함"
+        let archive = path.appending(FileNames.available("\(base).tar.gz", isDirectory: false, taken: Set(items.map(\.name))))
+        await runOnServer {
+            try await server.compress(chosen.map(\.path), into: archive)
+        }
+        selection = [archive]
+    }
+
+    /// Unpacks an archive into a new folder named after it.
+    func extractOnServer(_ archive: FileItem) async {
+        guard let server = provider as? SFTPFileProvider else { return }
+        let name = archive.name.replacingOccurrences(of: #"\.(tar\.(gz|bz2|xz)|tgz|tar|zip)$"#, with: "", options: [.regularExpression, .caseInsensitive])
+        let folder = path.appending(FileNames.available(name.isEmpty ? "풀린 파일" : name, isDirectory: true, taken: Set(items.map(\.name))))
+        await runOnServer {
+            try await server.extract(archive.path, into: folder)
+        }
+        selection = [folder]
+    }
+
+    private func runOnServer(_ work: () async throws -> Void) async {
+        isLoading = true
+        do {
+            try await work()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await reload()
+    }
+
+    /// Whether the pane's server lets Bottari run commands, for the archive actions.
+    var canRunCommands: Bool { (provider as? SFTPFileProvider)?.canRunCommands == true }
+
+    static func isArchive(_ item: FileItem) -> Bool {
+        !item.isDirectory && item.name.range(of: #"\.(tar\.(gz|bz2|xz)|tgz|tar|zip)$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     /// Paths of the selected items, one per line, for ⌥⌘C.
     var selectedPathsText: String {
         let paths = selectedItems.map(\.path.string).joined(separator: "\n")

@@ -12,6 +12,9 @@ public final class TransferQueue {
     public var maxConcurrentTransfers = 3 {
         didSet { pump() }
     }
+    /// Compare SHA-256 on both sides after each file, where both can compute it
+    /// without sending the file again. Applies to jobs started afterwards.
+    public var verifiesChecksums = false
     /// Called when a job ends or is removed, e.g. to close connections nothing uses any more.
     @ObservationIgnored public var onJobsChanged: (() -> Void)?
     @ObservationIgnored private var ticker: Task<Void, Never>?
@@ -46,6 +49,7 @@ public final class TransferQueue {
             route: Self.route(kind, from: source.provider, to: destination.provider),
             policy: policy
         )
+        job.verifiesChecksums = verifiesChecksums
         jobs.append(job)
         Task { [self] in await prepare(job) }
         return job
@@ -108,6 +112,7 @@ public final class TransferQueue {
         guard !job.state.hasEnded else { return }
         job.state = .cancelled
         job.bytesPerSecond = 0
+        discardPartials(of: job.pending, in: job)
         job.pending.removeAll()
         for running in job.running.values {
             running.task.cancel()
@@ -135,6 +140,7 @@ public final class TransferQueue {
     /// Gives up on the failed files and calls the job done.
     public func skipFailures(of job: TransferJob) {
         guard !job.failures.isEmpty else { return }
+        discardPartials(of: Array(job.retryable.values), in: job)
         job.skippedFiles += job.failures.count
         job.failures = []
         job.retryable = [:]
@@ -310,9 +316,10 @@ public final class TransferQueue {
     // MARK: - Running
 
     private enum Outcome {
-        case done(bytes: Int64)
+        case done(bytes: Int64, verified: Bool)
         case skipped(bytes: Int64)
-        case failed(String)
+        /// Carries the item as far as it got, for a retry.
+        case failed(String, WorkItem)
         /// Stopped by pause or cancel, carrying the item as far as it got.
         case interrupted(WorkItem)
         case planned
@@ -356,7 +363,7 @@ public final class TransferQueue {
                     return .planned
                 }
                 guard existing.isDirectory == work.source.isDirectory else {
-                    return .failed(existing.isDirectory ? "같은 이름의 폴더가 있어요: \(work.destination)" : "같은 이름의 파일이 있어요: \(work.destination)")
+                    return .failed(existing.isDirectory ? "같은 이름의 폴더가 있어요: \(work.destination)" : "같은 이름의 파일이 있어요: \(work.destination)", work)
                 }
                 let answer = await resolve(TransferConflict(incoming: work.source, existing: existing), in: job)
                 work.settled = answer
@@ -372,9 +379,40 @@ public final class TransferQueue {
             }
             let source = job.source.provider
             let destination = job.destination.provider
+            var resumedFrom: Int64 = 0
+            var verified = false
             switch work.action {
             case .stream:
-                try await destination.write(work.destination, from: source.read(work.source.path, range: nil).counted(by: counter))
+                resumedFrom = await resumableOffset(for: work, in: job)
+                do {
+                    if resumedFrom > 0, let size = work.source.size {
+                        let rest = source.read(work.source.path, range: resumedFrom..<size).counted(by: counter)
+                        try await destination.write(work.destination, from: rest, resumingAt: resumedFrom)
+                    } else {
+                        try await destination.write(work.destination, from: source.read(work.source.path, range: nil).counted(by: counter))
+                    }
+                } catch {
+                    // Whatever reached the destination waits in its partial file.
+                    work.mayHavePartial = work.mayHavePartial || resumedFrom > 0 || counter.total > 0
+                    throw error
+                }
+                work.mayHavePartial = false
+                if job.verifiesChecksums, source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) {
+                    let sentPath = work.source.path
+                    let receivedPath = work.destination
+                    async let sent = source.checksum(sentPath)
+                    async let received = destination.checksum(receivedPath)
+                    let (expected, actual) = try await (sent, received)
+                    guard expected == actual else {
+                        // A retry must replace the bad copy, not trip over it as a clash.
+                        work.settled = .overwrite
+                        return .failed("받은 파일의 체크섬이 달라요 (원본 \(expected.prefix(12))…, 받은 쪽 \(actual.prefix(12))…)", work)
+                    }
+                    verified = true
+                }
+                if destination.capabilities.contains(.modificationTime), let modified = work.source.modified {
+                    try? await destination.setModified(modified, at: work.destination)
+                }
             case .rename, .providerCopy:
                 // Neither replaces an existing file, so clear the way first.
                 if work.settled == .overwrite {
@@ -393,15 +431,45 @@ public final class TransferQueue {
                 do {
                     try await source.delete(work.source.path)
                 } catch {
-                    return .failed("옮겼지만 원본을 지우지 못했어요: \(error.localizedDescription)")
+                    return .failed("옮겼지만 원본을 지우지 못했어요: \(error.localizedDescription)", work)
                 }
             }
-            return .done(bytes: work.action == .stream ? counter.total : (work.source.size ?? 0))
+            let bytes = work.action == .stream ? resumedFrom + counter.total : (work.source.size ?? 0)
+            return .done(bytes: bytes, verified: verified)
         } catch {
             if job.state == .paused || job.state == .cancelled || error is CancellationError {
                 return .interrupted(work)
             }
-            return .failed(error.localizedDescription)
+            return .failed(error.localizedDescription, work)
+        }
+    }
+
+    /// Where to pick a cut-off file up again. Partial files this job wrote are
+    /// trusted; one found from before is resumed only when checksums will be
+    /// compared, since it might hold a different file's beginning.
+    private func resumableOffset(for work: WorkItem, in job: TransferJob) async -> Int64 {
+        let source = job.source.provider
+        let destination = job.destination.provider
+        guard destination.capabilities.contains(.resumableWrite), source.capabilities.contains(.rangeRead),
+              let size = work.source.size, size > 0
+        else { return 0 }
+        let partial = work.destination.partialWritePath
+        let written: Int64?
+        if work.mayHavePartial {
+            written = try? await destination.stat(partial).size
+        } else if job.verifiesChecksums, source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) {
+            written = job.listings[partial.parent ?? .root]?[partial.name]?.size
+        } else {
+            written = nil
+        }
+        guard let written, written > 0, written < size else { return 0 }
+        return written
+    }
+
+    private func discardPartials(of work: [WorkItem], in job: TransferJob) {
+        let destination = job.destination.provider
+        for item in work where item.mayHavePartial {
+            Task { await destination.discardPartialWrite(to: item.destination) }
         }
     }
 
@@ -423,18 +491,21 @@ public final class TransferQueue {
     private func settle(_ id: UUID, _ outcome: Outcome, in job: TransferJob) {
         guard let running = job.running.removeValue(forKey: id) else { return }
         switch outcome {
-        case .done(let bytes):
+        case .done(let bytes, let verified):
             job.completedFiles += 1
             job.completedBytes += bytes
+            if verified { job.verifiedFiles += 1 }
         case .skipped(let bytes):
             job.skippedFiles += 1
             job.skippedBytes += bytes
-        case .failed(let message):
+        case .failed(let message, let work):
             let failure = TransferFailure(path: running.work.source.path, message: message)
             job.failures.append(failure)
-            job.retryable[failure.id] = running.work
+            job.retryable[failure.id] = work
         case .interrupted(let work):
-            if job.state != .cancelled {
+            if job.state == .cancelled {
+                discardPartials(of: [work], in: job)
+            } else {
                 job.pending.insert(work, at: 0)
             }
         case .planned:

@@ -274,6 +274,15 @@ struct PaneView: View {
                     workspace.beginRenaming(in: side)
                 }
             }
+            if model.canRunCommands, !readOnlyHere {
+                Button(items.count == 1 ? "서버에서 압축 (tar.gz)" : "\(items.count)개를 서버에서 압축") {
+                    Task { await model.compressOnServer(items) }
+                }
+                if items.count == 1, let item = items.first, PaneModel.isArchive(item) {
+                    Button("서버에서 압축 풀기") { Task { await model.extractOnServer(item) } }
+                }
+                Divider()
+            }
             Button("복사") { AppServices.clipboard.copy(items, from: model.provider, site: model.site) }
             Button("경로 복사") {
                 model.selection = Set(items.map(\.id))

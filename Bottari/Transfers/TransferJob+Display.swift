@@ -49,7 +49,10 @@ extension TransferJob {
         case .paused:
             return "일시정지"
         case .finished:
-            return skippedFiles > 0 ? "완료 · \(skippedFiles)개 건너뜀" : "완료"
+            var parts = ["완료"]
+            if verifiedFiles > 0 { parts.append(verifiedFiles == completedFiles ? "체크섬 일치" : "체크섬 \(verifiedFiles)개 일치") }
+            if skippedFiles > 0 { parts.append("\(skippedFiles)개 건너뜀") }
+            return parts.joined(separator: " · ")
         case .failed:
             return "\(failures.count)개 실패"
         case .cancelled:

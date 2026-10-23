@@ -65,6 +65,7 @@ struct TransferPanel: View {
     @Bindable var workspace: Workspace
     @AppStorage(TransferSettings.maxConcurrentKey) private var maxConcurrent = 3
     @AppStorage(TransferSettings.conflictPolicyKey) private var policy: ConflictPolicy = .ask
+    @AppStorage(TransferSettings.verifiesChecksumsKey) private var verifiesChecksums = false
 
     private var queue: TransferQueue { AppServices.transfers }
 
@@ -83,6 +84,9 @@ struct TransferPanel: View {
                 }
                 .fixedSize()
                 .help("같은 이름의 파일이 있을 때. 새로 시작하는 전송부터 적용돼요.")
+                Toggle("체크섬 비교", isOn: $verifiesChecksums)
+                    .toggleStyle(.checkbox)
+                    .help("전송한 뒤 양쪽에서 SHA-256을 계산해 비교해요. 서버는 명령을 실행할 수 있을 때만 돼요.")
                 Button("모두 일시정지") { queue.pauseAll() }
                 Button("모두 재개") { queue.resumeAll() }
                 Button("완료 항목 지우기") { queue.removeEnded() }
@@ -116,6 +120,9 @@ struct TransferPanel: View {
         .frame(height: 250)
         .onChange(of: maxConcurrent) {
             queue.maxConcurrentTransfers = maxConcurrent
+        }
+        .onChange(of: verifiesChecksums) {
+            queue.verifiesChecksums = verifiesChecksums
         }
     }
 }

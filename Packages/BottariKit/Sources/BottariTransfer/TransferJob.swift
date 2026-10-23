@@ -37,6 +37,8 @@ public final class TransferJob: Identifiable {
     public internal(set) var totalFiles = 0
     public internal(set) var completedFiles = 0
     public internal(set) var skippedFiles = 0
+    /// Files whose checksums were compared after the transfer, and matched.
+    public internal(set) var verifiedFiles = 0
     public internal(set) var failures: [TransferFailure] = []
     public internal(set) var bytesPerSecond: Double = 0
     var questions: [Question] = []
@@ -65,6 +67,7 @@ public final class TransferJob: Identifiable {
 
     // Bookkeeping for the queue.
     @ObservationIgnored var policy: ConflictPolicy
+    @ObservationIgnored var verifiesChecksums = false
     @ObservationIgnored var rememberedAnswer: ConflictAnswer?
     @ObservationIgnored var pending: [WorkItem] = []
     @ObservationIgnored var running: [UUID: (work: WorkItem, counter: ByteCounter, task: Task<Void, Never>)] = [:]

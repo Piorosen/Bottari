@@ -1,4 +1,5 @@
 import BottariCore
+import CryptoKit
 import Foundation
 import Synchronization
 
@@ -19,11 +20,15 @@ final class MemoryFileProvider: FileProvider {
         var chunkDelay: Duration?
         var writesInProgress = 0
         var mostWritesAtOnce = 0
+        /// Where each read started, to see resumes.
+        var readOffsets: [Int64] = []
+        /// Names whose checksum comes out wrong, as if the copy were damaged.
+        var damagedChecksums: Set<String> = []
     }
 
     let displayName: String
     let locationID: String
-    let capabilities: ProviderCapabilities = [.rangeRead]
+    let capabilities: ProviderCapabilities = [.rangeRead, .resumableWrite, .checksum, .modificationTime]
     let home = RemotePath.root
     let state = Mutex(State())
 
@@ -105,6 +110,7 @@ final class MemoryFileProvider: FileProvider {
     }
 
     func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
+        state.withLock { $0.readOffsets.append(range?.lowerBound ?? 0) }
         let offset = Mutex(Int(range?.lowerBound ?? 0))
         return AsyncThrowingStream(unfolding: { [self] in
             let (data, size, delay) = try self.state.withLock { state in
@@ -125,21 +131,53 @@ final class MemoryFileProvider: FileProvider {
     }
 
     func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws {
-        let fails = try state.withLock { state in
+        try await write(path, from: data, resumingAt: 0)
+    }
+
+    func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
+        let partial = path.partialWritePath
+        let (fails, written) = try state.withLock { state in
             guard let parent = path.parent, state.entries[parent]?.isDirectory == true else { throw ProviderError.notFound(path) }
             if state.entries[path]?.isDirectory == true { throw ProviderError.isADirectory(path) }
             state.writesInProgress += 1
             state.mostWritesAtOnce = max(state.mostWritesAtOnce, state.writesInProgress)
-            return state.failingWrites.contains(path.name)
+            return (state.failingWrites.contains(path.name), state.entries[partial]?.data.prefix(Int(offset)) ?? Data())
         }
         defer { state.withLock { $0.writesInProgress -= 1 } }
-        // Collect everything first and commit at the end, like an atomic write.
-        var received = Data()
-        for try await chunk in data {
-            received.append(chunk)
-            if fails { throw ProviderError.io("디스크가 가득 찼어요") }
+        // Collect into the partial file and commit at the end, like an atomic write.
+        var received = offset > 0 ? Data(written) : Data()
+        do {
+            for try await chunk in data {
+                received.append(chunk)
+                if fails { throw ProviderError.io("디스크가 가득 찼어요") }
+            }
+        } catch {
+            state.withLock { $0.entries[partial] = Entry(data: received) }
+            throw error
         }
-        state.withLock { $0.entries[path] = Entry(data: received, modified: Date()) }
+        state.withLock { state in
+            state.entries[partial] = nil
+            state.entries[path] = Entry(data: received, modified: Date())
+        }
+    }
+
+    func checksum(_ path: RemotePath) async throws -> String {
+        try state.withLock { state in
+            guard let entry = state.entries[path], !entry.isDirectory else { throw ProviderError.notFound(path) }
+            let hash = SHA256.hash(data: entry.data).map { String(format: "%02x", $0) }.joined()
+            return state.damagedChecksums.contains(path.name) ? String(hash.reversed()) : hash
+        }
+    }
+
+    func setModified(_ date: Date, at path: RemotePath) async throws {
+        try state.withLock { state in
+            guard state.entries[path] != nil else { throw ProviderError.notFound(path) }
+            state.entries[path]?.modified = date
+        }
+    }
+
+    func modified(_ path: RemotePath) -> Date? {
+        state.withLock { $0.entries[path]?.modified }
     }
 
     func makeDirectory(_ path: RemotePath) async throws {

@@ -285,6 +285,7 @@ struct SiteManagerSheet: View {
                 let milliseconds = elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
                 var parts = ["연결 성공", "홈 \(provider.home.string)"]
                 if !site.proxyJump.isEmpty { parts.append("\(site.proxyJump.joined(separator: " → ")) 경유") }
+                parts.append(provider.canRunCommands ? "명령 실행 가능" : "SFTP 전용")
                 parts.append("\(milliseconds) ms")
                 outcome = .success(parts.joined(separator: " · "))
                 await provider.disconnect()

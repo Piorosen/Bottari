@@ -5,10 +5,15 @@ import Foundation
 enum TransferSettings {
     static let maxConcurrentKey = "transfers.maxConcurrent"
     static let conflictPolicyKey = "transfers.conflictPolicy"
+    static let verifiesChecksumsKey = "transfers.verifiesChecksums"
 
     static var maxConcurrentTransfers: Int {
         let stored = UserDefaults.standard.integer(forKey: maxConcurrentKey)
         return stored == 0 ? 3 : stored
+    }
+
+    static var verifiesChecksums: Bool {
+        UserDefaults.standard.bool(forKey: verifiesChecksumsKey)
     }
 
     static var conflictPolicy: ConflictPolicy {

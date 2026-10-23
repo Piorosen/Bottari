@@ -77,6 +77,8 @@ struct WorkItem: Sendable {
     /// Set once the user (or the policy) has settled a name clash for this item,
     /// so a paused item does not ask again.
     var settled: ConflictAnswer?
+    /// An earlier attempt in this job wrote part of the file, which may be resumed.
+    var mayHavePartial = false
 }
 
 /// Bytes streamed so far by one transfer, written by the stream and read by the

@@ -295,6 +295,8 @@ import Testing
 
         #expect(job.state == .paused)
         #expect(!server.exists("/movie.mp4"))
+        let partial = try #require(server.data("/.movie.mp4.bottari-part"))
+        #expect(!partial.isEmpty)
         #expect(job.pending.count == 1)
 
         mac.state.withLock { $0.chunkDelay = nil }
@@ -303,7 +305,10 @@ import Testing
 
         #expect(job.state == .finished)
         #expect(server.data("/movie.mp4") == payload)
+        #expect(!server.exists("/.movie.mp4.bottari-part"))
         #expect(job.transferredBytes == 40_000)
+        // The second attempt picked up where the partial file ended.
+        #expect(mac.state.withLock { $0.readOffsets } == [0, Int64(partial.count)])
     }
 
     @Test func cancellingLeavesNothingHalfWritten() async throws {
@@ -321,7 +326,51 @@ import Testing
         try await eventually { job.running.isEmpty }
 
         #expect(job.state == .cancelled)
-        #expect(server.tree.isEmpty)
+        // The cut-off file's partial is cleaned up too.
+        try await eventually { server.tree.isEmpty }
+    }
+
+    @Test func checksumsAreComparedAndAMismatchIsRetriedOverTheBadCopy() async throws {
+        mac.addFile("/good.txt", "good")
+        mac.addFile("/bad.txt", "bad")
+        server.state.withLock { $0.damagedChecksums = ["bad.txt"] }
+        queue.verifiesChecksums = true
+
+        let job = try await finished(try await transfer(.copy, ["/good.txt", "/bad.txt"], from: mac, to: server))
+
+        #expect(job.state == .failed)
+        #expect(job.verifiedFiles == 1)
+        #expect(job.failures.first?.message.contains("체크섬") == true)
+
+        server.state.withLock { $0.damagedChecksums = [] }
+        queue.retryFailures(of: job)
+        try await eventually { job.state == .finished }
+        #expect(job.verifiedFiles == 2)
+        #expect(job.skippedFiles == 0)
+    }
+
+    @Test func modificationTimesComeAlong() async throws {
+        let date = Date(timeIntervalSince1970: 1_234_567_890)
+        mac.addFile("/old-photo.jpg", "jpg", modified: date)
+
+        _ = try await finished(try await transfer(.copy, ["/old-photo.jpg"], from: mac, to: server))
+
+        #expect(server.modified("/old-photo.jpg") == date)
+    }
+
+    @Test func aPartialFromBeforeIsResumedOnlyWhenChecksumsWillCatchMistakes() async throws {
+        mac.addFile("/big.bin", "0123456789")
+        server.addFile("/.big.bin.bottari-part", "01234")
+
+        _ = try await finished(try await transfer(.copy, ["/big.bin"], from: mac, to: server))
+        #expect(mac.state.withLock { $0.readOffsets } == [0])
+        #expect(server.text("/big.bin") == "0123456789")
+
+        server.addFile("/.big.bin.bottari-part", "01234")
+        queue.verifiesChecksums = true
+        _ = try await finished(try await transfer(.copy, ["/big.bin"], from: mac, to: server, policy: .overwrite))
+        #expect(mac.state.withLock { $0.readOffsets } == [0, 5])
+        #expect(server.text("/big.bin") == "0123456789")
     }
 
     @Test func freeNamesGoBeforeTheExtension() {

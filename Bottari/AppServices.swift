@@ -17,6 +17,7 @@ enum AppServices {
     static let transfers: TransferQueue = {
         let queue = TransferQueue()
         queue.maxConcurrentTransfers = TransferSettings.maxConcurrentTransfers
+        queue.verifiesChecksums = TransferSettings.verifiesChecksums
         queue.onJobsChanged = {
             connections.closeUnused()
             NotificationCenter.default.post(name: .transfersChanged, object: nil)
