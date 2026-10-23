@@ -45,9 +45,20 @@ struct GeneralSettings: View {
                     Text("양쪽에서 SHA-256을 계산해 비교해요. 서버는 명령을 실행할 수 있을 때만 돼요.")
                 }
             }
+            Section("업데이트") {
+                if Updates.shared.isAvailable {
+                    Toggle("자동으로 업데이트 확인", isOn: Binding(get: { Updates.shared.automaticallyChecks }, set: { Updates.shared.automaticallyChecks = $0 }))
+                    Button("지금 확인") { Updates.shared.checkForUpdates() }
+                } else {
+                    LabeledContent("버전", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
+                    Text("이 빌드는 업데이트를 확인하지 않아요. 서명한 릴리스(scripts/release.sh)에서 켜져요.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 620, height: 250)
+        .frame(width: 620, height: 380)
         .onChange(of: maxConcurrent) { AppServices.transfers.maxConcurrentTransfers = maxConcurrent }
         .onChange(of: verifiesChecksums) { AppServices.transfers.verifiesChecksums = verifiesChecksums }
     }

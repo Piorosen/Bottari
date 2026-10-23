@@ -14,6 +14,7 @@
 		B0771A0000000000000000A5 /* BottariPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C5 /* BottariPlayer */; };
 		B0771A0000000000000000A6 /* BottariRemote in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C6 /* BottariRemote */; };
 		B0771A0000000000000000A7 /* BottariCloud in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C7 /* BottariCloud */; };
+		B0771A0000000000000000A8 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C8 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 				B0771A0000000000000000A5 /* BottariPlayer in Frameworks */,
 				B0771A0000000000000000A6 /* BottariRemote in Frameworks */,
 				B0771A0000000000000000A7 /* BottariCloud in Frameworks */,
+				B0771A0000000000000000A8 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +91,7 @@
 				B0771A0000000000000000C5 /* BottariPlayer */,
 				B0771A0000000000000000C6 /* BottariRemote */,
 				B0771A0000000000000000C7 /* BottariCloud */,
+				B0771A0000000000000000C8 /* Sparkle */,
 			);
 			productName = Bottari;
 			productReference = B0771A000000000000000010 /* Bottari.app */;
@@ -121,6 +124,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				B0771A0000000000000000B1 /* XCLocalSwiftPackageReference "Packages/BottariKit" */,
+				B0771A0000000000000000B2 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B0771A000000000000000002 /* Products */;
@@ -207,6 +211,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				BOTTARI_SPARKLE_PUBLIC_KEY = "";
+				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -215,6 +221,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Bottari;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 JooHyoung Cha";
@@ -236,6 +243,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				BOTTARI_SPARKLE_PUBLIC_KEY = "";
+				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -244,6 +253,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Bottari;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 JooHyoung Cha";
@@ -291,6 +301,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		B0771A0000000000000000B2 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		B0771A0000000000000000C1 /* BottariCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -319,6 +340,11 @@
 		B0771A0000000000000000C7 /* BottariCloud */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BottariCloud;
+		};
+		B0771A0000000000000000C8 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B0771A0000000000000000B2 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

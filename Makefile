@@ -4,7 +4,7 @@ DERIVED := .build/xcode
 DESTINATION := platform=macOS,arch=$(shell uname -m)
 APP := $(DERIVED)/Build/Products/Debug/Bottari.app
 
-.PHONY: build test run open clean
+.PHONY: build test run open clean release package
 
 # Build the app (Debug) without opening Xcode.
 build:
@@ -19,6 +19,14 @@ run: build
 
 open:
 	open $(PROJECT)
+
+# Signed, notarized DMG plus the Sparkle zip and appcast (see Config/release.env.example).
+release:
+	scripts/release.sh
+
+# The same steps without signing, to try the pipeline.
+package:
+	scripts/release.sh --unsigned
 
 clean:
 	rm -rf .build Packages/BottariKit/.build

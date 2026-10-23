@@ -325,7 +325,7 @@ enum SnapshotRenderer {
     private static func renderSettings(into directory: URL, folder: URL) async {
         let themes = ThemeStore.shared, keymap = Keymap.shared
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            await render(GeneralSettings(), size: CGSize(width: 620, height: 250), appearance: appearance,
+            await render(GeneralSettings(), size: CGSize(width: 620, height: 380), appearance: appearance,
                          to: directory.appending(path: "settings-general-\(name).png"))
             await render(AppearanceSettings(), size: CGSize(width: 880, height: 700), appearance: appearance,
                          to: directory.appending(path: "settings-look-\(name).png"))

@@ -64,3 +64,6 @@ fastlane/test_output
 # Bottari
 .DS_Store
 .swiftpm/
+
+# Release settings (team ID, notary profile, Sparkle public key)
+Config/release.env

@@ -53,7 +53,7 @@ struct MainWindow: View {
                     .frame(minWidth: 320)
                 }
                 .keyboardShortcut(Keymap.shared.shortcut(for: .palette))
-                .help("명령 팔레트 (\(Keymap.shared.combo(for: .palette)))")
+                .help("명령 팔레트 (\(Keymap.shared.combo(for: .palette).description))")
             }
             ToolbarItem(placement: .primaryAction) {
                 TunnelStatusButton()

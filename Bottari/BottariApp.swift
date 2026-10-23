@@ -16,6 +16,11 @@ struct BottariApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             FileCommands()
+            if Updates.shared.isAvailable {
+                CommandGroup(after: .appInfo) {
+                    Button("업데이트 확인…") { Updates.shared.checkForUpdates() }
+                }
+            }
         }
 
         WindowGroup("이미지", id: "gallery", for: UUID.self) { $id in
@@ -97,5 +102,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         ThemeStore.shared.applyAppearance()
         SettingsSync.shared.start()
+        _ = Updates.shared
     }
 }
