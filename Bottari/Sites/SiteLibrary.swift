@@ -89,15 +89,24 @@ final class SiteLibrary {
     /// Opens an SFTP connection to `site`. `typedSecrets` (Keychain key → value)
     /// were just typed by the user: they win over stored ones, and are stored
     /// once the connection works.
-    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:]) async throws -> SFTPFileProvider {
+    /// A running Bottari-only tunnel that covers the site's host adds its
+    /// server as the first jump, unless `takingDetours` is false (the tunnel's own connection).
+    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:], takingDetours: Bool = true) async throws -> SFTPFileProvider {
         let sites = sites
         let sshConfig = sshConfig
         let stored = secrets
+        let detour = takingDetours ? TunnelStore.shared.detour(for: site) : nil
         // Key files and the Keychain are read off the main thread: the Keychain
         // may stop to ask the user for permission.
-        let plan = try await Task.detached {
+        var plan = try await Task.detached {
             try site.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: TypedSecrets(typed: typedSecrets, stored: stored))
         }.value
+        if let detour {
+            let via = try await Task.detached {
+                try detour.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: stored)
+            }.value
+            plan.hops = via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential)] + plan.hops
+        }
         let provider = try await SFTPFileProvider.connect(
             to: plan.endpoint,
             credential: plan.credential,

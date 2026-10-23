@@ -75,6 +75,7 @@ enum SnapshotRenderer {
         await renderEditor(into: directory)
         await renderPlayer(into: directory)
         await checkScreen(into: directory)
+        await renderTunnels(into: directory, library: library)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -269,6 +270,27 @@ enum SnapshotRenderer {
         ]
         try? lines.joined(separator: "\n").write(to: directory.appending(path: "screen-check.txt"), atomically: true, encoding: .utf8)
         model.disconnect()
+    }
+
+    /// The tunnel window with three sample tunnels.
+    private static func renderTunnels(into directory: URL, library: SiteLibrary) async {
+        let nas = library.sites[2]
+        var proxy = TunnelProfile(name: "집 NAS", siteID: nas.id, mode: .proxy, routes: "192.168.0.0/16\n*.home.arpa")
+        proxy.appliesSystemProxy = true
+        let office = TunnelProfile(name: "사내망", siteID: library.sites[0].id, mode: .wholeMac, routes: "10.0.0.0/8\n172.16.0.0/12")
+        let gpu = TunnelProfile(name: "GPU 클러스터", siteID: library.sites[1].id, mode: .bottariOnly, routes: "10.0.4.0/24")
+        TunnelStore.shared.showPreview(
+            [proxy, office, gpu],
+            states: [proxy.id: .on("SOCKS5 :1080 · HTTP :8118 · 시스템 프록시에 PAC 적용"), office.id: .off, gpu.id: .on("Bottari 연결이 dev-api을(를) 거쳐요")],
+            connections: [proxy.id: [
+                .init(id: UUID(), host: "photos.home.arpa", port: 443, kind: "SOCKS", opened: Date()),
+                .init(id: UUID(), host: "192.168.0.20", port: 5000, kind: "HTTP", opened: Date()),
+            ]]
+        )
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(TunnelWindow(), size: CGSize(width: 1100, height: 1500), appearance: appearance,
+                         to: directory.appending(path: "tunnels-\(name).png"))
+        }
     }
 
     /// A short H.264 movie, so the player has something to open.

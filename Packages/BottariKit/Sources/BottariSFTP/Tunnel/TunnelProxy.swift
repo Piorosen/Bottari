@@ -16,6 +16,14 @@ public final class TunnelProxy: Sendable {
         /// "SOCKS" or "HTTP".
         public let kind: String
         public let opened: Date
+
+        public init(id: UUID, host: String, port: Int, kind: String, opened: Date) {
+            self.id = id
+            self.host = host
+            self.port = port
+            self.kind = kind
+            self.opened = opened
+        }
     }
 
     public enum Activity: Sendable {

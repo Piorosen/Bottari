@@ -20,6 +20,11 @@ struct MainWindow: View {
             TransferBar(workspace: workspace)
         }
         .frame(minWidth: 900, minHeight: 520)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                TunnelStatusButton()
+            }
+        }
         .sheet(item: $workspace.pendingConfirmation) { request in
             WriteConfirmationSheet(request: request) {
                 workspace.confirm(request)

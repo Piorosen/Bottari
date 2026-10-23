@@ -64,6 +64,13 @@ public struct SFTPFileProvider: FileProvider {
     /// The same for every copy of this provider, different for each connection.
     public var connectionID: ObjectIdentifier { ObjectIdentifier(connection) }
 
+    public var isConnected: Bool { connection.client.isConnected }
+
+    /// Runs `action` once the SSH connection drops (or is closed).
+    public func whenDisconnected(_ action: @escaping @Sendable () -> Void) {
+        connection.client.onDisconnect(perform: action)
+    }
+
     // MARK: - FileProvider
 
     public func list(_ path: RemotePath) async throws -> [FileItem] {

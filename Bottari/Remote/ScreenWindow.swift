@@ -329,7 +329,7 @@ private struct ScreenView: View {
             Text(model.status)
             Spacer()
             if model.screen.throughTunnel {
-                Label("SSH 터널 · 서버 방화벽에 \(model.screen.port) 포트를 열 필요 없어요", systemImage: "lock.fill")
+                Label("SSH 터널 · 서버 방화벽에 \(String(model.screen.port)) 포트를 열 필요 없어요", systemImage: "lock.fill")
             } else {
                 Label("직접 연결", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)

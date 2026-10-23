@@ -6,7 +6,7 @@ struct BottariApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             // Rendering snapshots lists no real folders at all.
             if !AppDelegate.isRenderingSnapshots {
                 MainWindow()
@@ -30,6 +30,20 @@ struct BottariApp: App {
             }
         }
         .defaultSize(width: 1100, height: 700)
+
+        Window("터널", id: "tunnels") {
+            TunnelWindow()
+        }
+        .defaultSize(width: 1000, height: 720)
+
+        // Only once there is a tunnel to switch.
+        MenuBarExtra(
+            "Bottari 터널",
+            systemImage: TunnelStore.shared.activeCount > 0 ? "point.3.filled.connected.trianglepath.dotted" : "point.3.connected.trianglepath.dotted",
+            isInserted: Binding(get: { !AppDelegate.isRenderingSnapshots && !TunnelStore.shared.profiles.isEmpty }, set: { _ in })
+        ) {
+            TunnelMenu()
+        }
 
         WindowGroup("터미널", id: "terminal", for: UUID.self) { $id in
             if let id {
