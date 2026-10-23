@@ -23,6 +23,13 @@ struct BottariApp: App {
             }
         }
         .defaultSize(width: 1100, height: 760)
+
+        WindowGroup("편집기", id: "editor", for: UUID.self) { $id in
+            if let id {
+                EditorWindow(contextID: id)
+            }
+        }
+        .defaultSize(width: 960, height: 720)
     }
 }
 

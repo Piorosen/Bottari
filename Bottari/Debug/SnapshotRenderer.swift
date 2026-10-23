@@ -71,6 +71,7 @@ enum SnapshotRenderer {
         }
         await renderTransfers(into: directory)
         await renderGallery(into: directory)
+        await renderEditor(into: directory)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -148,6 +149,49 @@ enum SnapshotRenderer {
             await render(GalleryWindow(contextID: id), size: CGSize(width: 1000, height: 640), appearance: appearance,
                          to: directory.appending(path: "gallery-\(name).png"))
         }
+    }
+
+    /// The editor on an nginx config, and a check of the save, clash and merge flow
+    /// written to editor-check.txt.
+    private static func renderEditor(into directory: URL) async {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bottari-editor-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appending(path: "nginx.conf")
+        let original = "server {\n    listen 80;\n    server_name example.com;\n\n    location / {\n        root /var/www/site;\n        index index.html;\n    }\n}\n"
+        try? original.write(to: file, atomically: true, encoding: .utf8)
+        let local = LocalFileProvider()
+        guard let item = try? await local.stat(RemotePath(file.path)) else { return }
+        let context = ViewerContext(provider: local, site: nil, item: item, siblings: [item])
+
+        let id = Viewers.register(context)
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(EditorWindow(contextID: id), size: CGSize(width: 820, height: 420), appearance: appearance,
+                         to: directory.appending(path: "editor-\(name).png"))
+        }
+
+        var report: [String] = []
+        func check(_ name: String, _ passed: Bool) { report.append((passed ? "PASS " : "FAIL ") + name) }
+        let model = EditorModel(context: context)
+        await model.load()
+        check("loads", model.phase == .ready && model.text == original)
+        model.text = model.text.replacingOccurrences(of: "listen 80;", with: "listen 8080;")
+        model.markEdited()
+        try? await Task.sleep(for: .seconds(1.1))
+        let theirs = original.replacingOccurrences(of: "index index.html;", with: "index index.php;")
+        try? theirs.write(to: file, atomically: true, encoding: .utf8)
+        await model.save()
+        check("notices the server changed", model.conflict != nil)
+        check("offers a merge", model.conflict?.merged != nil)
+        await model.saveMerged()
+        let saved = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        check("keeps both edits", saved.contains("listen 8080;") && saved.contains("index index.php;"))
+        check("clean afterwards", !model.isDirty && model.conflict == nil)
+        model.text += "# more\n"
+        model.markEdited()
+        await model.save()
+        check("saves again without a clash", model.conflict == nil && ((try? String(contentsOf: file, encoding: .utf8)) ?? "").hasSuffix("# more\n"))
+        try? report.joined(separator: "\n").write(to: directory.appending(path: "editor-check.txt"), atomically: true, encoding: .utf8)
     }
 
     private static func sampleFolder() -> URL {

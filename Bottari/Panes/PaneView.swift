@@ -269,6 +269,12 @@ struct PaneView: View {
                     workspace.open(item, in: side)
                 }
                 if !item.isDirectory {
+                    if FileKind(item) != .image {
+                        Button("편집기로 열기") { workspace.openInEditor(item, in: side) }
+                    }
+                    Button("외부 에디터로 열기") {
+                        ExternalEdits.shared.start(item: item, provider: model.provider, site: model.site)
+                    }
                     Button("빠른 미리보기") {
                         model.selection = [item.id]
                         model.toggleQuickLook()

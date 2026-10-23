@@ -10,6 +10,7 @@
 		B0771A0000000000000000A1 /* BottariCore in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C1 /* BottariCore */; };
 		B0771A0000000000000000A2 /* BottariSFTP in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C2 /* BottariSFTP */; };
 		B0771A0000000000000000A3 /* BottariTransfer in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C3 /* BottariTransfer */; };
+		B0771A0000000000000000A4 /* BottariEditor in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C4 /* BottariEditor */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 				B0771A0000000000000000A1 /* BottariCore in Frameworks */,
 				B0771A0000000000000000A2 /* BottariSFTP in Frameworks */,
 				B0771A0000000000000000A3 /* BottariTransfer in Frameworks */,
+				B0771A0000000000000000A4 /* BottariEditor in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +79,7 @@
 				B0771A0000000000000000C1 /* BottariCore */,
 				B0771A0000000000000000C2 /* BottariSFTP */,
 				B0771A0000000000000000C3 /* BottariTransfer */,
+				B0771A0000000000000000C4 /* BottariEditor */,
 			);
 			productName = Bottari;
 			productReference = B0771A000000000000000010 /* Bottari.app */;
@@ -291,6 +294,10 @@
 		B0771A0000000000000000C3 /* BottariTransfer */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BottariTransfer;
+		};
+		B0771A0000000000000000C4 /* BottariEditor */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BottariEditor;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -42,6 +42,7 @@ struct TransferBar: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
+            ExternalEditsButton()
             if let count = AppServices.clipboard.content?.items.count {
                 Text("클립보드: \(count)개 · ⌘V 붙여넣기")
                     .foregroundStyle(.secondary)
@@ -246,5 +247,49 @@ private struct TransferRow: View {
 
     private func describe(_ item: FileItem) -> String {
         [item.formattedSize, item.formattedModified].joined(separator: " · ")
+    }
+}
+
+/// "외부 편집 2" with the files being edited in other apps.
+private struct ExternalEditsButton: View {
+    @State private var showsList = false
+    private var edits: ExternalEdits { .shared }
+
+    var body: some View {
+        if !edits.sessions.isEmpty {
+            Button {
+                showsList.toggle()
+            } label: {
+                Label("외부 편집 \(edits.sessions.count)", systemImage: "square.and.pencil")
+            }
+            .popover(isPresented: $showsList) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("외부 에디터에서 편집 중")
+                        .font(.headline)
+                    Text("임시 폴더에 받아 두고, 저장을 감지하면 자동으로 올려요.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(edits.sessions) { session in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(session.item.name)
+                                Text("\(session.provider.displayName) · \(session.status)")
+                                    .font(.caption)
+                                    .foregroundStyle(session.blockedByServerChange ? .orange : .secondary)
+                            }
+                            Spacer()
+                            if session.blockedByServerChange {
+                                Button("그래도 올리기") { edits.uploadAnyway(session) }
+                            }
+                            Button("열기") { NSWorkspace.shared.open(session.localURL) }
+                            Button("그만") { edits.stop(session) }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                .padding(14)
+                .frame(width: 420)
+            }
+        }
     }
 }

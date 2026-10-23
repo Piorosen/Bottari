@@ -141,10 +141,16 @@ final class Workspace {
         switch FileKind(item) {
         case .image:
             openViewer("gallery", for: item, in: pane)
+        case .text where (item.size ?? 0) <= EditorModel.sizeLimit:
+            openViewer("editor", for: item, in: pane)
         case .text, .video, .other:
             pane.selection = [item.id]
             pane.toggleQuickLook()
         }
+    }
+
+    func openInEditor(_ item: FileItem, in side: PaneSide) {
+        openViewer("editor", for: item, in: pane(side))
     }
 
     private func openViewer(_ windowID: String, for item: FileItem, in pane: PaneModel) {
