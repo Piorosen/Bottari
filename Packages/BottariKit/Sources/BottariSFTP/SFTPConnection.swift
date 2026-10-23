@@ -1,6 +1,7 @@
 import Citadel
 import Crypto
 import Foundation
+import Synchronization
 import NIOCore
 import NIOPosix
 import NIOSSH
@@ -161,6 +162,10 @@ final class SFTPConnection: @unchecked Sendable {
     /// Jump host connections, outermost first; closed after the destination.
     private let jumps: [SSHClient]
     private let group: MultiThreadedEventLoopGroup
+    /// Requests sent outside any caller's await (read-ahead, closing an abandoned
+    /// file). Closing waits for them: a request sent while the channel goes down
+    /// would never be answered, which Citadel treats as a fatal leak.
+    private let background = Mutex<(closing: Bool, next: Int, tasks: [Int: Task<Void, Never>])>((false, 0, [:]))
 
     private init(client: SSHClient, sftp: SFTPClient, jumps: [SSHClient], group: MultiThreadedEventLoopGroup) {
         self.client = client
@@ -273,7 +278,36 @@ final class SFTPConnection: @unchecked Sendable {
         throw SFTPConnectError.authenticationFailed
     }
 
+    /// Runs `operation` as tracked background work, or returns nil once closing has begun.
+    @discardableResult
+    func track<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) -> Task<T, any Error>? {
+        background.withLock { state in
+            guard !state.closing else { return nil }
+            let id = state.next
+            state.next += 1
+            let task = Task {
+                defer { self.background.withLock { _ = $0.tasks.removeValue(forKey: id) } }
+                return try await operation()
+            }
+            state.tasks[id] = Task { _ = try? await task.value }
+            return task
+        }
+    }
+
     func close() async {
+        let pending = background.withLock { state in
+            state.closing = true
+            return Array(state.tasks.values)
+        }
+        // Give tracked requests their answers first, for two seconds at most.
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for task in pending { await task.value }
+            }
+            group.addTask { try? await Task.sleep(for: .seconds(2)) }
+            await group.next()
+            group.cancelAll()
+        }
         try? await sftp.close()
         try? await client.close()
         for jump in jumps.reversed() {

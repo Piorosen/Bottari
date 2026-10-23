@@ -95,7 +95,7 @@ public struct SFTPFileProvider: FileProvider {
     }
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
-        let reader = Reader(sftp: sftp, path: path, start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max)
+        let reader = Reader(connection: connection, path: path, start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max)
         return AsyncThrowingStream(unfolding: {
             do {
                 return try await reader.next()
@@ -213,21 +213,16 @@ public struct SFTPFileProvider: FileProvider {
     /// Tries `echo` once at connect. A server that refuses or ignores exec
     /// requests gets three seconds before Bottari stops waiting.
     static func probeCommands(on connection: SFTPConnection) async -> Bool {
-        let answered = Mutex(false)
+        let outcome = FirstAnswer()
         return await withCheckedContinuation { continuation in
-            func answer(_ value: Bool) {
-                let first = answered.withLock { done in
-                    defer { done = true }
-                    return !done
-                }
-                if first { continuation.resume(returning: value) }
+            outcome.wait(with: continuation)
+            let probe = connection.track {
+                outcome.give((try? await run("echo bottari", on: connection))?.hasPrefix("bottari") == true)
             }
-            Task {
-                answer((try? await run("echo bottari", on: connection))?.hasPrefix("bottari") == true)
-            }
+            if probe == nil { outcome.give(false) }
             Task {
                 try? await Task.sleep(for: .seconds(3))
-                answer(false)
+                outcome.give(false)
             }
         }
     }
@@ -298,7 +293,7 @@ public struct SFTPFileProvider: FileProvider {
     /// keeping a few read requests ahead. The stream calls `next()` from one task
     /// at a time, which is what makes the mutable state safe.
     private final class Reader: @unchecked Sendable {
-        private let sftp: SFTPClient
+        private let connection: SFTPConnection
         private let path: RemotePath
         private let end: Int64
         private var file: UncheckedSendable<SFTPFile>?
@@ -306,16 +301,19 @@ public struct SFTPFileProvider: FileProvider {
         private var ahead: [(offset: Int64, length: Int64, data: Task<ByteBuffer, any Error>)] = []
         private var finished = false
 
-        init(sftp: SFTPClient, path: RemotePath, start: Int64, end: Int64) {
-            self.sftp = sftp
+        init(connection: SFTPConnection, path: RemotePath, start: Int64, end: Int64) {
+            self.connection = connection
             self.path = path
             self.nextRequest = start
             self.end = end
         }
 
         deinit {
-            // The consumer stopped early, e.g. a cancelled transfer.
-            close()
+            // The consumer stopped early, e.g. a cancelled transfer or a seek.
+            cancelAhead()
+            if let file {
+                connection.track { try? await file.value.close() }
+            }
         }
 
         func next() async throws -> Data? {
@@ -326,13 +324,16 @@ public struct SFTPFileProvider: FileProvider {
                 while ahead.count < SFTPFileProvider.readsInFlight, nextRequest < end {
                     let offset = nextRequest
                     let length = min(Int64(SFTPFileProvider.chunkSize), end - offset)
+                    guard let read = connection.track({ try await file.value.read(from: UInt64(offset), length: UInt32(length)) }) else {
+                        throw SFTPError.connectionClosed
+                    }
                     nextRequest += length
-                    ahead.append((offset, length, Task { try await file.value.read(from: UInt64(offset), length: UInt32(length)) }))
+                    ahead.append((offset, length, read))
                 }
-                guard !ahead.isEmpty else { return finish() }
+                guard !ahead.isEmpty else { return await finish() }
                 let chunk = ahead.removeFirst()
                 let first = try await chunk.data.value
-                guard first.readableBytes > 0 else { return finish() }
+                guard first.readableBytes > 0 else { return await finish() }
                 var data = Data(first.readableBytesView)
                 // Servers may answer with less than asked, e.g. at the end of the
                 // file. Fill the rest of this chunk before moving on.
@@ -350,7 +351,7 @@ public struct SFTPFileProvider: FileProvider {
                 }
                 return data
             } catch {
-                close()
+                await closeFile()
                 finished = true
                 throw error
             }
@@ -358,14 +359,14 @@ public struct SFTPFileProvider: FileProvider {
 
         private func openedFile() async throws -> UncheckedSendable<SFTPFile> {
             if let file { return file }
-            let opened = UncheckedSendable(try await sftp.openFile(filePath: path.string, flags: .read))
+            let opened = UncheckedSendable(try await connection.sftp.openFile(filePath: path.string, flags: .read))
             file = opened
             return opened
         }
 
-        private func finish() -> Data? {
+        private func finish() async -> Data? {
             finished = true
-            close()
+            await closeFile()
             return nil
         }
 
@@ -376,11 +377,15 @@ public struct SFTPFileProvider: FileProvider {
             ahead.removeAll()
         }
 
-        private func close() {
-            cancelAhead()
+        /// Waits for reads already sent, then closes the handle.
+        private func closeFile() async {
+            for chunk in ahead {
+                _ = try? await chunk.data.value
+            }
+            ahead.removeAll()
             guard let file else { return }
             self.file = nil
-            Task { try? await file.value.close() }
+            try? await file.value.close()
         }
     }
 
@@ -498,5 +503,22 @@ public struct SFTPFileProvider: FileProvider {
         case .noConnection, .connectionLost: .io("서버와 연결이 끊겼어요")
         default: .io(message.isEmpty ? "SFTP 오류: \(code)" : message)
         }
+    }
+}
+
+/// Resumes a continuation with whichever answer comes first.
+private final class FirstAnswer: Sendable {
+    private let continuation = Mutex<CheckedContinuation<Bool, Never>?>(nil)
+
+    func wait(with continuation: CheckedContinuation<Bool, Never>) {
+        self.continuation.withLock { $0 = continuation }
+    }
+
+    func give(_ answer: Bool) {
+        let waiting = continuation.withLock { current in
+            defer { current = nil }
+            return current
+        }
+        waiting?.resume(returning: answer)
     }
 }
