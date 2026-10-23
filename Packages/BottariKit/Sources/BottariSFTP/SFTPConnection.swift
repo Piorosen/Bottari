@@ -2,6 +2,8 @@ import Citadel
 import Crypto
 import Foundation
 import NIOCore
+import NIOPosix
+import NIOSSH
 
 /// Where to connect: one SSH account on one host.
 public struct SFTPEndpoint: Hashable, Sendable, Codable {
@@ -26,9 +28,28 @@ public enum SFTPCredential: Sendable {
     case password(String)
     /// An OpenSSH private key (`-----BEGIN OPENSSH PRIVATE KEY-----`), Ed25519 or RSA.
     case privateKey(String, passphrase: String? = nil)
+    /// Keys held by an SSH agent such as ssh-agent or 1Password; `socket` nil
+    /// means `SSH_AUTH_SOCK`. Only the agent's Ed25519 keys are used for now.
+    case agent(socket: String? = nil)
+
+    /// One authentication method per connection attempt, tried in order until one
+    /// is accepted. Only an agent with several keys yields more than one.
+    func authenticationAttempts(username: String) throws -> [SSHAuthenticationMethod] {
+        guard case .agent(let socket) = self else {
+            return [try authenticationMethod(username: username)]
+        }
+        guard let agent = SSHAgentClient(socket: socket), let identities = try? agent.identities() else {
+            throw SFTPConnectError.agentUnavailable
+        }
+        let keys = identities.compactMap { AgentEd25519PrivateKey(agent: agent, identity: $0) }
+        guard !keys.isEmpty else { throw SFTPConnectError.agentHasNoUsableKeys }
+        return keys.map { .custom(SingleKeyOffer(username: username, key: NIOSSHPrivateKey(custom: $0))) }
+    }
 
     func authenticationMethod(username: String) throws -> SSHAuthenticationMethod {
         switch self {
+        case .agent:
+            preconditionFailure("Agent credentials go through authenticationAttempts(username:)")
         case .password(let password):
             return .passwordBased(username: username, password: password)
         case .privateKey(let text, let passphrase):
@@ -67,6 +88,8 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case unsupportedKey(String)
     /// The key text could not be parsed, or the passphrase is wrong.
     case unreadableKey
+    case agentUnavailable
+    case agentHasNoUsableKeys
     case unreachable(String)
 
     static func wrap(_ error: any Error) -> any Error {
@@ -99,6 +122,10 @@ extension SFTPConnectError: LocalizedError {
             "아직 지원하지 않는 키 형식이에요: \(type)"
         case .unreadableKey:
             "키를 읽지 못했어요. 형식이나 암호를 확인하세요."
+        case .agentUnavailable:
+            "SSH 에이전트에 연결하지 못했어요. ssh-agent 나 1Password 에이전트가 켜져 있는지 확인하세요."
+        case .agentHasNoUsableKeys:
+            "에이전트에 쓸 수 있는 키가 없어요. Ed25519 키를 ssh-add 로 추가하세요. (RSA · ECDSA 에이전트 키는 아직 지원하지 않아요)"
         case .unreachable(let reason):
             "서버에 연결하지 못했어요: \(reason)"
         }
@@ -109,13 +136,19 @@ extension SFTPConnectError: LocalizedError {
 ///
 /// `SSHClient` is not marked `Sendable`, but its state lives on its NIO event
 /// loop and we only call its async methods, which hop onto that loop.
+///
+/// Each connection gets its own event loop thread: an agent waiting for the
+/// user to approve a signature blocks that thread, and should stall only the
+/// connection asking for it.
 final class SFTPConnection: @unchecked Sendable {
     let client: SSHClient
     let sftp: SFTPClient
+    private let group: MultiThreadedEventLoopGroup
 
-    init(client: SSHClient, sftp: SFTPClient) {
+    private init(client: SSHClient, sftp: SFTPClient, group: MultiThreadedEventLoopGroup) {
         self.client = client
         self.sftp = sftp
+        self.group = group
     }
 
     static func open(
@@ -124,23 +157,43 @@ final class SFTPConnection: @unchecked Sendable {
         hostKeys: HostKeyTrust,
         timeout: TimeAmount = .seconds(15)
     ) async throws -> SFTPConnection {
+        for method in try credential.authenticationAttempts(username: endpoint.username) {
+            do {
+                return try await open(to: endpoint, method: method, hostKeys: hostKeys, timeout: timeout)
+            } catch SFTPConnectError.authenticationFailed {
+                continue
+            }
+        }
+        throw SFTPConnectError.authenticationFailed
+    }
+
+    private static func open(
+        to endpoint: SFTPEndpoint,
+        method: SSHAuthenticationMethod,
+        hostKeys: HostKeyTrust,
+        timeout: TimeAmount
+    ) async throws -> SFTPConnection {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let client: SSHClient
         do {
             client = try await SSHClient.connect(
                 host: endpoint.host,
                 port: endpoint.port,
-                authenticationMethod: try credential.authenticationMethod(username: endpoint.username),
+                authenticationMethod: method,
                 hostKeyValidator: hostKeys.validator(for: endpoint),
                 reconnect: .never,
+                group: group,
                 connectTimeout: timeout
             )
         } catch {
+            try? await group.shutdownGracefully()
             throw SFTPConnectError.wrap(hostKeys.rejection(for: endpoint) ?? error)
         }
         do {
-            return SFTPConnection(client: client, sftp: try await client.openSFTP())
+            return SFTPConnection(client: client, sftp: try await client.openSFTP(), group: group)
         } catch {
             try? await client.close()
+            try? await group.shutdownGracefully()
             throw SFTPConnectError.wrap(error)
         }
     }
@@ -148,5 +201,6 @@ final class SFTPConnection: @unchecked Sendable {
     func close() async {
         try? await sftp.close()
         try? await client.close()
+        try? await group.shutdownGracefully()
     }
 }
