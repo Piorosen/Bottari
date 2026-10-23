@@ -14,6 +14,7 @@ let package = Package(
         // Citadel builds on this fork of swift-nio-ssh; depend on the same one to import NIOSSH.
         .package(url: "https://github.com/Wellz26/swift-nio-ssh.git", "0.3.4" ..< "0.4.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.12.3"),
+        .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2"),
     ],
     targets: [
         .target(name: "BottariCore"),
@@ -25,6 +26,7 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "KeychainAccess", package: "KeychainAccess"),
             ]
         ),
         .testTarget(name: "BottariCoreTests", dependencies: ["BottariCore"]),
