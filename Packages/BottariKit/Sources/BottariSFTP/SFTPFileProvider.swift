@@ -21,9 +21,10 @@ public struct SFTPFileProvider: FileProvider {
         to endpoint: SFTPEndpoint,
         credential: SFTPCredential,
         hostKeys: HostKeyTrust,
+        via hops: [SSHHop] = [],
         displayName: String? = nil
     ) async throws -> SFTPFileProvider {
-        let connection = try await SFTPConnection.open(to: endpoint, credential: credential, hostKeys: hostKeys)
+        let connection = try await SFTPConnection.open(to: endpoint, credential: credential, hostKeys: hostKeys, via: hops)
         do {
             let home = RemotePath(try await connection.sftp.getRealPath(atPath: "."))
             return SFTPFileProvider(

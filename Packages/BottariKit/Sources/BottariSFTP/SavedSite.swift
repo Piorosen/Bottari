@@ -107,3 +107,116 @@ public struct SiteStore: Sendable {
         return (sites + added, added)
     }
 }
+
+/// Everything `SFTPFileProvider.connect` needs for a saved site.
+public struct ConnectionPlan: Equatable, Sendable {
+    public var endpoint: SFTPEndpoint
+    public var credential: SFTPCredential
+    public var hops: [SSHHop]
+}
+
+/// Why a saved site could not be turned into a connection plan.
+public enum SiteConnectError: Error, Equatable, Sendable {
+    /// No password was given and none is stored for this site.
+    case passwordMissing(site: String)
+    case keyFileUnreadable(path: String)
+    /// Jump hosts refer back to each other.
+    case jumpLoop(String)
+}
+
+extension SiteConnectError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .passwordMissing(let site): "\(site)의 비밀번호가 저장되어 있지 않아요."
+        case .keyFileUnreadable(let path): "키 파일을 읽지 못했어요: \(path)"
+        case .jumpLoop(let name): "점프 호스트가 서로를 가리키고 있어요: \(name)"
+        }
+    }
+}
+
+extension SavedSite {
+    public typealias FileReader = @Sendable (String) -> String?
+
+    public static let readFile: FileReader = { try? String(contentsOfFile: $0, encoding: .utf8) }
+
+    /// The site's credential, with secrets taken from `secrets`. A `password`
+    /// passed in (just typed by the user) wins over a stored one.
+    public func credential(secrets: SecretStore, password: String? = nil, readFile: FileReader = SavedSite.readFile) throws -> SFTPCredential {
+        switch authentication {
+        case .agent(let socket):
+            return .agent(socket: socket)
+        case .keyFile(let path):
+            guard let text = readFile((path as NSString).expandingTildeInPath) else {
+                throw SiteConnectError.keyFileUnreadable(path: path)
+            }
+            return .privateKey(text, passphrase: try secrets.secret(for: passphraseKey))
+        case .password:
+            guard let password = try password ?? secrets.secret(for: passwordKey) else {
+                throw SiteConnectError.passwordMissing(site: name)
+            }
+            return .password(password)
+        }
+    }
+
+    /// The endpoint, credential and jump hosts to connect to this site. Each
+    /// ProxyJump name is looked up among `sites`, then in `sshConfig`, and is
+    /// otherwise read as `[user@]host[:port]` and tried with the default agent.
+    public func connectionPlan(
+        sites: [SavedSite],
+        sshConfig: SSHConfig,
+        secrets: SecretStore,
+        password: String? = nil,
+        defaultUser: String = NSUserName(),
+        readFile: @escaping FileReader = SavedSite.readFile
+    ) throws -> ConnectionPlan {
+        let resolver = HopResolver(sites: sites, sshConfig: sshConfig, secrets: secrets, defaultUser: defaultUser, readFile: readFile)
+        return ConnectionPlan(
+            endpoint: endpoint,
+            credential: try credential(secrets: secrets, password: password, readFile: readFile),
+            hops: try resolver.hops(for: proxyJump, visiting: [name])
+        )
+    }
+
+    /// `[user@]host[:port]`, as ProxyJump writes a hop.
+    static func endpoint(parsingHop text: String, defaultUser: String) -> SFTPEndpoint {
+        var rest = Substring(text)
+        var user = defaultUser
+        if let at = rest.lastIndex(of: "@") {
+            user = String(rest[..<at])
+            rest = rest[rest.index(after: at)...]
+        }
+        var port = 22
+        if let colon = rest.lastIndex(of: ":"), let parsed = Int(rest[rest.index(after: colon)...]) {
+            port = parsed
+            rest = rest[..<colon]
+        }
+        return SFTPEndpoint(host: String(rest), port: port, username: user)
+    }
+}
+
+private struct HopResolver {
+    let sites: [SavedSite]
+    let sshConfig: SSHConfig
+    let secrets: SecretStore
+    let defaultUser: String
+    let readFile: SavedSite.FileReader
+
+    func hops(for names: [String], visiting: Set<String>) throws -> [SSHHop] {
+        var hops: [SSHHop] = []
+        for name in names {
+            guard !visiting.contains(name) else { throw SiteConnectError.jumpLoop(name) }
+            let site: SavedSite? = sites.first { $0.name == name || $0.sshConfigAlias == name }
+                ?? (sshConfig.aliases.contains(name)
+                    ? SavedSite(importing: sshConfig.resolve(name), defaultUser: defaultUser, fileExists: { readFile($0) != nil })
+                    : nil)
+            if let site {
+                // A jump host can have its own jump hosts; those come first.
+                hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
+                hops.append(SSHHop(endpoint: site.endpoint, credential: try site.credential(secrets: secrets, readFile: readFile)))
+            } else {
+                hops.append(SSHHop(endpoint: SavedSite.endpoint(parsingHop: name, defaultUser: defaultUser), credential: .agent()))
+            }
+        }
+        return hops
+    }
+}

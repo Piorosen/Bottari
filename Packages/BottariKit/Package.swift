@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "BottariKit",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "BottariCore", targets: ["BottariCore"]),
         .library(name: "BottariSFTP", targets: ["BottariSFTP"]),
@@ -38,6 +38,7 @@ let package = Package(
                 "BottariSFTP",
                 .product(name: "Citadel", package: "Citadel"),
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "Crypto", package: "swift-crypto"),
             ]

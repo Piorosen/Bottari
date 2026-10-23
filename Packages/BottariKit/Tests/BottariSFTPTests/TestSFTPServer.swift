@@ -3,6 +3,7 @@ import Citadel
 import Crypto
 import Foundation
 import NIOCore
+import NIOPosix
 @preconcurrency import NIOSSH
 @testable import BottariSFTP
 
@@ -32,7 +33,8 @@ final class TestSFTPServer {
         self.server = server
     }
 
-    static func start(port fixedPort: Int? = nil) async throws -> TestSFTPServer {
+    /// With `forwarding`, the server also opens direct-tcpip channels, so it can act as a jump host.
+    static func start(port fixedPort: Int? = nil, forwarding: Bool = false) async throws -> TestSFTPServer {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("BottariSFTP-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let clientKey = Curve25519.Signing.PrivateKey()
@@ -52,6 +54,9 @@ final class TestSFTPServer {
                     authenticationDelegate: auth
                 )
                 server.enableSFTP(withDelegate: LocalDirectorySFTPDelegate(root: root))
+                if forwarding {
+                    server.enableDirectTCPIP(withDelegate: ForwardingDelegate())
+                }
                 return TestSFTPServer(root: root, port: port, clientKey: clientKey, server: server)
             } catch {
                 lastError = error
@@ -85,6 +90,61 @@ final class TestSFTPServer {
 
     func names(in path: RemotePath) throws -> [String] {
         try FileManager.default.contentsOfDirectory(atPath: url(path).path).sorted()
+    }
+}
+
+/// Opens a TCP connection for each direct-tcpip request and copies bytes both
+/// ways, like `sshd` does for ProxyJump. Citadel has already put a codec on the
+/// SSH channel, so both sides speak plain ByteBuffers. (Citadel's own forwarding
+/// delegate wires its handlers on the outbound side, so bytes never reach the target.)
+private struct ForwardingDelegate: DirectTCPIPDelegate {
+    func initializeDirectTCPIPChannel(_ channel: Channel, request: SSHChannelType.DirectTCPIP, context: SSHContext) -> EventLoopFuture<Void> {
+        ClientBootstrap(group: channel.eventLoop)
+            .connect(host: request.targetHost, port: request.targetPort)
+            .flatMap { remote in
+                do {
+                    try channel.pipeline.syncOperations.addHandler(SSHToRemote(remote: remote))
+                    try remote.pipeline.syncOperations.addHandler(RemoteToSSH(ssh: channel))
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    remote.close(promise: nil)
+                    return channel.eventLoop.makeFailedFuture(error)
+                }
+            }
+    }
+}
+
+private final class SSHToRemote: ChannelInboundHandler, @unchecked Sendable {
+    typealias InboundIn = ByteBuffer
+    let remote: Channel
+
+    init(remote: Channel) {
+        self.remote = remote
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        remote.writeAndFlush(unwrapInboundIn(data), promise: nil)
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        remote.close(promise: nil)
+    }
+}
+
+private final class RemoteToSSH: ChannelInboundHandler, @unchecked Sendable {
+    typealias InboundIn = ByteBuffer
+    let ssh: Channel
+
+    init(ssh: Channel) {
+        self.ssh = ssh
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        ssh.writeAndFlush(unwrapInboundIn(data), promise: nil)
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        ssh.close(promise: nil)
     }
 }
 

@@ -53,8 +53,13 @@ public final class KnownHosts: @unchecked Sendable {
 
     /// Forgets a server's key, e.g. after the user confirms it was reinstalled.
     public func forget(_ endpoint: SFTPEndpoint) {
+        forget(hostKeyID: endpoint.hostKeyID)
+    }
+
+    /// Forgets the key for a `host` or `[host]:port` name, as `hostKeyChanged` reports it.
+    public func forget(hostKeyID: String) {
         lock.withLock {
-            keys[endpoint.hostKeyID] = nil
+            keys[hostKeyID] = nil
             save()
         }
     }

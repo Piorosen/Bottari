@@ -7,7 +7,7 @@ FileZilla처럼 쓰지만 왼쪽은 로컬, 오른쪽은 서버로 고정하지 
 
 ## 요구 사항
 
-- 실행: macOS 14 이상
+- 실행: macOS 15 이상
 - 빌드: Xcode 26 이상 (Swift 6.2+)
 
 ## 빌드
@@ -39,7 +39,8 @@ Packages/BottariKit/    앱과 분리된 핵심 로직
 
 - [x] 프로젝트 골격, 로컬 듀얼 패인
 - [x] SFTP 연결과 탐색 (Citadel) — 키 파일 · 비밀번호, 호스트 키 확인
-- [ ] 저장된 사이트 · 키체인 · ssh-agent · `~/.ssh/config` 가져오기
+- [x] 저장된 사이트 · 키체인 · ssh-agent · `~/.ssh/config` 가져오기 · 점프 호스트 (엔진)
+- [ ] 연결 관리 화면 (UI 초안 반영 예정)
 - [ ] 전송 큐 · 서버 간 전송
 - [ ] Google Drive · S3 (rclone)
 - [ ] 원격 편집, 이미지 뷰어, 영상 재생 (libmpv)
