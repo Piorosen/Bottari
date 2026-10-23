@@ -222,6 +222,70 @@ struct PanelButtonStyle: ButtonStyle {
     }
 }
 
+/// A label above its field, and a hint below, as in the design's forms.
+struct LabeledField<Content: View>: View {
+    let label: String
+    var hint: String?
+    @ViewBuilder let content: Content
+
+    init(_ label: String, hint: String? = nil, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.hint = hint
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.ui(.callout, weight: .semibold))
+            content
+            if let hint {
+                Text(hint)
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension View {
+    /// A text field drawn as the design's white box with a hairline.
+    func designField(mono: Bool = false) -> some View {
+        textFieldStyle(.plain)
+            .font(mono ? .themeMono(.body) : .ui(.body))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Palette.panel, in: .rect(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line))
+    }
+}
+
+/// A setting that switches on and off, with what it does underneath.
+struct SwitchRow: View {
+    let title: String
+    var detail: String?
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.ui(.body, weight: .medium))
+                if let detail {
+                    Text(detail).font(.ui(.caption)).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Toggle(title, isOn: $isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+        .padding(12)
+        .background(Palette.panel, in: .rect(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Palette.line))
+    }
+}
+
 /// "‹ 메인으로" at the top left of the secondary windows.
 struct BackButton: View {
     let title: String

@@ -50,22 +50,30 @@ struct SiteManagerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
-            HStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
                 sidebar
                     .frame(width: 280)
-                Divider()
+                    .card()
                 detail
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .top) {
+                        if current?.tag == .prod {
+                            Rectangle().fill(SavedSite.Tag.prod.color).frame(height: 3)
+                        }
+                    }
+                    .card()
             }
+            .padding(.horizontal, 12)
             if case .failure(let message, let changedHostKey, _) = outcome {
-                Divider()
                 failureBanner(message, changedHostKey: changedHostKey)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
             }
-            Divider()
             footer
         }
-        .frame(minWidth: 880, idealWidth: 880, minHeight: 640, idealHeight: 640)
+        .background(Palette.background)
+        .themed()
+        .frame(minWidth: 960, idealWidth: 1040, minHeight: 680, idealHeight: 760)
         .onAppear {
             library.reloadSSHConfig()
             if case .failure(_, _, true) = outcome { secretFocused = true }
@@ -88,12 +96,12 @@ struct SiteManagerSheet: View {
 
     private var header: some View {
         HStack {
-            Text("연결 관리")
-                .font(.ui(.title3, weight: .semibold))
+            WindowHeading(title: "연결 관리", subtitle: "비밀번호와 키 암호는 macOS 키체인에만 저장해요.")
             Spacer()
-            Label("비밀번호와 키 암호는 macOS 키체인에만 저장해요.", systemImage: "key")
-                .font(.ui(.caption))
-                .foregroundStyle(.secondary)
+            Button("닫기") { dismiss() }
+                .buttonStyle(PanelButtonStyle())
+                .fixedSize()
+                .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -102,67 +110,61 @@ struct SiteManagerSheet: View {
     // MARK: - List
 
     private var sidebar: some View {
-        VStack(spacing: 0) {
-            if let error = library.storageError {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.ui(.caption))
-                    .foregroundStyle(.orange)
-                    .padding(10)
-            }
-            if !library.importableHosts.isEmpty {
-                importBanner
-                    .padding([.horizontal, .top], 10)
-            }
-            List(selection: $selection) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if let error = library.storageError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.ui(.caption))
+                        .foregroundStyle(.orange)
+                }
+                if !library.importableHosts.isEmpty {
+                    importBanner
+                }
                 ForEach([("서버", true), ("클라우드", false)], id: \.0) { title, servers in
                     let group = library.sites.filter { $0.isSFTP == servers }
                     if !group.isEmpty {
-                        Section(title) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            SectionLabel(title).padding(.horizontal, 8).padding(.top, 4)
                             ForEach(group) { site in
-                                SiteRow(site: site, isNew: library.recentlyImported.contains(site.id))
-                                    .tag(site.id as SavedSite.ID?)
-                                    .contextMenu {
-                                        Button("지우기…", role: .destructive) { pendingDelete = site }
-                                    }
+                                Button {
+                                    selection = site.id
+                                } label: {
+                                    SiteRow(site: site, isNew: library.recentlyImported.contains(site.id))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(selection == site.id ? Palette.selection : .clear, in: .rect(cornerRadius: 8))
+                                        .contentShape(.rect)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("지우기…", role: .destructive) { pendingDelete = site }
+                                }
                             }
                         }
                     }
                 }
-            }
-            .listStyle(.sidebar)
-            .overlay {
                 if library.sites.isEmpty {
                     VStack(spacing: 6) {
                         Image(systemName: "server.rack")
                             .font(.ui(.title2))
                         Text("저장된 연결이 없어요")
                             .font(.ui(.callout, weight: .medium))
-                        Text("아래 + 로 새 연결을 만들어요.")
-                            .font(.ui(.caption))
                     }
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 30)
                 }
-            }
-            Divider()
-            HStack(spacing: 4) {
                 Button {
                     selection = library.add().id
                 } label: {
                     Label("새 연결", systemImage: "plus")
                 }
-                Button {
-                    pendingDelete = current
-                } label: {
-                    Image(systemName: "minus")
-                        .frame(width: 18)
-                }
-                .disabled(current == nil)
-                .help("선택한 연결 지우기")
-                Spacer()
+                .buttonStyle(PanelButtonStyle(dashed: true))
+                .padding(.top, 4)
             }
-            .buttonStyle(.borderless)
-            .padding(8)
+            .padding(12)
         }
+        .scrollIndicators(.never)
     }
 
     private var importBanner: some View {
@@ -180,12 +182,14 @@ struct SiteManagerSheet: View {
                 let added = library.importSSHConfig()
                 if let first = added.first { selection = first.id }
             }
-            .controlSize(.small)
-            .padding(.top, 2)
+            .buttonStyle(PanelButtonStyle(prominent: true))
+            .fixedSize()
+            .padding(.top, 4)
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.themeAccent.opacity(0.08), in: .rect(cornerRadius: 8))
+        .background(Palette.selection, in: .rect(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.themeAccent.opacity(0.35)))
     }
 
     // MARK: - Settings
@@ -228,9 +232,9 @@ struct SiteManagerSheet: View {
             }
         }
         .font(.ui(.callout))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.orange.opacity(0.08))
+        .padding(12)
+        .background(Color.orange.opacity(0.08), in: .rect(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.orange.opacity(0.35)))
     }
 
     private var footer: some View {
@@ -238,26 +242,30 @@ struct SiteManagerSheet: View {
             Button(activity == .testing ? "연결 확인 중…" : "연결 테스트") {
                 Task { await run(.testing) }
             }
+            .buttonStyle(PanelButtonStyle())
+            .fixedSize()
             .disabled(!canConnect || activity != nil)
             if activity != nil {
                 ProgressView()
                     .controlSize(.small)
             } else if case .success(let message) = outcome {
                 Label(message, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .font(.ui(.callout))
+                    .foregroundStyle(Color(light: 0x0F7C5A, dark: 0x3CC48E))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             Spacer()
-            Button("닫기", role: .cancel) { dismiss() }
-                .keyboardShortcut(.cancelAction)
             Button("저장하고 열기") {
                 Task { await run(.opening) }
             }
+            .buttonStyle(PanelButtonStyle(prominent: true))
+            .fixedSize()
             .keyboardShortcut(.defaultAction)
             .disabled(!canConnect || activity != nil)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private var canConnect: Bool {
@@ -374,6 +382,7 @@ private struct SiteRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
                     Text(site.name)
+                        .font(.ui(.body, weight: .semibold))
                         .lineLimit(1)
                     if isNew {
                         Text("가져옴")
@@ -394,10 +403,9 @@ private struct SiteRow: View {
                     .help("읽기 전용")
             }
             if let tag = site.tag {
-                TagChip(tag: tag)
+                TagChip.outlined(tag)
             }
         }
-        .padding(.vertical, 2)
     }
 }
 
@@ -446,29 +454,52 @@ private struct SiteForm: View {
     let signOut: () -> Void
 
     var body: some View {
-        Form {
-            Section {
-                Picker("종류", selection: kindChoice) {
-                    Label("SFTP", systemImage: "server.rack").tag(0)
-                    Label("S3", systemImage: "cylinder").tag(1)
-                    Label("Google Drive", systemImage: "cloud").tag(2)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionLabel("종류")
+                    HStack(spacing: 8) {
+                        kindCard(0, "SFTP", "SSH 서버", "server.rack")
+                        kindCard(1, "S3", "AWS · R2 · MinIO", "cylinder")
+                        kindCard(2, "Google Drive", "OAuth 로그인", "cloud")
+                        Spacer()
+                    }
+                    Text(kindHint).font(.ui(.caption)).foregroundStyle(.secondary)
                 }
-                .pickerStyle(.segmented)
-            } footer: {
-                Text(kindHint)
-                    .foregroundStyle(.secondary)
+                switch site.kind {
+                case .sftp:
+                    sftpFields
+                case .s3:
+                    s3Fields
+                case .googleDrive:
+                    driveFields
+                }
+                Rectangle().fill(Palette.line).frame(height: 1)
+                safety
             }
-            switch site.kind {
-            case .sftp:
-                sftpSections
-            case .s3:
-                s3Section
-            case .googleDrive:
-                driveSection
-            }
-            safetySection
+            .padding(20)
         }
-        .formStyle(.grouped)
+        .scrollIndicators(.never)
+    }
+
+    private func kindCard(_ choice: Int, _ title: String, _ subtitle: String, _ symbol: String) -> some View {
+        let selected = kindChoice.wrappedValue == choice
+        return Button {
+            kindChoice.wrappedValue = choice
+        } label: {
+            VStack(alignment: .leading, spacing: 5) {
+                Image(systemName: symbol)
+                    .foregroundStyle(selected ? Color.themeAccent : .secondary)
+                Text(title).font(.ui(.callout, weight: .semibold))
+                Text(subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
+            }
+            .frame(width: 128, alignment: .leading)
+            .padding(12)
+            .background(selected ? Palette.selection : Palette.panel, in: .rect(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(selected ? Color.themeAccent : Palette.line, lineWidth: selected ? 1.5 : 1))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 
     private var kindHint: String {
@@ -514,150 +545,164 @@ private struct SiteForm: View {
     }
 
     @ViewBuilder
-    private var s3Section: some View {
-        Section {
-            TextField("이름", text: $site.name)
-            TextField("버킷", text: s3.bucket)
-            TextField("리전", text: s3.region, prompt: Text("us-east-1"))
-            TextField("엔드포인트", text: s3.endpoint, prompt: Text("AWS 기본값"))
-            Toggle("경로 방식 주소 (MinIO)", isOn: s3.usesPathStyle)
-            TextField("액세스 키", text: s3.accessKey)
-            SecureField("비밀 키", text: $password, prompt: Text("비워 두면 저장된 키를 써요"))
-                .focused(secretFocused)
-        } header: {
-            Text("S3")
-        } footer: {
-            Text("MinIO, R2 같은 S3 호환 저장소도 주소만 바꾸면 돼요. 비밀 키는 연결에 성공하면 키체인에 저장해요.")
-                .foregroundStyle(.secondary)
+    private var s3Fields: some View {
+        LabeledField("이름") { TextField("이름", text: $site.name).designField() }
+        HStack(alignment: .top, spacing: 12) {
+            LabeledField("버킷") { TextField("버킷", text: s3.bucket).designField(mono: true) }
+            LabeledField("리전") { TextField("리전", text: s3.region, prompt: Text("us-east-1")).designField(mono: true) }
+                .frame(width: 180)
+        }
+        LabeledField("엔드포인트", hint: "MinIO, R2 같은 S3 호환 저장소도 주소만 바꾸면 돼요.") {
+            TextField("엔드포인트", text: s3.endpoint, prompt: Text(verbatim: "s3.amazonaws.com")).designField(mono: true)
+        }
+        SwitchRow(title: "경로 방식 주소", detail: "MinIO처럼 버킷을 주소 경로에 넣는 곳", isOn: s3.usesPathStyle)
+        HStack(alignment: .top, spacing: 12) {
+            LabeledField("액세스 키") { TextField("액세스 키", text: s3.accessKey).designField(mono: true) }
+            LabeledField("비밀 키", hint: "연결에 성공하면 키체인에 저장해요.") {
+                SecureField("비밀 키", text: $password, prompt: Text("비워 두면 저장된 키를 써요"))
+                    .focused(secretFocused)
+                    .designField()
+            }
         }
     }
 
     @ViewBuilder
-    private var driveSection: some View {
-        Section {
-            TextField("이름", text: $site.name)
-            LabeledContent {
-                if isSigningIn {
-                    ProgressView().controlSize(.small)
-                } else if drive.wrappedValue.account.isEmpty {
-                    Button("Google 계정으로 로그인", action: signIn)
-                        .disabled(drive.wrappedValue.clientID.isEmpty)
-                } else {
-                    Button("로그아웃", action: signOut)
-                }
-            } label: {
+    private var driveFields: some View {
+        LabeledField("이름") { TextField("이름", text: $site.name).designField() }
+        HStack(spacing: 12) {
+            Image(systemName: drive.wrappedValue.account.isEmpty ? "person.crop.circle.badge.questionmark" : "person.crop.circle.badge.checkmark")
+                .font(.ui(.title2))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(drive.wrappedValue.account.isEmpty ? "연결된 Google 계정이 없어요" : "로그인됨 · \(drive.wrappedValue.account)")
+                    .font(.ui(.body, weight: .medium))
                 Text(drive.wrappedValue.account.isEmpty ? "브라우저에서 Google 로그인 창이 열려요" : "토큰은 키체인에 있어요 · 공유 드라이브 포함")
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
             }
-            TextField("OAuth 클라이언트 ID", text: drive.clientID, prompt: Text("…apps.googleusercontent.com"))
-            SecureField("클라이언트 보안 비밀", text: $passphrase, prompt: Text("데스크톱 앱 클라이언트의 secret · 키체인에 저장"))
-        } header: {
-            Text("Google Drive")
-        } footer: {
-            Text("직접 만든 Google Cloud 클라이언트(데스크톱 앱)를 써요. 테스트 상태면 7일마다 다시 로그인해야 해요.")
-                .foregroundStyle(.secondary)
+            Spacer()
+            if isSigningIn {
+                ProgressView().controlSize(.small)
+            } else if drive.wrappedValue.account.isEmpty {
+                Button("Google 계정으로 로그인", action: signIn)
+                    .buttonStyle(PanelButtonStyle(prominent: true))
+                    .fixedSize()
+                    .disabled(drive.wrappedValue.clientID.isEmpty)
+            } else {
+                Button("로그아웃", action: signOut)
+                    .buttonStyle(PanelButtonStyle())
+                    .fixedSize()
+            }
         }
-        Section {
-            Picker("Google 문서를 받을 때 형식", selection: drive.exportFormat) {
-                Text("DOCX / XLSX / PPTX").tag("office")
-                Text("PDF").tag("pdf")
-                Text("ODT / ODS / ODP").tag("openDocument")
+        .padding(14)
+        .well()
+        LabeledField("OAuth 클라이언트 ID", hint: "직접 만든 Google Cloud 클라이언트(데스크톱 앱)를 써요. 테스트 상태면 7일마다 다시 로그인해야 해요.") {
+            TextField("OAuth 클라이언트 ID", text: drive.clientID, prompt: Text("…apps.googleusercontent.com")).designField(mono: true)
+        }
+        LabeledField("클라이언트 보안 비밀") {
+            SecureField("클라이언트 보안 비밀", text: $passphrase, prompt: Text("데스크톱 앱 클라이언트의 secret · 키체인에 저장")).designField()
+        }
+        LabeledField("Google 문서를 받을 때 형식", hint: "문서 · 스프레드시트 · 프레젠테이션은 실제 파일이 아니라서 변환해서 받아요. Drive는 한 폴더에 같은 이름을 허용해서, 목록에서는 “이름 (2)”처럼 구분해 보여줘요.") {
+            HStack(spacing: 6) {
+                ForEach([("office", "DOCX / XLSX / PPTX"), ("pdf", "PDF"), ("openDocument", "ODT / ODS / ODP")], id: \.0) { value, title in
+                    Button(title) { drive.wrappedValue.exportFormat = value }
+                        .buttonStyle(ChoiceButtonStyle(isOn: drive.wrappedValue.exportFormat == value))
+                        .fixedSize()
+                }
             }
-        } footer: {
-            Text("문서 · 스프레드시트 · 프레젠테이션은 실제 파일이 아니라서 변환해서 받아요. Drive는 한 폴더에 같은 이름을 허용해서, 목록에서는 “이름 (2)”처럼 구분해 보여줘요.")
-                .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
-    private var sftpSections: some View {
-            Section("서버") {
-                TextField("이름", text: $site.name)
-                TextField("호스트", text: $site.endpoint.host, prompt: Text("example.com"))
-                TextField("포트", value: $site.endpoint.port, format: .number.grouping(.never))
-                TextField("사용자", text: $site.endpoint.username)
-                TextField("시작 폴더", text: optional(\.startPath), prompt: Text("~ (로그인 폴더)"))
+    private var sftpFields: some View {
+        LabeledField("이름") { TextField("이름", text: $site.name).designField() }
+        HStack(alignment: .top, spacing: 12) {
+            LabeledField("호스트") {
+                TextField("호스트", text: $site.endpoint.host, prompt: Text("example.com")).designField(mono: true)
             }
-
-            Section {
-                Picker("인증", selection: authKind) {
-                    ForEach(AuthKind.allCases) { Text($0.label).tag($0) }
+            LabeledField("포트") {
+                TextField("포트", value: $site.endpoint.port, format: .number.grouping(.never)).designField(mono: true)
+            }
+            .frame(width: 140)
+        }
+        HStack(alignment: .top, spacing: 12) {
+            LabeledField("사용자") { TextField("사용자", text: $site.endpoint.username).designField(mono: true) }
+            LabeledField("시작 폴더") {
+                TextField("시작 폴더", text: optional(\.startPath), prompt: Text(verbatim: "~")).designField(mono: true)
+            }
+        }
+        LabeledField("인증", hint: site.authentication.kind.hint) {
+            HStack(spacing: 6) {
+                ForEach(AuthKind.allCases) { kind in
+                    Button(kind.label) { authKind.wrappedValue = kind }
+                        .buttonStyle(ChoiceButtonStyle(isOn: site.authentication.kind == kind))
+                        .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                switch site.authentication {
-                case .agent:
-                    TextField("에이전트 소켓", text: agentSocket, prompt: Text("SSH_AUTH_SOCK"))
-                case .keyFile:
-                    HStack {
-                        TextField("키 파일", text: keyPath, prompt: Text("~/.ssh/id_ed25519"))
-                        Button("선택…", action: chooseKey)
+            }
+            switch site.authentication {
+            case .agent:
+                TextField("에이전트 소켓", text: agentSocket, prompt: Text(verbatim: "$SSH_AUTH_SOCK")).designField(mono: true)
+            case .keyFile:
+                HStack {
+                    TextField("키 파일", text: keyPath, prompt: Text("~/.ssh/id_ed25519")).designField(mono: true)
+                    Button("선택…", action: chooseKey)
+                        .buttonStyle(PanelButtonStyle())
+                        .fixedSize()
+                }
+                SecureField("키 암호", text: $passphrase, prompt: Text("키 암호 · 비워 두면 저장된 암호를 써요"))
+                    .focused(secretFocused)
+                    .designField()
+            case .password:
+                SecureField("비밀번호", text: $password, prompt: Text("비밀번호 · 비워 두면 저장된 비밀번호를 써요"))
+                    .focused(secretFocused)
+                    .designField()
+            }
+        }
+        LabeledField("점프 호스트 (ProxyJump)", hint: "저장된 연결 이름, ~/.ssh/config 별칭, user@host:port 를 쉼표로 이어 쓰면 차례로 거쳐요.") {
+            JumpHostField(site: $site, candidates: jumpHostNames)
+                .id(site.id)
+        }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("원격 제어").font(.ui(.body, weight: .semibold))
+            HStack(spacing: 6) {
+                ForEach([(SavedSite.RemoteScreen.Kind?.none, "사용 안 함"), (.some(.vnc), "VNC"), (.some(.appleScreenSharing), "macOS 화면 공유")], id: \.1) { kind, title in
+                    Button(title) { screenKind.wrappedValue = kind }
+                        .buttonStyle(ChoiceButtonStyle(isOn: site.remoteScreen?.kind == kind))
+                        .fixedSize()
+                }
+            }
+            if site.remoteScreen != nil {
+                HStack(alignment: .bottom, spacing: 12) {
+                    LabeledField("화면 포트") {
+                        TextField("화면 포트", value: screenPort, format: .number.grouping(.never)).designField(mono: true)
                     }
-                    SecureField("키 암호", text: $passphrase, prompt: Text("비워 두면 저장된 암호를 써요"))
-                        .focused(secretFocused)
-                case .password:
-                    SecureField("비밀번호", text: $password, prompt: Text("비워 두면 저장된 비밀번호를 써요"))
-                        .focused(secretFocused)
+                    .frame(width: 140)
+                    SwitchRow(
+                        title: "SSH 터널로 연결 (추천)",
+                        detail: site.remoteScreen?.throughTunnel == true
+                            ? "SSH 연결 안으로 화면을 보내요 · 서버 방화벽에 포트를 열 필요 없어요"
+                            : "직접 연결 · VNC는 암호화가 약해서 추천하지 않아요",
+                        isOn: screenTunnel
+                    )
                 }
-            } header: {
-                Text("인증")
-            } footer: {
-                Text(site.authentication.kind.hint)
-                    .foregroundStyle(.secondary)
             }
-
-            Section {
-                JumpHostField(site: $site, candidates: jumpHostNames)
-                    .id(site.id)
-            } header: {
-                Text("점프 호스트 (ProxyJump)")
-            } footer: {
-                Text("저장된 연결 이름, ~/.ssh/config 별칭, user@host:port 를 쉼표로 이어 쓰면 차례로 거쳐요.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Picker("원격 화면", selection: screenKind) {
-                    Text("사용 안 함").tag(SavedSite.RemoteScreen.Kind?.none)
-                    Text("VNC").tag(SavedSite.RemoteScreen.Kind?.some(.vnc))
-                    Text("macOS 화면 공유").tag(SavedSite.RemoteScreen.Kind?.some(.appleScreenSharing))
-                }
-                .pickerStyle(.segmented)
-                if site.remoteScreen != nil {
-                    TextField("화면 포트", value: screenPort, format: .number.grouping(.never))
-                    Toggle(isOn: screenTunnel) {
-                        Text("SSH 터널로 연결 (추천)")
-                        Text(site.remoteScreen?.throughTunnel == true
-                             ? "SSH 연결 안으로 화면을 보내요 · 서버 방화벽에 포트를 열 필요 없어요"
-                             : "직접 연결 · VNC는 암호화가 약해서 추천하지 않아요")
-                    }
-                }
-            } header: {
-                Text("원격 제어")
-            } footer: {
-                Text(screenHint)
-                    .foregroundStyle(.secondary)
-            }
+            Text(screenHint).font(.ui(.caption)).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .well()
     }
 
-    private var safetySection: some View {
-            Section {
-                LabeledContent("색 태그") {
-                    TagPicker(tag: tag)
-                }
-                Toggle(isOn: $site.readOnly) {
-                    Text("읽기 전용으로 열기")
-                    Text("쓰기 · 삭제 버튼을 숨겨요")
-                }
-                Toggle(isOn: $site.confirmsWrites) {
-                    Text("쓰기 전에 항상 확인")
-                    Text(site.tag == .prod ? "PROD 태그라 자동으로 켜져요" : "복사 · 삭제 · 덮어쓰기 전에 물어봐요")
-                }
-            } header: {
-                Text("구분과 안전")
-            } footer: {
-                Text("PROD 로 지정하면 패인 위에 띠가 생기고, 파일을 쓰기 전에 항상 확인해요.")
-                    .foregroundStyle(.secondary)
-            }
+    private var safety: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel("구분과 안전")
+            TagPicker(tag: tag)
+            SwitchRow(title: "읽기 전용으로 열기", detail: "쓰기 · 삭제 버튼을 숨겨요", isOn: $site.readOnly)
+            SwitchRow(title: "쓰기 전에 항상 확인", detail: site.tag == .prod ? "PROD 태그라 자동으로 켜져요" : "복사 · 삭제 · 덮어쓰기 전에 물어봐요", isOn: $site.confirmsWrites)
+            Text("PROD 로 지정하면 패인 위에 띠가 생기고, 파일을 쓰기 전에 항상 확인해요.")
+                .font(.ui(.caption))
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var screenKind: Binding<SavedSite.RemoteScreen.Kind?> {
@@ -769,7 +814,8 @@ private struct JumpHostField: View {
 
     var body: some View {
         HStack {
-            TextField("거쳐 갈 호스트", text: $text, prompt: Text("없음"))
+            TextField("거쳐 갈 호스트", text: $text, prompt: Text(verbatim: "bastion"))
+                .designField(mono: true)
                 .onChange(of: text) {
                     site.proxyJump = text.split(separator: ",")
                         .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -783,8 +829,12 @@ private struct JumpHostField: View {
                 }
             } label: {
                 Image(systemName: "plus")
+                    .frame(width: 30, height: 30)
+                    .background(Palette.panel, in: .rect(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line))
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(addable.isEmpty)
@@ -811,19 +861,19 @@ private struct TagPicker: View {
         return Button {
             tag = value
         } label: {
-            HStack(spacing: 5) {
-                Circle()
+            HStack(spacing: 7) {
+                RoundedRectangle(cornerRadius: 2)
                     .fill(color)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 10, height: 10)
                 Text(label)
-                    .fontWeight(selected ? .semibold : .regular)
+                    .font(.ui(.callout, weight: selected ? .semibold : .regular))
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(selected ? Color.themeAccent.opacity(0.14) : .clear, in: .rect(cornerRadius: 6))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(selected ? Palette.selection : Palette.panel, in: .rect(cornerRadius: 7))
             .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(selected ? Color.themeAccent : Color.secondary.opacity(0.35), lineWidth: selected ? 1.5 : 1)
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(selected ? Color.themeAccent : Palette.line, lineWidth: selected ? 1.5 : 1)
             }
             .contentShape(.rect)
         }
