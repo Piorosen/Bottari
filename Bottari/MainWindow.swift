@@ -1,13 +1,10 @@
 import BottariCore
 import SwiftUI
 
-/// Two panes side by side. Each pane can browse any provider; for now both show the Mac.
+/// Two panes side by side, each browsing the Mac or an SFTP server.
 struct MainWindow: View {
     @State private var left = PaneModel(provider: LocalFileProvider())
-    @State private var right = PaneModel(
-        provider: LocalFileProvider(),
-        start: RemotePath(NSHomeDirectory()).appending("Downloads")
-    )
+    @State private var right = PaneModel(provider: LocalFileProvider())
     @State private var activeSide: PaneSide = .left
 
     var body: some View {

@@ -1,11 +1,12 @@
 import BottariCore
+import BottariSFTP
 import Foundation
 import Observation
 
 /// One pane: the provider it browses, the folder it shows, its history and selection.
 @Observable
 final class PaneModel {
-    let provider: any FileProvider
+    private(set) var provider: any FileProvider
     private(set) var path: RemotePath
     private(set) var items: [FileItem] = []
     private(set) var isLoading = false
@@ -24,6 +25,10 @@ final class PaneModel {
     }
 
     var isLocal: Bool { provider is LocalFileProvider }
+    /// `user@host` for remote panes, nil for the Mac.
+    var remoteAddress: String? {
+        (provider as? SFTPFileProvider).map { "\($0.endpoint.username)@\($0.endpoint.hostKeyID)" }
+    }
     var visibleItems: [FileItem] { showsHiddenFiles ? items : items.filter { !$0.isHidden } }
     var selectedItems: [FileItem] { items.filter { selection.contains($0.id) } }
     var canGoBack: Bool { !backStack.isEmpty || path.parent != nil }
@@ -34,6 +39,30 @@ final class PaneModel {
         guard !hasStarted else { return }
         hasStarted = true
         await load(path)
+    }
+
+    /// Shows a different location in this pane, starting at its home folder,
+    /// and closes the connection the pane was using before.
+    func switchProvider(to newProvider: any FileProvider) async {
+        let previous = provider
+        provider = newProvider
+        path = newProvider.home
+        items = []
+        selection = []
+        backStack = []
+        forwardStack = []
+        hasStarted = true
+        await load(path)
+        if let previous = previous as? SFTPFileProvider {
+            await previous.disconnect()
+        }
+    }
+
+    /// Closes the pane's connection, e.g. when its window closes.
+    func disconnect() async {
+        if let remote = provider as? SFTPFileProvider {
+            await remote.disconnect()
+        }
     }
 
     func reload() async {

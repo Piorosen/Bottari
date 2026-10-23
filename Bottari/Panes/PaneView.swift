@@ -8,6 +8,7 @@ struct PaneView: View {
     let becomeActive: () -> Void
 
     @FocusState private var listFocused: Bool
+    @State private var showsConnectSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,8 +28,16 @@ struct PaneView: View {
         }
         .frame(minWidth: 360)
         .task { await model.start() }
+        .onDisappear {
+            Task { await model.disconnect() }
+        }
         .onChange(of: listFocused) { _, focused in
             if focused { becomeActive() }
+        }
+        .sheet(isPresented: $showsConnectSheet) {
+            ConnectSheet { provider in
+                Task { await model.switchProvider(to: provider) }
+            }
         }
     }
 
@@ -46,10 +55,21 @@ struct PaneView: View {
             .disabled(!model.canGoForward)
             .help("앞으로")
 
-            Label(model.provider.displayName, systemImage: model.isLocal ? "laptopcomputer" : "server.rack")
-                .font(.headline)
-                .labelStyle(.titleAndIcon)
-                .padding(.leading, 4)
+            Menu {
+                Button("이 Mac", systemImage: "laptopcomputer") {
+                    Task { await model.switchProvider(to: LocalFileProvider()) }
+                }
+                Button("SFTP 서버에 연결…", systemImage: "server.rack") {
+                    showsConnectSheet = true
+                }
+            } label: {
+                Label(model.provider.displayName, systemImage: model.isLocal ? "laptopcomputer" : "server.rack")
+                    .font(.headline)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("이 패인에서 열 위치")
+            .padding(.leading, 4)
 
             PathBar(path: model.path) { target in
                 Task { await model.open(target) }
@@ -131,7 +151,7 @@ struct PaneView: View {
         HStack {
             Text(summary)
             Spacer()
-            Text(model.path.string)
+            Text(model.remoteAddress.map { "\($0):\(model.path.string)" } ?? model.path.string)
                 .font(.system(.caption, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.head)
