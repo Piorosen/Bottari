@@ -7,13 +7,24 @@ struct BottariApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainWindow()
+            // Rendering snapshots lists no real folders at all.
+            if !AppDelegate.isRenderingSnapshots {
+                MainWindow()
+            }
         }
         .defaultSize(width: 1280, height: 800)
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static var isRenderingSnapshots: Bool {
+        #if DEBUG
+        SnapshotRenderer.outputDirectory != nil
+        #else
+        false
+        #endif
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
         if let directory = SnapshotRenderer.outputDirectory {

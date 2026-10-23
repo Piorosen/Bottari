@@ -189,4 +189,36 @@ import Testing
         #expect(link.isDirectory)
         #expect(link.isSymbolicLink)
     }
+
+    @Test func listingDoesNotFollowLinksIntoGuardedFolders() async throws {
+        let home = try makeTempDirectory()
+        defer { cleanUp(home) }
+        let provider = LocalFileProvider(home: home, privacy: PrivacyGuard(home: home))
+        try await provider.makeDirectory(home.appending("Desktop"))
+        try await provider.makeDirectory(home.appending("Desktop/project"))
+        try await provider.makeDirectory(home.appending("Projects"))
+        let links = home.appending("links")
+        try await provider.makeDirectory(links)
+        try FileManager.default.createSymbolicLink(atPath: links.appending("desk").string, withDestinationPath: "../Desktop/project")
+        try FileManager.default.createSymbolicLink(atPath: links.appending("work").string, withDestinationPath: home.appending("Projects").string)
+
+        let listed = try await provider.list(links)
+
+        let desk = try #require(listed.first { $0.name == "desk" })
+        #expect(desk.isSymbolicLink && desk.kind == .other)
+        #expect(listed.first { $0.name == "work" }?.isDirectory == true)
+        // Opening the link on purpose follows it.
+        #expect(try await provider.stat(links.appending("desk")).isDirectory)
+    }
+
+    @Test func guardedFoldersAreTheProtectedOnes() {
+        let privacy = PrivacyGuard(home: "/Users/me")
+        #expect(privacy.isGuardedFolder("/Users/me/Downloads"))
+        #expect(privacy.isGuardedFolder("/Volumes/USB"))
+        #expect(!privacy.isGuardedFolder("/Users/me/Downloads/a"))
+        #expect(privacy.isGuarded("/Users/me/Library/CloudStorage/Dropbox/x"))
+        #expect(!privacy.isGuarded("/Users/me/Library/Preferences"))
+        #expect(!privacy.isGuarded("/Users/me"))
+        #expect(!privacy.isGuarded("/Volumes"))
+    }
 }

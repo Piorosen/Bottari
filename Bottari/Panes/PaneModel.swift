@@ -133,6 +133,16 @@ final class PaneModel {
     func activate(_ item: FileItem) async {
         if item.isDirectory {
             await open(item.path)
+        } else if item.isSymbolicLink, item.kind == .other {
+            // A link the listing did not follow (it points into a privacy-guarded
+            // folder). Follow it now that the user asked; macOS may ask first.
+            do {
+                if try await provider.stat(item.path).isDirectory {
+                    await open(item.path)
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
