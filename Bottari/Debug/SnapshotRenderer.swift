@@ -310,6 +310,10 @@ enum SnapshotRenderer {
             await render(Sidebar(workspace: workspace), size: CGSize(width: 260, height: 620), appearance: appearance,
                          to: directory.appending(path: "sidebar-\(name).png"))
         }
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(CommandPalette(workspace: workspace) {}.padding(20), size: CGSize(width: 680, height: 520), appearance: appearance,
+                         to: directory.appending(path: "palette-\(name).png"))
+        }
         BottariBundle.shared.clear()
     }
 

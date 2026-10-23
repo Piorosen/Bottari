@@ -25,7 +25,35 @@ struct MainWindow: View {
             }
         }
         .frame(minWidth: 1000, minHeight: 520)
+        .overlay(alignment: .top) {
+            if workspace.showsPalette {
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.15)
+                        .onTapGesture { workspace.showsPalette = false }
+                    CommandPalette(workspace: workspace) { workspace.showsPalette = false }
+                        .padding(.top, 60)
+                }
+            }
+        }
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Button {
+                    workspace.showsPalette.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                        Text("폴더 이동, 서버 연결, 명령 실행…")
+                        Text("⌘K")
+                            .font(.caption.monospaced())
+                            .padding(.horizontal, 4)
+                            .background(.quaternary, in: .rect(cornerRadius: 3))
+                    }
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 320)
+                }
+                .keyboardShortcut("k")
+                .help("명령 팔레트 (⌘K)")
+            }
             ToolbarItem(placement: .primaryAction) {
                 TunnelStatusButton()
             }

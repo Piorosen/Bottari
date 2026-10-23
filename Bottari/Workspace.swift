@@ -39,6 +39,7 @@ final class Workspace {
     /// Why the last transfer was refused, e.g. a read-only site.
     var refusal: String?
     var showsTransfers = false
+    var showsPalette = false
     /// Opens viewer windows; the main window sets it, since only views can open windows.
     @ObservationIgnored var viewerOpener: ViewerOpener?
 
