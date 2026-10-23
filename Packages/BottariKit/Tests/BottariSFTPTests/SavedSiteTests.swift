@@ -1,3 +1,4 @@
+import BottariCore
 import Foundation
 import Testing
 @testable import BottariSFTP
@@ -75,6 +76,18 @@ import Testing
         #expect(SavedSite(name: "p", endpoint: endpoint, authentication: .password, tag: .prod).confirmsWrites)
         #expect(!SavedSite(name: "d", endpoint: endpoint, authentication: .password, tag: .dev).confirmsWrites)
         #expect(!SavedSite(name: "p", endpoint: endpoint, authentication: .password, tag: .prod, confirmsWrites: false).confirmsWrites)
+    }
+
+    @Test(arguments: [
+        (nil, "/home/deploy"),
+        ("~", "/home/deploy"),
+        ("~/site/", "/home/deploy/site"),
+        ("logs", "/home/deploy/logs"),
+        ("/var/www", "/var/www"),
+    ] as [(String?, String)])
+    func startLocationExpandsTilde(startPath: String?, expected: String) {
+        let site = SavedSite(name: "s", endpoint: SFTPEndpoint(host: "h", username: "deploy"), authentication: .password, startPath: startPath)
+        #expect(site.startLocation(home: "/home/deploy") == RemotePath(expected))
     }
 
     @Test func secretKeysAreScopedToTheSite() {

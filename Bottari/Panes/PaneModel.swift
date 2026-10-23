@@ -6,25 +6,32 @@ import Observation
 /// One pane: the provider it browses, the folder it shows, its history and selection.
 @Observable
 final class PaneModel {
+    let library: SiteLibrary
     private(set) var provider: any FileProvider
     private(set) var path: RemotePath
     private(set) var items: [FileItem] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    /// The saved site being connected to from the pane's menu.
+    private(set) var connectingSite: SavedSite?
     var selection: Set<FileItem.ID> = []
     var showsHiddenFiles = false
 
     private var backStack: [RemotePath] = []
     private var forwardStack: [RemotePath] = []
+    private var siteID: SavedSite.ID?
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var hasStarted = false
 
-    init(provider: any FileProvider, start: RemotePath? = nil) {
+    init(provider: any FileProvider, start: RemotePath? = nil, library: SiteLibrary = AppServices.sites) {
+        self.library = library
         self.provider = provider
         self.path = start ?? provider.home
     }
 
     var isLocal: Bool { provider is LocalFileProvider }
+    /// The saved site this pane shows, as currently saved, so tag edits show up at once.
+    var site: SavedSite? { siteID.flatMap(library.site) }
     /// `user@host` for remote panes, nil for the Mac.
     var remoteAddress: String? {
         (provider as? SFTPFileProvider).map { "\($0.endpoint.username)@\($0.endpoint.hostKeyID)" }
@@ -41,18 +48,30 @@ final class PaneModel {
         await load(path)
     }
 
-    /// Shows a different location in this pane, starting at its home folder,
-    /// and closes the connection the pane was using before.
-    func switchProvider(to newProvider: any FileProvider) async {
+    /// Connects to a saved site and shows it in this pane.
+    func connect(to site: SavedSite) async throws {
+        connectingSite = site
+        defer { connectingSite = nil }
+        let provider = try await library.connect(site)
+        await switchProvider(to: provider, site: site)
+    }
+
+    /// Shows a different location in this pane, starting at the site's start
+    /// folder or the provider's home, and closes the connection the pane was using before.
+    func switchProvider(to newProvider: any FileProvider, site: SavedSite? = nil) async {
         let previous = provider
         provider = newProvider
-        path = newProvider.home
+        siteID = site?.id
+        let start = site?.startLocation(home: newProvider.home) ?? newProvider.home
+        path = start
         items = []
         selection = []
         backStack = []
         forwardStack = []
         hasStarted = true
-        await load(path)
+        if await !load(start), start != newProvider.home, await load(newProvider.home) {
+            errorMessage = "시작 폴더를 열지 못해서 홈 폴더를 열었어요: \(start.string)"
+        }
         if let previous = previous as? SFTPFileProvider {
             await previous.disconnect()
         }

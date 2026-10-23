@@ -1,3 +1,4 @@
+import BottariCore
 import Foundation
 
 /// A server the user saved. Secrets are not part of it; they live in a `SecretStore`.
@@ -73,6 +74,17 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
             proxyJump: host.proxyJump,
             sshConfigAlias: host.alias
         )
+    }
+
+    /// Where to open the site: its start folder, with `~` meaning the login folder `home`.
+    public func startLocation(home: RemotePath) -> RemotePath {
+        guard let startPath = startPath?.trimmingCharacters(in: .whitespaces), !startPath.isEmpty, startPath != "~" else {
+            return home
+        }
+        if startPath.hasPrefix("~/") {
+            return home.appending(String(startPath.dropFirst(2)))
+        }
+        return startPath.hasPrefix("/") ? RemotePath(startPath) : home.appending(startPath)
     }
 
     public var passwordKey: String { "site.\(id.uuidString).password" }

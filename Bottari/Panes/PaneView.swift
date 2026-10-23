@@ -1,4 +1,5 @@
 import BottariCore
+import BottariSFTP
 import SwiftUI
 
 /// A Finder-style list of one folder, with history buttons and a clickable path.
@@ -8,7 +9,7 @@ struct PaneView: View {
     let becomeActive: () -> Void
 
     @FocusState private var listFocused: Bool
-    @State private var showsConnectSheet = false
+    @State private var siteManager: SiteManagerRequest?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,9 +23,10 @@ struct PaneView: View {
             footer
         }
         .overlay(alignment: .top) {
+            // A PROD pane keeps its warning band even when it is not the active one.
             Rectangle()
-                .fill(isActive ? Color.accentColor : .clear)
-                .frame(height: 2)
+                .fill(isProd ? SavedSite.Tag.prod.color : isActive ? Color.accentColor : .clear)
+                .frame(height: isProd ? 3 : 2)
         }
         .frame(minWidth: 360)
         .task { await model.start() }
@@ -34,10 +36,21 @@ struct PaneView: View {
         .onChange(of: listFocused) { _, focused in
             if focused { becomeActive() }
         }
-        .sheet(isPresented: $showsConnectSheet) {
-            ConnectSheet { provider in
-                Task { await model.switchProvider(to: provider) }
+        .sheet(item: $siteManager) { request in
+            SiteManagerSheet(library: model.library, initialSelection: request.selection, initialError: request.error) { provider, site in
+                Task { await model.switchProvider(to: provider, site: site) }
             }
+        }
+    }
+
+    private var isProd: Bool { model.site?.tag == .prod }
+
+    private func open(_ site: SavedSite) async {
+        do {
+            try await model.connect(to: site)
+        } catch {
+            // Show the site's settings with the reason, where it can be fixed.
+            siteManager = SiteManagerRequest(selection: site.id, error: error)
         }
     }
 
@@ -59,17 +72,43 @@ struct PaneView: View {
                 Button("이 Mac", systemImage: "laptopcomputer") {
                     Task { await model.switchProvider(to: LocalFileProvider()) }
                 }
-                Button("SFTP 서버에 연결…", systemImage: "server.rack") {
-                    showsConnectSheet = true
+                let sites = model.library.sites
+                if !sites.isEmpty {
+                    Section("저장된 연결") {
+                        ForEach(sites) { site in
+                            Button {
+                                Task { await open(site) }
+                            } label: {
+                                Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, systemImage: "server.rack")
+                            }
+                        }
+                    }
+                }
+                Divider()
+                Button("연결 관리…", systemImage: "list.bullet.rectangle") {
+                    siteManager = SiteManagerRequest(selection: model.site?.id)
                 }
             } label: {
                 Label(model.provider.displayName, systemImage: model.isLocal ? "laptopcomputer" : "server.rack")
                     .font(.headline)
+                    .foregroundStyle(isProd ? SavedSite.Tag.prod.color : .primary)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("이 패인에서 열 위치")
             .padding(.leading, 4)
+            .disabled(model.connectingSite != nil)
+
+            if let site = model.site {
+                if let tag = site.tag {
+                    TagChip(tag: tag)
+                }
+                if site.readOnly {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                        .help("읽기 전용으로 열었어요")
+                }
+            }
 
             PathBar(path: model.path) { target in
                 Task { await model.open(target) }
@@ -77,7 +116,12 @@ struct PaneView: View {
 
             Spacer(minLength: 8)
 
-            if model.isLoading {
+            if let site = model.connectingSite {
+                ProgressView().controlSize(.small)
+                Text("\(site.name)에 연결하는 중…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if model.isLoading {
                 ProgressView().controlSize(.small)
             }
 
@@ -215,4 +259,11 @@ private struct ErrorBanner: View {
         .padding(.vertical, 6)
         .background(.orange.opacity(0.1))
     }
+}
+
+/// Opens the connection manager, optionally on one site with why it failed to open.
+private struct SiteManagerRequest: Identifiable {
+    let id = UUID()
+    var selection: SavedSite.ID?
+    var error: (any Error)?
 }
