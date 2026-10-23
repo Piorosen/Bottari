@@ -35,9 +35,10 @@ Packages/BottariKit/    앱과 분리된 핵심 로직
   BottariCore           RemotePath, FileItem, FileProvider, LocalFileProvider
   BottariSFTP           SFTPFileProvider (Citadel), 호스트 키 기억(TOFU),
                         저장된 사이트, ~/.ssh/config, ssh-agent, 점프 호스트
+  BottariTransfer       전송 큐: 폴더 펼치기, 동시 전송, 같은 이름 처리, 일시정지 · 재시도
 ```
 
-- 모든 패인은 `FileProvider` 프로토콜로만 파일을 다뤄요. 서버 간 전송은 한쪽의 `read` 스트림을 다른 쪽 `write`에 이어 붙이는 것으로 끝나요.
+- 모든 패인은 `FileProvider` 프로토콜로만 파일을 다뤄요. 서버 간 전송은 한쪽의 `read` 스트림을 다른 쪽 `write`에 이어 붙이는 것으로 끝나요. 읽기는 받는 쪽이 가져가는 만큼만 해서 큰 파일도 메모리에 쌓이지 않아요.
 - 쓰기는 대상 옆 임시 파일에 먼저 쓰고 이름을 바꿔서, 전송이 끊겨도 원래 파일이 깨지지 않아요.
 - Xcode 프로젝트는 폴더 동기화 방식이라 `Bottari/` 아래에 파일을 추가해도 프로젝트 파일을 고칠 필요가 없어요.
 - App Store에는 내지 않아요. 샌드박스 없이 Developer ID 서명과 공증으로 배포할 계획이에요.
@@ -48,7 +49,9 @@ Packages/BottariKit/    앱과 분리된 핵심 로직
 - [x] SFTP 연결과 탐색 (Citadel) — 키 파일 · 비밀번호, 호스트 키 확인
 - [x] 저장된 사이트 · 키체인 · ssh-agent · `~/.ssh/config` 가져오기 · 점프 호스트 (엔진)
 - [x] 연결 관리 화면 — 저장 · 가져오기 · 태그 · 연결 테스트, PROD 패인 띠
-- [ ] 전송 큐 · 서버 간 전송
+- [x] 전송 큐 · 서버 간 전송 — 드래그 · ⌘C/⌘V · 우클릭, 같은 이름 정책, 일시정지 · 재시도, PROD 확인
+- [ ] 전송 센터 (서버 간 직접 rsync, 체크섬 확인, 이어받기)
+- [ ] 파일 작업 — 새 폴더, 이름 바꾸기, 삭제 · 휴지통
 - [ ] Google Drive · S3 (rclone)
 - [ ] 원격 편집, 이미지 뷰어, 영상 재생 (libmpv)
 - [ ] SSH 터미널 (SwiftTerm), 원격 화면 (RoyalVNCKit), 터널
