@@ -7,6 +7,9 @@ public struct LocalFileProvider: FileProvider {
     public let privacy: PrivacyGuard
 
     static let chunkSize = 256 * 1024
+    public static let locationID = "local"
+
+    public var locationID: String { Self.locationID }
 
     public init(displayName: String = "이 Mac", home: RemotePath = RemotePath(NSHomeDirectory()), privacy: PrivacyGuard = PrivacyGuard()) {
         self.displayName = displayName
@@ -31,28 +34,51 @@ public struct LocalFileProvider: FileProvider {
     }
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    try requireFile(path)
-                    let handle = try mapErrors(path) { try FileHandle(forReadingFrom: url(path)) }
-                    defer { try? handle.close() }
-                    var offset = range?.lowerBound ?? 0
-                    let end = range?.upperBound ?? .max
-                    try handle.seek(toOffset: UInt64(offset))
-                    while offset < end {
-                        try Task.checkCancellation()
-                        let count = Int(min(Int64(Self.chunkSize), end - offset))
-                        guard let data = try handle.read(upToCount: count), !data.isEmpty else { break }
-                        continuation.yield(data)
-                        offset += Int64(data.count)
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
+        let reader = Reader(start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max) {
+            try requireFile(path)
+            return try mapErrors(path) { try FileHandle(forReadingFrom: url(path)) }
+        }
+        return AsyncThrowingStream(unfolding: { try reader.next() })
+    }
+
+    /// Reads one chunk each time the stream's consumer asks. The stream calls
+    /// `next()` from one task at a time, which is what makes the mutable state safe.
+    private final class Reader: @unchecked Sendable {
+        private let open: () throws -> FileHandle
+        private var handle: FileHandle?
+        private var offset: Int64
+        private let end: Int64
+
+        init(start: Int64, end: Int64, open: @escaping () throws -> FileHandle) {
+            self.offset = start
+            self.end = end
+            self.open = open
+        }
+
+        deinit {
+            try? handle?.close()
+        }
+
+        func next() throws -> Data? {
+            try Task.checkCancellation()
+            guard offset < end else { return finish() }
+            let handle = try self.handle ?? {
+                let opened = try open()
+                try opened.seek(toOffset: UInt64(offset))
+                self.handle = opened
+                return opened
+            }()
+            let count = Int(min(Int64(LocalFileProvider.chunkSize), end - offset))
+            guard let data = try handle.read(upToCount: count), !data.isEmpty else { return finish() }
+            offset += Int64(data.count)
+            return data
+        }
+
+        private func finish() -> Data? {
+            try? handle?.close()
+            handle = nil
+            offset = end
+            return nil
         }
     }
 

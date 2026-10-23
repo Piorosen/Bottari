@@ -25,6 +25,10 @@ public struct ProviderCapabilities: OptionSet, Hashable, Sendable {
 /// provider's `read` stream fed into another provider's `write`.
 public protocol FileProvider: Sendable {
     var displayName: String { get }
+    /// Which storage this is, e.g. `local` or `sftp://deploy@example.com`. Providers
+    /// with the same location see the same files, so items can be renamed from one
+    /// to the other instead of copied through the Mac.
+    var locationID: String { get }
     var capabilities: ProviderCapabilities { get }
     /// Where a new pane opened on this provider starts.
     var home: RemotePath { get }
@@ -32,7 +36,9 @@ public protocol FileProvider: Sendable {
     /// Entries of the directory at `path`, in Finder order.
     func list(_ path: RemotePath) async throws -> [FileItem]
     func stat(_ path: RemotePath) async throws -> FileItem
-    /// Streams the file's bytes, or only `range` of them when given.
+    /// Streams the file's bytes, or only `range` of them when given. Bytes are read
+    /// as the consumer asks for them, so a slow consumer does not pile a whole
+    /// file up in memory.
     func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error>
     /// Writes the streamed bytes to `path`. If anything fails, an existing file
     /// at `path` must be left untouched.
@@ -49,6 +55,8 @@ public protocol FileProvider: Sendable {
 }
 
 extension FileProvider {
+    public var isLocal: Bool { locationID == LocalFileProvider.locationID }
+
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
         throw ProviderError.unsupported("서버 안에서 복사")
     }

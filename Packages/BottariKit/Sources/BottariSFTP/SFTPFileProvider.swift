@@ -20,6 +20,7 @@ public struct SFTPFileProvider: FileProvider {
     static let writeSliceSize = 32_000
 
     public var capabilities: ProviderCapabilities { [.rangeRead] }
+    public var locationID: String { "sftp://\(endpoint.username)@\(endpoint.hostKeyID)" }
 
     private var sftp: SFTPClient { connection.sftp }
 
@@ -80,28 +81,14 @@ public struct SFTPFileProvider: FileProvider {
     }
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    let file = try await sftp.openFile(filePath: path.string, flags: .read)
-                    do {
-                        try await Self.read(
-                            UncheckedSendable(file),
-                            from: range?.lowerBound ?? 0,
-                            to: range?.upperBound ?? .max
-                        ) { continuation.yield($0) }
-                        try? await file.close()
-                    } catch {
-                        try? await file.close()
-                        throw error
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: await refine(error, path, expectingDirectory: false))
-                }
+        let reader = Reader(sftp: sftp, path: path, start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max)
+        return AsyncThrowingStream(unfolding: {
+            do {
+                return try await reader.next()
+            } catch {
+                throw await refine(error, path, expectingDirectory: false)
             }
-            continuation.onTermination = { _ in task.cancel() }
-        }
+        })
     }
 
     public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws {
@@ -165,58 +152,6 @@ public struct SFTPFileProvider: FileProvider {
 
     // MARK: - Pipelining
 
-    /// Reads `start..<end` with several requests in flight, handing data on in order.
-    /// `SFTPFile` is not `Sendable`, but its reads only send requests through the
-    /// thread-safe client.
-    static func read(
-        _ file: UncheckedSendable<SFTPFile>,
-        from start: Int64,
-        to end: Int64,
-        yield: (Data) -> Void
-    ) async throws {
-        try await withThrowingTaskGroup(of: (Int64, ByteBuffer).self) { group in
-            var nextRequest = start
-            var nextYield = start
-            var arrived: [Int64: ByteBuffer] = [:]
-            func request() {
-                guard nextRequest < end else { return }
-                let offset = nextRequest
-                let length = UInt32(min(Int64(chunkSize), end - offset))
-                nextRequest += Int64(length)
-                group.addTask { (offset, try await file.value.read(from: UInt64(offset), length: length)) }
-            }
-            for _ in 0..<readsInFlight {
-                request()
-            }
-            while nextYield < end, let (offset, buffer) = try await group.next() {
-                arrived[offset] = buffer
-                while let buffer = arrived.removeValue(forKey: nextYield) {
-                    try Task.checkCancellation()
-                    guard buffer.readableBytes > 0 else {
-                        group.cancelAll()
-                        return
-                    }
-                    yield(Data(buffer.readableBytesView))
-                    let chunkEnd = nextYield + min(Int64(chunkSize), end - nextYield)
-                    var filled = nextYield + Int64(buffer.readableBytes)
-                    // Servers may answer with less than asked, e.g. at the end of the
-                    // file. Fill the rest of this chunk before moving on.
-                    while filled < chunkEnd {
-                        let more = try await file.value.read(from: UInt64(filled), length: UInt32(chunkEnd - filled))
-                        guard more.readableBytes > 0 else {
-                            group.cancelAll()
-                            return
-                        }
-                        yield(Data(more.readableBytesView))
-                        filled += Int64(more.readableBytes)
-                    }
-                    nextYield = chunkEnd
-                    request()
-                }
-            }
-        }
-    }
-
     /// Writes the stream from offset 0 with several requests in flight.
     static func write(_ file: UncheckedSendable<SFTPFile>, from data: AsyncThrowingStream<Data, any Error>) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -236,6 +171,96 @@ public struct SFTPFileProvider: FileProvider {
                 }
             }
             try await group.waitForAll()
+        }
+    }
+
+    /// Hands out a file's bytes in order as the stream's consumer asks for them,
+    /// keeping a few read requests ahead. The stream calls `next()` from one task
+    /// at a time, which is what makes the mutable state safe.
+    private final class Reader: @unchecked Sendable {
+        private let sftp: SFTPClient
+        private let path: RemotePath
+        private let end: Int64
+        private var file: UncheckedSendable<SFTPFile>?
+        private var nextRequest: Int64
+        private var ahead: [(offset: Int64, length: Int64, data: Task<ByteBuffer, any Error>)] = []
+        private var finished = false
+
+        init(sftp: SFTPClient, path: RemotePath, start: Int64, end: Int64) {
+            self.sftp = sftp
+            self.path = path
+            self.nextRequest = start
+            self.end = end
+        }
+
+        deinit {
+            // The consumer stopped early, e.g. a cancelled transfer.
+            close()
+        }
+
+        func next() async throws -> Data? {
+            guard !finished else { return nil }
+            do {
+                try Task.checkCancellation()
+                let file = try await openedFile()
+                while ahead.count < SFTPFileProvider.readsInFlight, nextRequest < end {
+                    let offset = nextRequest
+                    let length = min(Int64(SFTPFileProvider.chunkSize), end - offset)
+                    nextRequest += length
+                    ahead.append((offset, length, Task { try await file.value.read(from: UInt64(offset), length: UInt32(length)) }))
+                }
+                guard !ahead.isEmpty else { return finish() }
+                let chunk = ahead.removeFirst()
+                let first = try await chunk.data.value
+                guard first.readableBytes > 0 else { return finish() }
+                var data = Data(first.readableBytesView)
+                // Servers may answer with less than asked, e.g. at the end of the
+                // file. Fill the rest of this chunk before moving on.
+                let chunkEnd = chunk.offset + chunk.length
+                while chunk.offset + Int64(data.count) < chunkEnd {
+                    let filled = chunk.offset + Int64(data.count)
+                    let more = try await file.value.read(from: UInt64(filled), length: UInt32(chunkEnd - filled))
+                    guard more.readableBytes > 0 else {
+                        // The file ended inside this chunk; nothing after it can follow.
+                        cancelAhead()
+                        nextRequest = end
+                        break
+                    }
+                    data.append(contentsOf: more.readableBytesView)
+                }
+                return data
+            } catch {
+                close()
+                finished = true
+                throw error
+            }
+        }
+
+        private func openedFile() async throws -> UncheckedSendable<SFTPFile> {
+            if let file { return file }
+            let opened = UncheckedSendable(try await sftp.openFile(filePath: path.string, flags: .read))
+            file = opened
+            return opened
+        }
+
+        private func finish() -> Data? {
+            finished = true
+            close()
+            return nil
+        }
+
+        private func cancelAhead() {
+            for chunk in ahead {
+                chunk.data.cancel()
+            }
+            ahead.removeAll()
+        }
+
+        private func close() {
+            cancelAhead()
+            guard let file else { return }
+            self.file = nil
+            Task { try? await file.value.close() }
         }
     }
 
