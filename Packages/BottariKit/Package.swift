@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "BottariEditor", targets: ["BottariEditor"]),
         .library(name: "BottariPlayer", targets: ["BottariPlayer"]),
         .library(name: "BottariRemote", targets: ["BottariRemote"]),
+        .library(name: "BottariCloud", targets: ["BottariCloud"]),
     ],
     dependencies: [
         .package(url: "https://github.com/orlandos-nl/Citadel.git", from: "0.12.1"),
@@ -45,6 +46,8 @@ let package = Package(
         .target(name: "BottariTransfer", dependencies: ["BottariCore"]),
         .target(name: "BottariEditor", dependencies: [.product(name: "Highlightr", package: "Highlightr")]),
         .target(name: "BottariPlayer", dependencies: ["BottariCore", .product(name: "MPVKit", package: "MPVKit")]),
+        .target(name: "BottariCloud", dependencies: ["BottariCore", .product(name: "Crypto", package: "swift-crypto")]),
+        .testTarget(name: "BottariCloudTests", dependencies: ["BottariCore", "BottariCloud"]),
         .target(name: "BottariRemote", dependencies: [
             .product(name: "SwiftTerm", package: "SwiftTerm"),
             .product(name: "RoyalVNCKit", package: "royalvnc"),
