@@ -61,3 +61,6 @@ public enum ThreeWaySync {
         return Result(merged: merged, conflicts: conflicts, remote: newRemote, base: newBase)
     }
 }
+
+extension ThreeWaySync.Conflict: Sendable where Item: Sendable {}
+extension ThreeWaySync.Result: Sendable where Item: Sendable {}

@@ -11,6 +11,7 @@ struct PaneView: View {
     @Bindable var model: PaneModel
 
     @FocusState private var listFocused: Bool
+    @AppStorage("panes.showsCloudBadges") private var showsCloudBadges = true
     @State private var siteManager: SiteManagerRequest?
     @State private var isDropTarget = false
 
@@ -26,6 +27,7 @@ struct PaneView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .background(ThemeStore.shared.panel2 ?? .clear)
             if let message = model.errorMessage {
                 ErrorBanner(message: message, dismiss: model.dismissError)
             }
@@ -33,18 +35,19 @@ struct PaneView: View {
             fileTable
             Divider()
             footer
+                .background(ThemeStore.shared.panel2 ?? .clear)
         }
         .overlay(alignment: .top) {
             // A PROD pane keeps its warning band even when it is not the active one.
             Rectangle()
-                .fill(isProd ? SavedSite.Tag.prod.color : isActive ? Color.accentColor : .clear)
+                .fill(isProd ? SavedSite.Tag.prod.color : isActive ? Color.themeAccent : .clear)
                 .frame(height: isProd ? 3 : 2)
         }
         .overlay {
             if isDropTarget {
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(Color.accentColor, lineWidth: 2)
-                    .background(Color.accentColor.opacity(0.06))
+                    .strokeBorder(Color.themeAccent, lineWidth: 2)
+                    .background(Color.themeAccent.opacity(0.06))
                     .allowsHitTesting(false)
             }
         }
@@ -55,6 +58,11 @@ struct PaneView: View {
         }
         .onChange(of: listFocused) { _, focused in
             if focused { workspace.activeSide = side }
+        }
+        .onChange(of: workspace.focusRequest) {
+            guard workspace.focusRequest == side else { return }
+            listFocused = true
+            workspace.focusRequest = nil
         }
         .focusedValue(\.paneFocus, PaneFocus(workspace: workspace, side: side))
         .onReceive(NotificationCenter.default.publisher(for: .transfersChanged)) { _ in
@@ -190,13 +198,14 @@ struct PaneView: View {
                         Text(item.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        if let cloud = item.cloud, cloud != .downloaded {
+                        if showsCloudBadges, let cloud = item.cloud, cloud != .downloaded {
                             Image(systemName: cloud == .downloading ? "icloud.and.arrow.down" : "icloud")
                                 .foregroundStyle(.secondary)
                                 .help(cloud == .downloading ? "받는 중" : "iCloud에만 있어요 · 열면 받아요")
                         }
                     }
                 }
+                .padding(.vertical, ThemeStore.shared.rowPadding)
             }
             TableColumn("크기") { item in
                 Text(item.formattedSize)
@@ -213,7 +222,7 @@ struct PaneView: View {
             .width(min: 110, ideal: 140, max: 200)
             TableColumn("권한") { item in
                 Text(item.permissionString ?? "—")
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.themeMono(.caption))
                     .foregroundStyle(.secondary)
             }
             .width(min: 80, ideal: 90, max: 110)
@@ -230,23 +239,33 @@ struct PaneView: View {
             workspace.open(item, in: side)
         }
         .focused($listFocused)
-        // While a name is being edited, keys belong to the text field.
-        .onKeyPress(.delete) {
+        // Keys the keymap gives the list (plain ones like Space, ↵ and ⇥; the rest
+        // are menu shortcuts). While a name is being edited, keys belong to the text field.
+        .onKeyPress(phases: .down) { press in
             guard model.renaming == nil else { return .ignored }
-            Task { await model.goBack() }
-            return .handled
-        }
-        .onKeyPress(.space) {
-            guard model.renaming == nil else { return .ignored }
-            model.toggleQuickLook()
-            return .handled
+            let combo = KeyCombo(press)
+            if let action = Keymap.shared.listAction(for: combo) {
+                workspace.perform(action, in: side)
+                return .handled
+            }
+            switch combo {
+            case KeyCombo("delete"):
+                Task { await model.goBack() }
+                return .handled
+            case KeyCombo("return"):
+                // Commander layouts rename with F2; Return opens instead.
+                guard model.selectedItems.count == 1, let item = model.selectedItems.first else { return .ignored }
+                workspace.open(item, in: side)
+                return .handled
+            default:
+                return .ignored
+            }
         }
         .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
-        .onKeyPress(.return) {
-            guard model.renaming == nil, model.selection.count == 1 else { return .ignored }
-            workspace.beginRenaming(in: side)
-            return .handled
-        }
+        // A theme's own panel colour shows through, without the system's stripes.
+        .scrollContentBackground(ThemeStore.shared.panel == nil ? .automatic : .hidden)
+        .alternatingRowBackgrounds(ThemeStore.shared.panel == nil ? .enabled : .disabled)
+        .background(ThemeStore.shared.panel ?? .clear)
         .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
             workspace.drop(providers, onto: side)
         }
@@ -365,7 +384,7 @@ struct PaneView: View {
             Text(model.downloadStatus ?? summary)
             Spacer()
             Text(model.remoteAddress.map { "\($0):\(model.path.string)" } ?? model.path.string)
-                .font(.system(.caption, design: .monospaced))
+                .font(.themeMono(.caption))
                 .lineLimit(1)
                 .truncationMode(.head)
         }
@@ -403,7 +422,7 @@ private struct PathBar: View {
                         .foregroundStyle(crumb == path ? .primary : .secondary)
                 }
             }
-            .font(.system(.callout, design: .monospaced))
+            .font(.themeMono(.callout))
         }
         .defaultScrollAnchor(.trailing)
     }
@@ -463,7 +482,7 @@ private struct RenameField: View {
             .textFieldStyle(.plain)
             .padding(.horizontal, 2)
             .background(Color(nsColor: .textBackgroundColor))
-            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color.accentColor))
+            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color.themeAccent))
             .focused($focused)
             .onAppear {
                 focused = true

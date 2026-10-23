@@ -40,6 +40,8 @@ final class Workspace {
     var refusal: String?
     var showsTransfers = false
     var showsPalette = false
+    /// The pane that should take keyboard focus next, e.g. after ⇥.
+    var focusRequest: PaneSide?
     /// Opens viewer windows; the main window sets it, since only views can open windows.
     @ObservationIgnored var viewerOpener: ViewerOpener?
 
@@ -226,6 +228,37 @@ final class Workspace {
         guard let opener = viewerOpener else { return }
         let context = ViewerContext(provider: pane.provider, site: pane.site, item: item, siblings: pane.visibleItems)
         opener.open(windowID, Viewers.register(context))
+    }
+
+    // MARK: - Shortcuts
+
+    /// What a key from the keymap does to the pane on `side`.
+    func perform(_ action: PaneAction, in side: PaneSide) {
+        let pane = pane(side)
+        let selected = pane.selectedItems
+        switch action {
+        case .copyToOther:
+            if !selected.isEmpty { send(selected, from: side, kind: .copy) }
+        case .moveToOther:
+            if !selected.isEmpty { send(selected, from: side, kind: .move) }
+        case .newFolder:
+            makeFolder(in: side)
+        case .rename:
+            if selected.count == 1 { beginRenaming(in: side) }
+        case .delete:
+            delete(selected, in: side)
+        case .preview:
+            pane.toggleQuickLook()
+        case .edit:
+            if selected.count == 1, let item = selected.first, !item.isDirectory { openInEditor(item, in: side) }
+        case .bundle:
+            if !selected.isEmpty { addToBundle(from: side) }
+        case .switchPane:
+            activeSide = side.other
+            focusRequest = side.other
+        case .palette:
+            showsPalette = true
+        }
     }
 
     // MARK: - File operations

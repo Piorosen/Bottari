@@ -214,7 +214,7 @@ private struct GalleryView: View {
                 TagChip(tag: tag)
             }
             Text(model.current?.path.parent?.string ?? "")
-                .font(.callout.monospaced())
+                .font(.themeMono(.callout))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.head)
@@ -324,7 +324,7 @@ private struct GalleryView: View {
                             .clipShape(.rect(cornerRadius: 4))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 4)
-                                    .strokeBorder(index == model.index ? Color.accentColor : .clear, lineWidth: 2)
+                                    .strokeBorder(index == model.index ? Color.themeAccent : .clear, lineWidth: 2)
                             }
                         }
                         .buttonStyle(.plain)

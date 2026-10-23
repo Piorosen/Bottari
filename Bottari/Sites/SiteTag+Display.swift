@@ -12,8 +12,13 @@ extension SavedSite.Tag {
         }
     }
 
-    /// The design's tag colours, lighter in dark mode so they stay readable.
+    /// The theme's colour for the tag, or the design's own, lighter in dark
+    /// mode so they stay readable.
     var color: Color {
+        ThemeStore.shared.tagColor(self) ?? defaultColor
+    }
+
+    var defaultColor: Color {
         switch self {
         case .prod: Color(light: 0xB93A0B, dark: 0xF2874E)
         case .staging: Color(light: 0x8A6100, dark: 0xE0B44C)

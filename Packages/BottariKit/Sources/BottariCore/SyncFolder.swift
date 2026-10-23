@@ -168,6 +168,8 @@ public struct SyncFolder: Sendable {
     }
 }
 
+extension SyncFolder.Outcome: Sendable where Item: Sendable {}
+
 /// A lone value, as the one item of a list.
 private struct Single<Value: Codable & Equatable>: Codable, Identifiable, Equatable {
     var id: Int { 0 }

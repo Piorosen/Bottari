@@ -292,7 +292,7 @@ private struct PlayerView: View {
                     } label: {
                         HStack {
                             Image(systemName: index == model.index ? "play.fill" : "film")
-                                .foregroundStyle(index == model.index ? Color.accentColor : .secondary)
+                                .foregroundStyle(index == model.index ? Color.themeAccent : .secondary)
                             Text(item.name)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -312,7 +312,7 @@ private struct PlayerView: View {
                 ForEach(model.reads) { read in
                     HStack {
                         Text("Range: bytes=\(read.offset)-")
-                            .font(.caption.monospaced())
+                            .font(.themeMono(.caption))
                         Spacer()
                         Text(read.at.formatted(date: .omitted, time: .standard))
                             .font(.caption)

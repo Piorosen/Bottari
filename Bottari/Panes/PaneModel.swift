@@ -16,7 +16,7 @@ final class PaneModel {
     /// The saved site being connected to from the pane's menu.
     private(set) var connectingSite: SavedSite?
     var selection: Set<FileItem.ID> = []
-    var showsHiddenFiles = false
+    var showsHiddenFiles = ThemeStore.shared.current.list.showHidden
     /// The row whose name is being edited in place.
     var renaming: FileItem.ID?
     /// What Quick Look shows (Space), and the files it can step through.

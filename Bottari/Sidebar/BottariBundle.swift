@@ -21,8 +21,8 @@ final class BottariBundle {
     }
 
     /// A saved bundle: where each item lives, to gather again later.
-    struct Preset: Codable, Identifiable, Hashable {
-        struct Place: Codable, Hashable {
+    nonisolated struct Preset: Codable, Identifiable, Hashable, Sendable {
+        nonisolated struct Place: Codable, Hashable, Sendable {
             /// Nil for the Mac.
             var siteID: SavedSite.ID?
             var path: RemotePath
@@ -135,9 +135,16 @@ final class BottariBundle {
         return missing
     }
 
+    /// The presets as another Mac left them.
+    func replacePresets(with presets: [Preset]) {
+        self.presets = presets
+        save()
+    }
+
     private func save() {
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? JSONEncoder().encode(presets).write(to: file, options: .atomic)
+        settingsChanged()
     }
 }
 
@@ -146,7 +153,7 @@ final class BottariBundle {
 final class Favorites {
     static let shared = Favorites()
 
-    struct Favorite: Codable, Identifiable, Hashable {
+    nonisolated struct Favorite: Codable, Identifiable, Hashable, Sendable {
         var id = UUID()
         var name: String
         var siteID: SavedSite.ID?
@@ -173,7 +180,14 @@ final class Favorites {
         save()
     }
 
+    /// The favorites as another Mac left them.
+    func replaceAll(with items: [Favorite]) {
+        self.items = items
+        save()
+    }
+
     private func save() {
         UserDefaults.standard.set(try? JSONEncoder().encode(items), forKey: key)
+        settingsChanged()
     }
 }

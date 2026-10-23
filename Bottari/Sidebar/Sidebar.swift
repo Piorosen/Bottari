@@ -8,6 +8,7 @@ struct Sidebar: View {
     @State private var isDropTarget = false
     @State private var presetName = ""
     @State private var namingPreset = false
+    @AppStorage("sidebar.showsICloudDrive") private var showsICloudDrive = true
 
     private var bundle: BottariBundle { .shared }
     private var sites: [SavedSite] { AppServices.sites.sites }
@@ -32,7 +33,7 @@ struct Sidebar: View {
                 } label: {
                     Label("응용 프로그램", systemImage: "square.grid.2x2")
                 }
-                if let iCloud = LocalFileProvider.iCloudDrive {
+                if showsICloudDrive, let iCloud = LocalFileProvider.iCloudDrive {
                     Button {
                         workspace.openOnMac(iCloud)
                     } label: {
@@ -55,6 +56,8 @@ struct Sidebar: View {
             bundleSection
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(ThemeStore.shared.background == nil ? .automatic : .hidden)
+        .background(ThemeStore.shared.background ?? .clear)
         .buttonStyle(.plain)
         .alert("보따리 프리셋 이름", isPresented: $namingPreset) {
             TextField("예: 배포 보따리", text: $presetName)
@@ -155,7 +158,7 @@ struct Sidebar: View {
         } header: {
             Label("보따리\(bundle.entries.isEmpty ? "" : " · \(bundle.entries.count)개")", systemImage: "shippingbox")
         }
-        .listRowBackground(isDropTarget ? Color.accentColor.opacity(0.12) : nil)
+        .listRowBackground(isDropTarget ? Color.themeAccent.opacity(0.12) : nil)
         .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
             workspace.dropIntoBundle(providers)
         }

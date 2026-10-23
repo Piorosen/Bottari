@@ -191,7 +191,7 @@ private struct TerminalScreen: View {
                     .foregroundStyle(.secondary)
             }
             Text(model.folder.string)
-                .font(.callout.monospaced())
+                .font(.themeMono(.callout))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.head)
@@ -264,7 +264,7 @@ private struct TerminalScreen: View {
                         model.run(snippet)
                     } label: {
                         Text(snippet)
-                            .font(.callout.monospaced())
+                            .font(.themeMono(.callout))
                             .lineLimit(1)
                     }
                     .buttonStyle(.plain)
@@ -279,7 +279,7 @@ private struct TerminalScreen: View {
             .listStyle(.sidebar)
             HStack {
                 TextField("새 명령", text: $newSnippet)
-                    .font(.callout.monospaced())
+                    .font(.themeMono(.callout))
                     .onSubmit(addSnippet)
                 Button(action: addSnippet) { Image(systemName: "plus") }
                     .disabled(newSnippet.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -306,7 +306,7 @@ private struct SwiftTermView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> TerminalView {
-        let view = TerminalView(frame: .zero, font: .monospacedSystemFont(ofSize: 13, weight: .regular))
+        let view = TerminalView(frame: .zero, font: ThemeStore.shared.monoNSFont(size: 13))
         view.terminalDelegate = context.coordinator
         view.optionAsMetaKey = true
         model.view = view

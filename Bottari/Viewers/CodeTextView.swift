@@ -19,7 +19,7 @@ struct CodeTextView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let dark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let storage = SyntaxHighlighting.makeStorage(language: language, dark: dark)
+        let storage = SyntaxHighlighting.makeStorage(language: language, dark: dark, font: ThemeStore.shared.monoNSFont(size: 13))
         let layoutManager = NSLayoutManager()
         storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
@@ -43,7 +43,7 @@ struct CodeTextView: NSViewRepresentable {
         textView.isContinuousSpellCheckingEnabled = false
         textView.smartInsertDeleteEnabled = false
         textView.textContainerInset = NSSize(width: 6, height: 8)
-        textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.font = ThemeStore.shared.monoNSFont(size: 13)
         textView.drawsBackground = true
         textView.backgroundColor = .textBackgroundColor
         textView.delegate = context.coordinator
@@ -120,7 +120,7 @@ private final class ThemedTextView: NSTextView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         guard let storage = textStorage else { return }
-        SyntaxHighlighting.apply(dark: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua, to: storage)
+        SyntaxHighlighting.apply(dark: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua, font: ThemeStore.shared.monoNSFont(size: 13), to: storage)
     }
 }
 

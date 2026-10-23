@@ -36,6 +36,7 @@ struct CommandPalette: View {
     let workspace: Workspace
     let close: () -> Void
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @State private var query = ""
     @State private var selected = 0
     @FocusState private var focused: Bool
@@ -116,7 +117,7 @@ struct CommandPalette: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .foregroundStyle(isSelected ? .white : .primary)
-        .background(isSelected ? Color.accentColor : .clear, in: .rect(cornerRadius: 7))
+        .background(isSelected ? Color.themeAccent : .clear, in: .rect(cornerRadius: 7))
         .contentShape(.rect)
     }
 
@@ -138,6 +139,10 @@ struct CommandPalette: View {
             .sorted { $0.1 > $1.1 }
             .prefix(40)
             .map(\.0)
+    }
+
+    private func keys(_ action: PaneAction) -> String {
+        Keymap.shared.combo(for: action).description
     }
 
     private var commands: [PaletteCommand] {
@@ -179,16 +184,16 @@ struct CommandPalette: View {
         let selection = pane.selectedItems
         let other = workspace.pane(side.other).provider.displayName
         list += [
-            PaletteCommand(id: "new-folder", title: "새 폴더", subtitle: "⇧⌘N", symbol: "folder.badge.plus", keywords: "new folder mkdir") {
+            PaletteCommand(id: "new-folder", title: "새 폴더", subtitle: keys(.newFolder), symbol: "folder.badge.plus", keywords: "new folder mkdir") {
                 workspace.makeFolder(in: side)
             },
-            PaletteCommand(id: "copy-other", title: "선택 항목을 \(other)에 복사", subtitle: "\(selection.count)개 선택", symbol: "arrow.right.doc.on.clipboard", keywords: "copy 복사 전송") {
+            PaletteCommand(id: "copy-other", title: "선택 항목을 \(other)에 복사", subtitle: "\(selection.count)개 선택 · \(keys(.copyToOther))", symbol: "arrow.right.doc.on.clipboard", keywords: "copy 복사 전송") {
                 workspace.send(selection, from: side, kind: .copy)
             },
-            PaletteCommand(id: "move-other", title: "선택 항목을 \(other)(으)로 이동", subtitle: "\(selection.count)개 선택", symbol: "arrow.right", keywords: "move 이동 전송") {
+            PaletteCommand(id: "move-other", title: "선택 항목을 \(other)(으)로 이동", subtitle: "\(selection.count)개 선택 · \(keys(.moveToOther))", symbol: "arrow.right", keywords: "move 이동 전송") {
                 workspace.send(selection, from: side, kind: .move)
             },
-            PaletteCommand(id: "bundle", title: "선택 항목을 보따리에 담기", subtitle: "⌘B", symbol: "shippingbox", keywords: "bundle 보따리") {
+            PaletteCommand(id: "bundle", title: "선택 항목을 보따리에 담기", subtitle: keys(.bundle), symbol: "shippingbox", keywords: "bundle 보따리") {
                 workspace.addToBundle(from: side)
             },
             PaletteCommand(id: "bundle-send", title: "보따리를 지금 패인으로 보내기", subtitle: "\(BottariBundle.shared.entries.count)개", symbol: "shippingbox.and.arrow.backward", keywords: "bundle 보따리 send") {
@@ -207,7 +212,7 @@ struct CommandPalette: View {
                 openWindow(id: "tunnels")
             },
             PaletteCommand(id: "settings", title: "설정", subtitle: "⌘,", symbol: "gearshape", keywords: "settings preferences theme 테마 단축키 icloud") {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                openSettings()
             },
         ]
         if pane.provider is SFTPFileProvider {

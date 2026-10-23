@@ -9,12 +9,16 @@ struct FileCommands: Commands {
     @FocusedValue(\.paneFocus) private var focus
 
     var body: some Commands {
+        // Keys come from the keymap (Settings › 단축키); plain keys such as
+        // Space are left to the file list, so they still type in text fields.
         CommandGroup(after: .newItem) {
-            Button("새 폴더") {
-                if let focus { focus.workspace.makeFolder(in: focus.side) }
-            }
-            .keyboardShortcut("n", modifiers: [.command, .shift])
-            .disabled(focus == nil)
+            action(.newFolder, "새 폴더", needsSelection: false)
+            Divider()
+            action(.copyToOther, "반대편 패인에 복사")
+            action(.moveToOther, "반대편 패인으로 이동")
+            action(.rename, "이름 바꾸기")
+            action(.preview, "빠른 미리보기")
+            action(.edit, "편집기로 열기")
         }
         CommandGroup(replacing: .pasteboard) {
             Button("잘라내기") { sendToTextField(#selector(NSText.cut(_:))) }
@@ -52,22 +56,14 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("a")
             Divider()
-            Button("보따리에 담기") {
-                if let focus { focus.workspace.addToBundle(from: focus.side) }
-            }
-            .keyboardShortcut("b")
-            .disabled(focus?.pane.selection.isEmpty ?? true)
+            action(.bundle, "보따리에 담기")
             Button("경로 복사") {
                 if let focus { focus.workspace.copyPaths(from: focus.side) }
             }
             .keyboardShortcut("c", modifiers: [.command, .option])
             .disabled(focus?.pane.selection.isEmpty ?? true)
             // Disabled outside panes, so text fields keep ⌘⌫ for themselves.
-            Button(focus?.pane.provider.capabilities.contains(.trash) == false ? "삭제…" : "휴지통으로 이동") {
-                if let focus { focus.workspace.delete(focus.pane.selectedItems, in: focus.side) }
-            }
-            .keyboardShortcut(.delete, modifiers: .command)
-            .disabled(focus?.pane.selection.isEmpty ?? true)
+            action(.delete, focus?.pane.provider.capabilities.contains(.trash) == false ? "삭제…" : "휴지통으로 이동")
         }
         CommandMenu("이동") {
             // Disabled outside panes, so text fields keep ⌘↑ and ⌘↓ for themselves.
@@ -96,6 +92,15 @@ struct FileCommands: Commands {
             }
             .disabled(focus == nil)
         }
+    }
+
+    /// A menu item for a keymap action on the focused pane.
+    private func action(_ action: PaneAction, _ title: String, needsSelection: Bool = true) -> some View {
+        Button(title) {
+            if let focus { focus.workspace.perform(action, in: focus.side) }
+        }
+        .keyboardShortcut(Keymap.shared.shortcut(for: action))
+        .disabled(focus == nil || (needsSelection && focus?.pane.selection.isEmpty != false))
     }
 
     private func run(_ action: @escaping (PaneModel) async -> Void) {

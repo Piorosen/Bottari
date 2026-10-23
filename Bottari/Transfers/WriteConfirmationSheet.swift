@@ -62,7 +62,7 @@ struct WriteConfirmationSheet: View {
                     }
                     Spacer()
                     Text(targetPath)
-                        .font(.callout.monospaced())
+                        .font(.themeMono(.callout))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.head)

@@ -79,6 +79,15 @@ final class SiteLibrary {
         persist()
     }
 
+    /// The list as another Mac left it. Secrets stay in this Mac's Keychain.
+    func replaceAll(with sites: [SavedSite]) {
+        guard sites != self.sites else { return }
+        self.sites = sites
+        recentlyImported = []
+        persist()
+        reloadSSHConfig()
+    }
+
     func remove(_ id: SavedSite.ID) {
         guard let site = site(id) else { return }
         sites.removeAll { $0.id == id }
@@ -208,6 +217,7 @@ final class SiteLibrary {
         do {
             try store.save(sites)
             storageError = nil
+            settingsChanged()
         } catch {
             storageError = "연결 목록을 저장하지 못했어요: \(error.localizedDescription)"
         }

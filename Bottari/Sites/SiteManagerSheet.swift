@@ -170,7 +170,7 @@ struct SiteManagerSheet: View {
             Label("~/.ssh/config 에서 새 호스트 \(library.importableHosts.count)개", systemImage: "square.and.arrow.down")
                 .font(.callout.weight(.semibold))
             Text(library.importableHosts.map(\.alias).joined(separator: " · "))
-                .font(.caption.monospaced())
+                .font(.themeMono(.caption))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             Text("ProxyJump, IdentityFile 설정도 그대로 가져와요.")
@@ -185,7 +185,7 @@ struct SiteManagerSheet: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.08), in: .rect(cornerRadius: 8))
+        .background(Color.themeAccent.opacity(0.08), in: .rect(cornerRadius: 8))
     }
 
     // MARK: - Settings
@@ -379,11 +379,11 @@ private struct SiteRow: View {
                         Text("가져옴")
                             .font(.caption2)
                             .padding(.horizontal, 4)
-                            .background(Color.accentColor.opacity(0.15), in: .rect(cornerRadius: 3))
+                            .background(Color.themeAccent.opacity(0.15), in: .rect(cornerRadius: 3))
                     }
                 }
                 Text(site.summary)
-                    .font(.caption.monospaced())
+                    .font(.themeMono(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -820,10 +820,10 @@ private struct TagPicker: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(selected ? Color.accentColor.opacity(0.14) : .clear, in: .rect(cornerRadius: 6))
+            .background(selected ? Color.themeAccent.opacity(0.14) : .clear, in: .rect(cornerRadius: 6))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.35), lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? Color.themeAccent : Color.secondary.opacity(0.35), lineWidth: selected ? 1.5 : 1)
             }
             .contentShape(.rect)
         }

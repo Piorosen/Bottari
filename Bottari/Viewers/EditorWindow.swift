@@ -83,7 +83,7 @@ private struct EditorView: View {
                 TagChip(tag: tag)
             }
             Text(model.item.path.string)
-                .font(.callout.monospaced())
+                .font(.themeMono(.callout))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.head)
@@ -125,7 +125,7 @@ private struct EditorView: View {
             Text("저장한 뒤 서버에서 실행")
                 .font(.headline)
             TextField("예: nginx -t", text: $model.postSaveCommand)
-                .font(.body.monospaced())
+                .font(.themeMono(.body))
                 .frame(width: 320)
             Text("명령이 실패하면 방금 올린 파일을 이전 버전으로 되돌려요. 이 파일에만 적용돼요.")
                 .font(.caption)
@@ -246,7 +246,7 @@ private struct DiffSheet: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(LineDiff.lines(from: theirs, to: mine).enumerated()), id: \.offset) { _, line in
                         Text((line.kind == .added ? "+ " : line.kind == .removed ? "- " : "  ") + line.text)
-                            .font(.body.monospaced())
+                            .font(.themeMono(.body))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
                             .background(line.kind == .added ? Color.green.opacity(0.12) : line.kind == .removed ? Color.red.opacity(0.12) : .clear)

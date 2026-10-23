@@ -36,18 +36,18 @@ public enum SyntaxHighlighting {
 
     /// Text storage for an NSTextView that highlights `language` in a theme
     /// matching light or dark mode. Without a language it stays plain.
-    public static func makeStorage(language: String?, dark: Bool, fontSize: CGFloat = 13) -> NSTextStorage {
+    public static func makeStorage(language: String?, dark: Bool, font: NSFont = .monospacedSystemFont(ofSize: 13, weight: .regular)) -> NSTextStorage {
         let storage = CodeAttributedString()
         storage.language = language
-        apply(dark: dark, fontSize: fontSize, to: storage)
+        apply(dark: dark, font: font, to: storage)
         return storage
     }
 
-    /// Switches the theme, e.g. when the system appearance changes.
-    public static func apply(dark: Bool, fontSize: CGFloat = 13, to storage: NSTextStorage) {
+    /// Switches the theme, e.g. when the system appearance or the font changes.
+    public static func apply(dark: Bool, font: NSFont = .monospacedSystemFont(ofSize: 13, weight: .regular), to storage: NSTextStorage) {
         guard let storage = storage as? CodeAttributedString else { return }
         storage.highlightr.setTheme(to: dark ? "atom-one-dark" : "xcode")
-        storage.highlightr.theme.setCodeFont(.monospacedSystemFont(ofSize: fontSize, weight: .regular))
+        storage.highlightr.theme.setCodeFont(font)
         storage.highlightr.theme.themeBackgroundColor = .clear
         // Re-colour what is already there.
         let language = storage.language

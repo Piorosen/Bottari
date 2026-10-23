@@ -82,6 +82,8 @@ enum SnapshotRenderer {
         await checkScreen(into: directory)
         await renderTunnels(into: directory, library: library)
         await renderSidebar(into: directory, folder: folder)
+        await renderSettings(into: directory, folder: folder)
+        await checkSync(into: directory)
         try? FileManager.default.removeItem(at: folder)
         exit(0)
     }
@@ -315,6 +317,156 @@ enum SnapshotRenderer {
                          to: directory.appending(path: "palette-\(name).png"))
         }
         BottariBundle.shared.clear()
+    }
+
+    /// The settings tabs; a pane in a dark custom theme; Commander keys, and
+    /// whether the menus took them (settings-check.txt). Nothing is saved:
+    /// in snapshot mode the theme and keymap stay in memory.
+    private static func renderSettings(into directory: URL, folder: URL) async {
+        let themes = ThemeStore.shared, keymap = Keymap.shared
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(GeneralSettings(), size: CGSize(width: 620, height: 250), appearance: appearance,
+                         to: directory.appending(path: "settings-general-\(name).png"))
+            await render(AppearanceSettings(), size: CGSize(width: 880, height: 700), appearance: appearance,
+                         to: directory.appending(path: "settings-look-\(name).png"))
+        }
+
+        themes.choose(preset: Theme.presets[3].theme)
+        themes.current.colors.accent = "#0F7C78"
+        themes.current.density = .compact
+        themes.current.tags["PROD"] = "#B42318"
+        await render(AppearanceSettings(), size: CGSize(width: 880, height: 700), appearance: .darkAqua,
+                     to: directory.appending(path: "settings-look-night.png"))
+        let left = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path))
+        let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path))
+        await left.start()
+        await right.start()
+        left.selection = [RemotePath(folder.path).appending("nginx.conf")]
+        let workspace = Workspace(left: left, right: right)
+        await render(
+            HStack(spacing: 0) {
+                PaneView(workspace: workspace, side: .left)
+                Divider()
+                PaneView(workspace: workspace, side: .right)
+            }
+            .background(themes.background ?? .clear)
+            .themed(),
+            size: CGSize(width: 1100, height: 300), appearance: .darkAqua,
+            to: directory.appending(path: "pane-night.png")
+        )
+        themes.current = Theme.presets[0].theme
+
+        var report: [String] = []
+        func check(_ name: String, _ passed: Bool) { report.append((passed ? "PASS " : "FAIL ") + name) }
+        keymap.layout = .commander
+        keymap.set(KeyCombo("c", command: true), for: .bundle)
+        await render(KeySettings(), size: CGSize(width: 620, height: 620), appearance: .aqua,
+                     to: directory.appending(path: "settings-keys.png"))
+        check("custom key is flagged as taken", keymap.clash(for: .bundle) == "복사 (클립보드)")
+        check("F5 copies across, from the list or the menu", keymap.combo(for: .copyToOther).description == "F5" && keymap.shortcut(for: .copyToOther) != nil)
+        check("Tab stays with the file list", keymap.listAction(for: KeyCombo("tab")) == .switchPane && keymap.shortcut(for: .switchPane) == nil)
+        check("combos survive a round trip", KeyCombo(parsing: "⌃⌥⇧⌘F12") == KeyCombo("f12", control: true, option: true, shift: true, command: true))
+        try? await Task.sleep(for: .milliseconds(300))
+        let item = menuItem(titled: "반대편 패인에 복사")
+        check("menu shows F5 (\(item.map { "\($0.keyEquivalent.unicodeScalars.map { String($0.value, radix: 16) }) \($0.keyEquivalentModifierMask.rawValue)" } ?? "no item"))",
+              item?.keyEquivalent == "\u{F708}" && item?.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control]) == [])
+        keymap.layout = .finder
+        try? await Task.sleep(for: .milliseconds(300))
+        let finder = menuItem(titled: "반대편 패인에 복사")
+        check("menu goes back to ⇧⌘C", finder?.keyEquivalent.lowercased() == "c" && finder?.keyEquivalentModifierMask.contains([.command, .shift]) == true)
+        try? report.joined(separator: "\n").write(to: directory.appending(path: "settings-check.txt"), atomically: true, encoding: .utf8)
+    }
+
+    private static func menuItem(titled title: String, in menu: NSMenu? = NSApp.mainMenu) -> NSMenuItem? {
+        for item in menu?.items ?? [] {
+            if item.title == title { return item }
+            if let found = menuItem(titled: title, in: item.submenu) { return found }
+        }
+        return nil
+    }
+
+    /// Two Macs syncing through a temporary folder, with lists kept in memory:
+    /// never the real iCloud Drive or the user's own lists. Renders the sync
+    /// tab with a conflict and writes sync-check.txt.
+    private static func checkSync(into directory: URL) async {
+        let root = FileManager.default.temporaryDirectory.appending(path: "bottari-sync-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cloud = root.appending(path: "iCloud/Bottari")
+        let suite = "bottari-snapshot-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        final class Box<Value> {
+            var value: Value
+            init(_ value: Value) { self.value = value }
+        }
+        func source<Value>(_ box: Box<Value>) -> SettingsSync.Source<Value> {
+            .init(get: { box.value }, set: { box.value = $0 })
+        }
+        let devAPI = SavedSite(name: "dev-api", endpoint: SFTPEndpoint(host: "10.0.4.12", username: "deploy"), authentication: .agent(socket: nil), tag: .dev)
+        let prodWeb = SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "web.example.com", username: "deploy"), authentication: .agent(socket: nil), tag: .prod)
+        let sites = Box([devAPI, prodWeb]), favorites = Box([Favorites.Favorite]()), presets = Box([BottariBundle.Preset]())
+        let keys = Box(Keymap.Saved()), theme = Box(Theme.presets[1].theme), themes = Box([Theme]())
+        let sync = SettingsSync(
+            folder: { cloud },
+            baseFolder: root.appending(path: "this-mac"),
+            sources: .init(sites: source(sites), favorites: source(favorites), presets: source(presets), keymap: source(keys), theme: source(theme), themes: source(themes)),
+            device: .init(id: "this-mac", name: "MacBook Pro", model: "MacBookPro18,3", lastSync: .distantPast),
+            defaults: defaults
+        )
+        func settle() async {
+            try? await Task.sleep(for: .milliseconds(50))
+            while sync.isSyncing { try? await Task.sleep(for: .milliseconds(50)) }
+        }
+        var report: [String] = []
+        func check(_ name: String, _ passed: Bool) { report.append((passed ? "PASS " : "FAIL ") + name) }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        sync.setEnabled(true)
+        await settle()
+        check("first sync writes the lists", FileManager.default.fileExists(atPath: cloud.appending(path: "sites.json").path) && sync.errors.isEmpty)
+        let written = (try? String(contentsOf: cloud.appending(path: "sites.json"), encoding: .utf8)) ?? ""
+        check("no secrets in sites.json", !written.contains("password\"") && written.contains("10.0.4.12"))
+
+        // The Mac mini changes dev-api's port, adds a site and picks Commander keys.
+        var theirs = devAPI
+        theirs.endpoint.port = 2222
+        let staging = SavedSite(name: "staging-db", endpoint: SFTPEndpoint(host: "db.staging", username: "admin"), authentication: .password, tag: .staging)
+        try? encoder.encode([theirs, prodWeb, staging]).write(to: cloud.appending(path: "sites.json"))
+        try? encoder.encode(Keymap.Saved(layout: .commander)).write(to: cloud.appending(path: "keymap.json"))
+        let today = Calendar.current.date(bySettingHour: 13, minute: 52, second: 0, of: .now)!
+        try? encoder.encode(SettingsSync.Device(id: "mac-mini", name: "Mac mini", model: "Macmini9,1", lastSync: today))
+            .write(to: cloud.appending(path: "devices/mac-mini.json"))
+        // Meanwhile this Mac changes dev-api's user.
+        sites.value[0].endpoint.username = "ubuntu"
+        sync.syncNow()
+        await settle()
+        check("a site added there arrives", sites.value.map(\.name) == ["dev-api", "prod-web", "staging-db"])
+        check("keys changed there arrive", keys.value.layout == .commander)
+        check("dev-api is a conflict: \(sync.conflicts.first?.detail ?? "none")", sync.conflicts.count == 1 && sync.conflicts.first?.detail == "포트 · 이 Mac: 22 · Mac mini: 2222")
+        check("this Mac keeps its version meanwhile", sites.value[0].endpoint.username == "ubuntu")
+        check("devices list both Macs", sync.devices.map(\.name) == ["Mac mini", "MacBook Pro"])
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            await render(SyncSettings(sync: sync, height: 1700), size: CGSize(width: 640, height: 1700), appearance: appearance,
+                         to: directory.appending(path: "settings-sync-\(name).png"))
+        }
+
+        if let conflict = sync.conflicts.first {
+            sync.resolve(conflict, .keepBoth)
+            await settle()
+        }
+        let cloudSites = (try? JSONDecoder().decode([SavedSite].self, from: Data(contentsOf: cloud.appending(path: "sites.json")))) ?? []
+        check("keeping both: this Mac's stays, theirs comes as a copy", sites.value.map(\.name) == ["dev-api", "prod-web", "staging-db", "dev-api (Mac mini)"]
+              && sites.value[0].endpoint.username == "ubuntu" && sites.value[3].endpoint.port == 2222)
+        check("and the shared file gets both", cloudSites.map(\.name) == sites.value.map(\.name) && cloudSites[0].endpoint.username == "ubuntu")
+        check("no conflict left: \(sync.resolution ?? "")", sync.conflicts.isEmpty)
+
+        try? FileManager.default.removeItem(at: cloud.appending(path: "sites.json"))
+        sync.syncNow()
+        await settle()
+        check("a deleted file is written again", sites.value.count == 4 && FileManager.default.fileExists(atPath: cloud.appending(path: "sites.json").path))
+        try? report.joined(separator: "\n").write(to: directory.appending(path: "sync-check.txt"), atomically: true, encoding: .utf8)
     }
 
     /// A short H.264 movie, so the player has something to open.

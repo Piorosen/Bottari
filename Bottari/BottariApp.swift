@@ -10,6 +10,7 @@ struct BottariApp: App {
             // Rendering snapshots lists no real folders at all.
             if !AppDelegate.isRenderingSnapshots {
                 MainWindow()
+                    .themed()
             }
         }
         .defaultSize(width: 1280, height: 800)
@@ -20,6 +21,7 @@ struct BottariApp: App {
         WindowGroup("이미지", id: "gallery", for: UUID.self) { $id in
             if let id {
                 GalleryWindow(contextID: id)
+                    .themed()
             }
         }
         .defaultSize(width: 1100, height: 760)
@@ -27,12 +29,14 @@ struct BottariApp: App {
         WindowGroup("영상", id: "player", for: UUID.self) { $id in
             if let id {
                 PlayerWindow(contextID: id)
+                    .themed()
             }
         }
         .defaultSize(width: 1100, height: 700)
 
         Window("터널", id: "tunnels") {
             TunnelWindow()
+                .themed()
         }
         .defaultSize(width: 1000, height: 720)
 
@@ -48,6 +52,7 @@ struct BottariApp: App {
         WindowGroup("터미널", id: "terminal", for: UUID.self) { $id in
             if let id {
                 TerminalWindow(contextID: id)
+                    .themed()
             }
         }
         .defaultSize(width: 1000, height: 640)
@@ -55,6 +60,7 @@ struct BottariApp: App {
         WindowGroup("원격 화면", id: "screen", for: UUID.self) { $id in
             if let id {
                 ScreenWindow(contextID: id)
+                    .themed()
             }
         }
         .defaultSize(width: 1280, height: 820)
@@ -62,9 +68,14 @@ struct BottariApp: App {
         WindowGroup("편집기", id: "editor", for: UUID.self) { $id in
             if let id {
                 EditorWindow(contextID: id)
+                    .themed()
             }
         }
         .defaultSize(width: 960, height: 720)
+
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -81,7 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         if let directory = SnapshotRenderer.outputDirectory {
             Task { await SnapshotRenderer.run(into: directory) }
+            return
         }
         #endif
+        ThemeStore.shared.applyAppearance()
+        SettingsSync.shared.start()
     }
 }

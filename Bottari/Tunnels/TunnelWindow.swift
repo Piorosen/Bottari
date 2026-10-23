@@ -167,7 +167,7 @@ private struct TunnelDetail: View {
 
             Section {
                 TextEditor(text: $profile.routes)
-                    .font(.body.monospaced())
+                    .font(.themeMono(.body))
                     .frame(minHeight: 90)
                 if !profile.invalidRoutes.isEmpty {
                     Label("“\(profile.invalidRoutes.joined(separator: "”, “"))” 은 대역 · IP · 호스트 · *.도메인 형식이 아니에요", systemImage: "exclamationmark.triangle.fill")
@@ -189,7 +189,7 @@ private struct TunnelDetail: View {
                         LabeledContent("PAC 주소") {
                             HStack {
                                 Text(profile.pacURL)
-                                    .font(.callout.monospaced())
+                                    .font(.themeMono(.callout))
                                     .textSelection(.enabled)
                                 Button {
                                     NSPasteboard.general.clearContents()
@@ -216,7 +216,7 @@ private struct TunnelDetail: View {
                     if let site = profile.siteID.flatMap(AppServices.sites.site) {
                         LabeledContent("실행할 명령") {
                             Text(TunnelStore.sshuttleCommand(profile, site: site))
-                                .font(.caption.monospaced())
+                                .font(.themeMono(.caption))
                                 .textSelection(.enabled)
                         }
                     }
@@ -244,10 +244,10 @@ private struct TunnelDetail: View {
                     ForEach(store.connections[profile.id] ?? []) { connection in
                         HStack {
                             Text(connection.kind)
-                                .font(.caption.monospaced())
+                                .font(.themeMono(.caption))
                                 .foregroundStyle(.secondary)
                             Text(verbatim: "\(connection.host):\(connection.port)")
-                                .font(.callout.monospaced())
+                                .font(.themeMono(.callout))
                             Spacer()
                             Text(connection.opened.formatted(date: .omitted, time: .standard))
                                 .font(.caption)
@@ -264,7 +264,7 @@ private struct TunnelDetail: View {
                 ForEach((store.logs[profile.id] ?? []).prefix(30)) { line in
                     HStack(alignment: .top) {
                         Text(line.at.formatted(date: .omitted, time: .standard))
-                            .font(.caption.monospaced())
+                            .font(.themeMono(.caption))
                             .foregroundStyle(.secondary)
                         Text(line.text)
                             .font(.caption)
@@ -308,10 +308,10 @@ private struct TunnelDetail: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-            .background(selected ? Color.accentColor.opacity(0.12) : .clear, in: .rect(cornerRadius: 8))
+            .background(selected ? Color.themeAccent.opacity(0.12) : .clear, in: .rect(cornerRadius: 8))
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: selected ? 1.5 : 1)
+                    .strokeBorder(selected ? Color.themeAccent : Color.secondary.opacity(0.3), lineWidth: selected ? 1.5 : 1)
             }
             .contentShape(.rect)
         }
@@ -352,7 +352,7 @@ private struct TunnelDetail: View {
                 Text(line.0)
                     .font(.caption.weight(.semibold))
                 Text(line.1)
-                    .font(.caption.monospaced())
+                    .font(.themeMono(.caption))
                     .textSelection(.enabled)
             }
         }
