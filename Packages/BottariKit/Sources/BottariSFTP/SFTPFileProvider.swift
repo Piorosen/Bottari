@@ -12,6 +12,12 @@ public struct SFTPFileProvider: FileProvider {
 
     /// Bytes asked for per read request. Servers may answer with less.
     static let chunkSize: UInt32 = 128 * 1024
+    /// Requests kept in flight at once. Waiting for each answer before sending
+    /// the next would make every chunk cost a full round trip to the server.
+    static let readsInFlight = 8
+    static let writesInFlight = 32
+    /// Bytes per write request; bigger SSH packets trip swift-nio-ssh (apple/swift-nio-ssh#99).
+    static let writeSliceSize = 32_000
 
     public var capabilities: ProviderCapabilities { [.rangeRead] }
 
@@ -79,16 +85,11 @@ public struct SFTPFileProvider: FileProvider {
                 do {
                     let file = try await sftp.openFile(filePath: path.string, flags: .read)
                     do {
-                        var offset = range?.lowerBound ?? 0
-                        let end = range?.upperBound ?? .max
-                        while offset < end {
-                            try Task.checkCancellation()
-                            let length = UInt32(min(Int64(Self.chunkSize), end - offset))
-                            let buffer = try await file.read(from: UInt64(offset), length: length)
-                            guard buffer.readableBytes > 0 else { break }
-                            continuation.yield(Data(buffer.readableBytesView))
-                            offset += Int64(buffer.readableBytes)
-                        }
+                        try await Self.read(
+                            UncheckedSendable(file),
+                            from: range?.lowerBound ?? 0,
+                            to: range?.upperBound ?? .max
+                        ) { continuation.yield($0) }
                         try? await file.close()
                     } catch {
                         try? await file.close()
@@ -111,11 +112,7 @@ public struct SFTPFileProvider: FileProvider {
         do {
             let file = try await sftp.openFile(filePath: temp.string, flags: [.write, .create, .truncate])
             do {
-                var offset: UInt64 = 0
-                for try await chunk in data {
-                    try await file.write(ByteBuffer(bytes: chunk), at: offset)
-                    offset += UInt64(chunk.count)
-                }
+                try await Self.write(UncheckedSendable(file), from: data)
                 try await file.close()
             } catch {
                 try? await file.close()
@@ -163,6 +160,82 @@ public struct SFTPFileProvider: FileProvider {
             } catch {
                 throw Self.translate(error, path)
             }
+        }
+    }
+
+    // MARK: - Pipelining
+
+    /// Reads `start..<end` with several requests in flight, handing data on in order.
+    /// `SFTPFile` is not `Sendable`, but its reads only send requests through the
+    /// thread-safe client.
+    static func read(
+        _ file: UncheckedSendable<SFTPFile>,
+        from start: Int64,
+        to end: Int64,
+        yield: (Data) -> Void
+    ) async throws {
+        try await withThrowingTaskGroup(of: (Int64, ByteBuffer).self) { group in
+            var nextRequest = start
+            var nextYield = start
+            var arrived: [Int64: ByteBuffer] = [:]
+            func request() {
+                guard nextRequest < end else { return }
+                let offset = nextRequest
+                let length = UInt32(min(Int64(chunkSize), end - offset))
+                nextRequest += Int64(length)
+                group.addTask { (offset, try await file.value.read(from: UInt64(offset), length: length)) }
+            }
+            for _ in 0..<readsInFlight {
+                request()
+            }
+            while nextYield < end, let (offset, buffer) = try await group.next() {
+                arrived[offset] = buffer
+                while let buffer = arrived.removeValue(forKey: nextYield) {
+                    try Task.checkCancellation()
+                    guard buffer.readableBytes > 0 else {
+                        group.cancelAll()
+                        return
+                    }
+                    yield(Data(buffer.readableBytesView))
+                    let chunkEnd = nextYield + min(Int64(chunkSize), end - nextYield)
+                    var filled = nextYield + Int64(buffer.readableBytes)
+                    // Servers may answer with less than asked, e.g. at the end of the
+                    // file. Fill the rest of this chunk before moving on.
+                    while filled < chunkEnd {
+                        let more = try await file.value.read(from: UInt64(filled), length: UInt32(chunkEnd - filled))
+                        guard more.readableBytes > 0 else {
+                            group.cancelAll()
+                            return
+                        }
+                        yield(Data(more.readableBytesView))
+                        filled += Int64(more.readableBytes)
+                    }
+                    nextYield = chunkEnd
+                    request()
+                }
+            }
+        }
+    }
+
+    /// Writes the stream from offset 0 with several requests in flight.
+    static func write(_ file: UncheckedSendable<SFTPFile>, from data: AsyncThrowingStream<Data, any Error>) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            var offset: UInt64 = 0
+            var inFlight = 0
+            for try await chunk in data {
+                var rest = ByteBuffer(bytes: chunk)
+                while rest.readableBytes > 0, let slice = rest.readSlice(length: min(writeSliceSize, rest.readableBytes)) {
+                    if inFlight == writesInFlight {
+                        try await group.next()
+                        inFlight -= 1
+                    }
+                    let at = offset
+                    group.addTask { try await file.value.write(slice, at: at) }
+                    inFlight += 1
+                    offset += UInt64(slice.readableBytes)
+                }
+            }
+            try await group.waitForAll()
         }
     }
 

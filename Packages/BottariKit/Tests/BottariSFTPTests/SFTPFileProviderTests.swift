@@ -174,6 +174,28 @@ import Testing
         }
     }
 
+    @Test func pipelinedTransfersKeepEveryByteInOrder() async throws {
+        try await withConnection { server, provider in
+            // Several read and write windows' worth, not a multiple of any chunk size.
+            let payload = Data((0..<(5 * 1024 * 1024 + 12_345)).map { UInt8(truncatingIfNeeded: ($0 &* 31) ^ ($0 >> 9)) })
+            let upload = AsyncThrowingStream<Data, any Error> { continuation in
+                var offset = 0
+                while offset < payload.count {
+                    let length = min(70_001, payload.count - offset)
+                    continuation.yield(payload.subdata(in: offset..<offset + length))
+                    offset += length
+                }
+                continuation.finish()
+            }
+
+            try await provider.write("/video.bin", from: upload)
+
+            #expect(try Data(contentsOf: server.url("/video.bin")) == payload)
+            #expect(try await provider.readData("/video.bin") == payload)
+            #expect(try await provider.readData("/video.bin", range: 1_000_003..<3_500_000) == payload.subdata(in: 1_000_003..<3_500_000))
+        }
+    }
+
     @Test func writesNewFilesAndOverwritesKeepingPermissions() async throws {
         try await withConnection { server, provider in
             try await provider.write("/app.env", data: Data("old".utf8))

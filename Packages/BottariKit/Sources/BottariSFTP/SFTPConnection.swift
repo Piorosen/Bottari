@@ -396,7 +396,7 @@ final class EventLoopTaskExecutor: TaskExecutor, @unchecked Sendable {
 }
 
 /// Carries a value NIO only touches on one event loop across a `@Sendable` boundary.
-private struct UncheckedSendable<Value>: @unchecked Sendable {
+struct UncheckedSendable<Value>: @unchecked Sendable {
     let value: Value
 
     init(_ value: Value) {
