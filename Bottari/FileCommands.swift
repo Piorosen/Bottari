@@ -8,6 +8,13 @@ struct FileCommands: Commands {
     @FocusedValue(\.paneFocus) private var focus
 
     var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("새 폴더") {
+                if let focus { focus.workspace.makeFolder(in: focus.side) }
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .disabled(focus == nil)
+        }
         CommandGroup(replacing: .pasteboard) {
             Button("잘라내기") { sendToTextField(#selector(NSText.cut(_:))) }
                 .keyboardShortcut("x")
@@ -43,7 +50,47 @@ struct FileCommands: Commands {
                 }
             }
             .keyboardShortcut("a")
+            Divider()
+            Button("경로 복사") {
+                if let focus { focus.workspace.copyPaths(from: focus.side) }
+            }
+            .keyboardShortcut("c", modifiers: [.command, .option])
+            .disabled(focus?.pane.selection.isEmpty ?? true)
+            // Disabled outside panes, so text fields keep ⌘⌫ for themselves.
+            Button(focus?.pane.provider.capabilities.contains(.trash) == false ? "삭제…" : "휴지통으로 이동") {
+                if let focus { focus.workspace.delete(focus.pane.selectedItems, in: focus.side) }
+            }
+            .keyboardShortcut(.delete, modifiers: .command)
+            .disabled(focus?.pane.selection.isEmpty ?? true)
         }
+        CommandMenu("이동") {
+            // Disabled outside panes, so text fields keep ⌘↑ and ⌘↓ for themselves.
+            Group {
+                Button("뒤로") { run { await $0.goBack() } }
+                    .keyboardShortcut("[")
+                Button("앞으로") { run { await $0.goForward() } }
+                    .keyboardShortcut("]")
+                Button("상위 폴더") { run { await $0.goUp() } }
+                    .keyboardShortcut(.upArrow)
+                Button("열기") {
+                    run { pane in
+                        if pane.selectedItems.count == 1, let item = pane.selectedItems.first {
+                            await pane.activate(item)
+                        }
+                    }
+                }
+                .keyboardShortcut(.downArrow)
+                Divider()
+                Button("새로고침") { run { await $0.reload() } }
+                    .keyboardShortcut("r")
+            }
+            .disabled(focus == nil)
+        }
+    }
+
+    private func run(_ action: @escaping (PaneModel) async -> Void) {
+        guard let pane = focus?.pane else { return }
+        Task { await action(pane) }
     }
 
     private var pasteTitle: String {

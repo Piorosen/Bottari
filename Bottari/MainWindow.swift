@@ -24,8 +24,13 @@ struct MainWindow: View {
                 workspace.confirm(request)
             }
         }
+        .sheet(item: $workspace.pendingDeletion) { deletion in
+            DeleteConfirmationSheet(deletion: deletion) {
+                workspace.confirm(deletion)
+            }
+        }
         .alert(
-            "보낼 수 없어요",
+            "할 수 없어요",
             isPresented: Binding(get: { workspace.refusal != nil }, set: { if !$0 { workspace.refusal = nil } })
         ) {
             Button("확인") {}

@@ -45,7 +45,12 @@ enum SnapshotRenderer {
             var site = prod
             site.startPath = folder.path
             await pane.switchProvider(to: LocalFileProvider(), site: site)
-            let workspace = Workspace(left: pane, right: PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path), library: library))
+            let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path), library: library)
+            await right.start()
+            let renamed = RemotePath(folder.path).appending("nginx.conf")
+            right.selection = [renamed]
+            right.renaming = renamed
+            let workspace = Workspace(left: pane, right: right)
             workspace.activeSide = .right
             await render(
                 HStack(spacing: 0) {
@@ -55,6 +60,13 @@ enum SnapshotRenderer {
                 },
                 size: CGSize(width: 1100, height: 360), appearance: appearance,
                 to: directory.appending(path: "pane-prod-\(name).png")
+            )
+            await render(
+                DeleteConfirmationSheet(
+                    deletion: DeletionRequest(items: right.items, side: .left, site: prod, folder: "/var/www/site")
+                ) {},
+                size: CGSize(width: 460, height: 420), appearance: appearance,
+                to: directory.appending(path: "delete-\(name).png")
             )
         }
         await renderTransfers(into: directory)

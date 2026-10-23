@@ -17,6 +17,8 @@ final class PaneModel {
     private(set) var connectingSite: SavedSite?
     var selection: Set<FileItem.ID> = []
     var showsHiddenFiles = false
+    /// The row whose name is being edited in place.
+    var renaming: FileItem.ID?
 
     private var backStack: [RemotePath] = []
     private var forwardStack: [RemotePath] = []
@@ -167,6 +169,72 @@ final class PaneModel {
 
     func dismissError() {
         errorMessage = nil
+    }
+
+    // MARK: - File operations
+
+    /// Creates "새 폴더" (or the next free name) and starts renaming it, like Finder.
+    func makeFolder() async {
+        let name = FileNames.available("새 폴더", isDirectory: true, taken: Set(items.map(\.name)))
+        let folder = path.appending(name)
+        do {
+            try await provider.makeDirectory(folder)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        await reload()
+        selection = [folder]
+        renaming = folder
+    }
+
+    func beginRenaming() {
+        guard selection.count == 1, let id = selection.first else { return }
+        renaming = id
+    }
+
+    func rename(_ item: FileItem, to name: String) async {
+        renaming = nil
+        guard name != item.name, let parent = item.path.parent else { return }
+        if let problem = FileNames.problem(with: name) {
+            errorMessage = problem
+            return
+        }
+        let target = parent.appending(name)
+        do {
+            try await provider.move(item.path, to: target)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        await reload()
+        selection = [target]
+    }
+
+    /// Moves items to the trash where the provider has one, otherwise deletes them.
+    func remove(_ doomed: [FileItem], permanently: Bool) async {
+        let trash = !permanently && provider.capabilities.contains(.trash)
+        isLoading = true
+        for item in doomed {
+            do {
+                if trash {
+                    try await provider.trash(item.path)
+                } else {
+                    try await provider.delete(item.path)
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                break
+            }
+        }
+        await reload()
+    }
+
+    /// Paths of the selected items, one per line, for ⌥⌘C.
+    var selectedPathsText: String {
+        let paths = selectedItems.map(\.path.string).joined(separator: "\n")
+        guard let address = remoteAddress else { return paths }
+        return selectedItems.map { "\(address):\($0.path.string)" }.joined(separator: "\n")
     }
 
     /// Lists `destination` and shows it. Returns false if it failed or a newer

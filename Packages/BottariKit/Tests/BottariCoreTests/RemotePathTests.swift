@@ -64,3 +64,21 @@ import Testing
         #expect(decoded["path"] == "/var/www")
     }
 }
+
+@Suite struct FileNamesTests {
+    @Test(arguments: ["", "  ", "a/b", ".", "..", String(repeating: "가", count: 90)])
+    func badNamesAreRejected(name: String) {
+        #expect(FileNames.problem(with: name) != nil)
+    }
+
+    @Test func ordinaryNamesPass() {
+        #expect(FileNames.problem(with: "새 폴더") == nil)
+        #expect(FileNames.problem(with: ".env") == nil)
+    }
+
+    @Test func availableNamesCountUpOnlyWhenTaken() {
+        #expect(FileNames.available("새 폴더", isDirectory: true, taken: []) == "새 폴더")
+        #expect(FileNames.available("새 폴더", isDirectory: true, taken: ["새 폴더", "새 폴더 2"]) == "새 폴더 3")
+        #expect(FileNames.available("notes.md", isDirectory: false, taken: ["notes.md"]) == "notes 2.md")
+    }
+}

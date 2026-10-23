@@ -34,6 +34,8 @@ final class Workspace {
     var activeSide: PaneSide = .left
     /// A transfer touching a site marked "confirm before writing", waiting for the user.
     var pendingConfirmation: TransferRequest?
+    /// Items waiting for the user to confirm deleting them for good.
+    var pendingDeletion: DeletionRequest?
     /// Why the last transfer was refused, e.g. a read-only site.
     var refusal: String?
     var showsTransfers = false
@@ -122,6 +124,52 @@ final class Workspace {
         if request.clearsClipboard {
             AppServices.clipboard.clear()
         }
+    }
+
+    // MARK: - File operations
+
+    /// Refuses with an explanation when the pane shows a read-only site.
+    private func allowsChanges(in pane: PaneModel) -> Bool {
+        guard let site = pane.site, site.readOnly else { return true }
+        refusal = "‘\(site.name)’ 서버는 읽기 전용으로 열었어요. 바꾸려면 연결 관리에서 읽기 전용을 끄세요."
+        return false
+    }
+
+    func makeFolder(in side: PaneSide) {
+        let pane = pane(side)
+        guard allowsChanges(in: pane) else { return }
+        Task { await pane.makeFolder() }
+    }
+
+    func beginRenaming(in side: PaneSide) {
+        let pane = pane(side)
+        guard allowsChanges(in: pane) else { return }
+        pane.beginRenaming()
+    }
+
+    /// The Mac's own files go to the Trash straight away, as in Finder; deleting
+    /// on a server cannot be undone, so it asks first.
+    func delete(_ items: [FileItem], in side: PaneSide) {
+        let pane = pane(side)
+        guard !items.isEmpty, allowsChanges(in: pane) else { return }
+        if pane.provider.capabilities.contains(.trash) {
+            Task { await pane.remove(items, permanently: false) }
+        } else {
+            pendingDeletion = DeletionRequest(items: items, side: side, site: pane.site, folder: pane.path)
+        }
+    }
+
+    func confirm(_ deletion: DeletionRequest) {
+        pendingDeletion = nil
+        let pane = pane(deletion.side)
+        Task { await pane.remove(deletion.items, permanently: true) }
+    }
+
+    func copyPaths(from side: PaneSide) {
+        let text = pane(side).selectedPathsText
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     // MARK: - Drag and drop
@@ -217,6 +265,15 @@ final class Workspace {
         }
         return loaded
     }
+}
+
+/// Items to delete for good, waiting for the user's yes.
+struct DeletionRequest: Identifiable {
+    let id = UUID()
+    let items: [FileItem]
+    let side: PaneSide
+    let site: SavedSite?
+    let folder: RemotePath
 }
 
 /// The pane with keyboard focus, for the Edit menu's copy and paste.

@@ -171,9 +171,17 @@ struct PaneView: View {
                     FileIcon.image(for: item, isLocal: model.isLocal)
                         .resizable()
                         .frame(width: 16, height: 16)
-                    Text(item.name)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if model.renaming == item.id {
+                        RenameField(original: item.name, isDirectory: item.isDirectory) { name in
+                            Task { await model.rename(item, to: name) }
+                        } cancel: {
+                            model.renaming = nil
+                        }
+                    } else {
+                        Text(item.name)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
             }
             TableColumn("크기") { item in
@@ -208,8 +216,15 @@ struct PaneView: View {
             Task { await model.activate(item) }
         }
         .focused($listFocused)
+        // While a name is being edited, keys belong to the text field.
         .onKeyPress(.delete) {
+            guard model.renaming == nil else { return .ignored }
             Task { await model.goBack() }
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard model.renaming == nil, model.selection.count == 1 else { return .ignored }
+            workspace.beginRenaming(in: side)
             return .handled
         }
         .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
@@ -232,6 +247,8 @@ struct PaneView: View {
         if items.isEmpty {
             let count = AppServices.clipboard.content?.items.count
             if !readOnlyHere {
+                Button("새 폴더") { workspace.makeFolder(in: side) }
+                Divider()
                 Button(count.map { "붙여넣기 (\($0)개)" } ?? "붙여넣기") { workspace.paste(into: side, kind: .copy) }
                     .disabled(count == nil)
                 Button("이동해서 붙여넣기") { workspace.paste(into: side, kind: .move) }
@@ -251,7 +268,23 @@ struct PaneView: View {
                 }
                 Divider()
             }
+            if items.count == 1, let item = items.first, !readOnlyHere {
+                Button("이름 바꾸기") {
+                    model.selection = [item.id]
+                    workspace.beginRenaming(in: side)
+                }
+            }
             Button("복사") { AppServices.clipboard.copy(items, from: model.provider, site: model.site) }
+            Button("경로 복사") {
+                model.selection = Set(items.map(\.id))
+                workspace.copyPaths(from: side)
+            }
+            if !readOnlyHere {
+                Divider()
+                Button(model.provider.capabilities.contains(.trash) ? "휴지통으로 이동" : "삭제…", role: .destructive) {
+                    workspace.delete(items, in: side)
+                }
+            }
         }
     }
 
@@ -330,4 +363,56 @@ private struct SiteManagerRequest: Identifiable {
     let id = UUID()
     var selection: SavedSite.ID?
     var error: (any Error)?
+}
+
+/// Edits a name in place, with the part before the extension selected like
+/// Finder. Return or clicking elsewhere keeps the new name; Escape cancels.
+private struct RenameField: View {
+    let original: String
+    let isDirectory: Bool
+    let commit: (String) -> Void
+    let cancel: () -> Void
+
+    @State private var text: String
+    @State private var selection: TextSelection?
+    @State private var finished = false
+    @FocusState private var focused: Bool
+
+    init(original: String, isDirectory: Bool, commit: @escaping (String) -> Void, cancel: @escaping () -> Void) {
+        self.original = original
+        self.isDirectory = isDirectory
+        self.commit = commit
+        self.cancel = cancel
+        _text = State(initialValue: original)
+    }
+
+    var body: some View {
+        TextField("이름", text: $text, selection: $selection)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 2)
+            .background(Color(nsColor: .textBackgroundColor))
+            .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(Color.accentColor))
+            .focused($focused)
+            .onAppear {
+                focused = true
+                let ext = isDirectory ? "" : RemotePath("/" + original).pathExtension
+                let end = ext.isEmpty ? text.endIndex : text.index(text.endIndex, offsetBy: -(ext.count + 1))
+                selection = TextSelection(range: text.startIndex..<end)
+            }
+            .onSubmit { finish(keeping: true) }
+            .onExitCommand { finish(keeping: false) }
+            .onChange(of: focused) {
+                if !focused { finish(keeping: true) }
+            }
+    }
+
+    private func finish(keeping: Bool) {
+        guard !finished else { return }
+        finished = true
+        if keeping {
+            commit(text)
+        } else {
+            cancel()
+        }
+    }
 }
