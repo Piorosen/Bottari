@@ -91,6 +91,7 @@ import Testing
         await first.stop()
         let remembered = try #require(knownHosts.trustedKey(for: first.endpoint))
         #expect(KnownHosts(fileURL: storeURL).trustedKey(for: first.endpoint) == remembered)
+        #expect(knownHosts.remembered.map(\.key) == [remembered])
 
         // Same address, new host key: what a man-in-the-middle would look like.
         try await withServer(port: first.port) { impostor in

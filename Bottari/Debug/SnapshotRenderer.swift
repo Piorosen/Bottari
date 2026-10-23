@@ -276,6 +276,8 @@ enum SnapshotRenderer {
             "framebuffer \(model.framebufferView.map { "\(Int($0.framebufferSize.width))x\(Int($0.framebufferSize.height))" } ?? "none")",
         ]
         try? lines.joined(separator: "\n").write(to: directory.appending(path: "screen-check.txt"), atomically: true, encoding: .utf8)
+        await render(ScreenView(model: model).themed(), size: CGSize(width: 1400, height: 820), appearance: .aqua,
+                     to: directory.appending(path: "screen-light.png"))
         model.disconnect()
     }
 
@@ -295,7 +297,7 @@ enum SnapshotRenderer {
             ]]
         )
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            await render(TunnelWindow(), size: CGSize(width: 1100, height: 1500), appearance: appearance,
+            await render(TunnelWindow().themed(), size: CGSize(width: 1440, height: 1100), appearance: appearance,
                          to: directory.appending(path: "tunnels-\(name).png"))
         }
     }
@@ -381,9 +383,9 @@ enum SnapshotRenderer {
     private static func renderSettings(into directory: URL, folder: URL) async {
         let themes = ThemeStore.shared, keymap = Keymap.shared
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            await render(GeneralSettings(), size: CGSize(width: 620, height: 380), appearance: appearance,
+            await render(GeneralSettings().padding(12).background(Palette.background).themed(), size: CGSize(width: 960, height: 560), appearance: appearance,
                          to: directory.appending(path: "settings-general-\(name).png"))
-            await render(AppearanceSettings(), size: CGSize(width: 880, height: 700), appearance: appearance,
+            await render(SettingsView(), size: CGSize(width: 1180, height: 780), appearance: appearance,
                          to: directory.appending(path: "settings-look-\(name).png"))
         }
 
@@ -391,7 +393,7 @@ enum SnapshotRenderer {
         themes.current.colors.accent = "#0F7C78"
         themes.current.density = .compact
         themes.current.tags["PROD"] = "#B42318"
-        await render(AppearanceSettings(), size: CGSize(width: 880, height: 700), appearance: .darkAqua,
+        await render(SettingsView(), size: CGSize(width: 1180, height: 780), appearance: .darkAqua,
                      to: directory.appending(path: "settings-look-night.png"))
         let left = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path))
         let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path))
@@ -416,7 +418,7 @@ enum SnapshotRenderer {
         func check(_ name: String, _ passed: Bool) { report.append((passed ? "PASS " : "FAIL ") + name) }
         keymap.layout = .commander
         keymap.set(KeyCombo("c", command: true), for: .bundle)
-        await render(KeySettings(), size: CGSize(width: 620, height: 620), appearance: .aqua,
+        await render(KeySettings().padding(12).background(Palette.background).themed(), size: CGSize(width: 960, height: 760), appearance: .aqua,
                      to: directory.appending(path: "settings-keys.png"))
         check("custom key is flagged as taken", keymap.clash(for: .bundle) == "복사 (클립보드)")
         check("F5 copies across, from the list or the menu", keymap.combo(for: .copyToOther).description == "F5" && keymap.shortcut(for: .copyToOther) != nil)
@@ -504,7 +506,7 @@ enum SnapshotRenderer {
         check("this Mac keeps its version meanwhile", sites.value[0].endpoint.username == "ubuntu")
         check("devices list both Macs", sync.devices.map(\.name) == ["Mac mini", "MacBook Pro"])
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            await render(SyncSettings(sync: sync, height: 1700), size: CGSize(width: 640, height: 1700), appearance: appearance,
+            await render(SyncSettings(sync: sync, height: 1200).padding(12).background(Palette.background).themed(), size: CGSize(width: 980, height: 1224), appearance: appearance,
                          to: directory.appending(path: "settings-sync-\(name).png"))
         }
 
@@ -574,20 +576,6 @@ enum SnapshotRenderer {
         // Let SwiftUI lay out, run onAppear and fill its lists.
         try? await Task.sleep(for: .milliseconds(800))
         host.layoutSubtreeIfNeeded()
-        if url.lastPathComponent == "main-light.png" {
-            var lines: [String] = []
-            func walk(_ view: NSView, depth: Int) {
-                if let table = view as? NSTableView {
-                    lines.append("table style=\(table.style.rawValue) grid=\(table.gridStyleMask.rawValue) alt=\(table.usesAlternatingRowBackgroundColors) cols=\(table.tableColumns.map { Int($0.width) }) resizing=\(table.columnAutoresizingStyle.rawValue) width=\(Int(table.bounds.width)) clip=\(Int(table.enclosingScrollView?.contentView.bounds.width ?? 0))")
-                    if let row = table.rowView(atRow: 0, makeIfNecessary: false) {
-                        lines.append("  row \(type(of: row)) super=\(String(describing: type(of: row).superclass()))")
-                    }
-                }
-                view.subviews.forEach { walk($0, depth: depth + 1) }
-            }
-            walk(host, depth: 0)
-            try? lines.joined(separator: "\n").write(to: url.deletingLastPathComponent().appending(path: "tables-debug.txt"), atomically: true, encoding: .utf8)
-        }
         if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
             host.cacheDisplay(in: host.bounds, to: bitmap)
             try? bitmap.representation(using: .png, properties: [:])?.write(to: url)

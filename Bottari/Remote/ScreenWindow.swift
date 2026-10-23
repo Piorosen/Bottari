@@ -223,53 +223,26 @@ struct ScreenWindow: View {
     }
 }
 
-private struct ScreenView: View {
+struct ScreenView: View {
     @Bindable var model: ScreenModel
     @State private var isDropTarget = false
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
-            ZStack {
-                Color.black
-                if let view = model.framebufferView {
-                    FramebufferHost(view: view, scalesToFit: model.scalesToFit)
-                } else {
-                    VStack(spacing: 10) {
-                        if !model.status.hasPrefix("연결이") && !model.status.hasPrefix("연결을 끊었") && !model.status.hasPrefix("터널을") {
-                            ProgressView().controlSize(.large)
-                        }
-                        Text(model.status)
-                        if !model.isConnected && (model.status.hasPrefix("연결이") || model.status.hasPrefix("연결을 끊었") || model.status.hasPrefix("터널을")) {
-                            Button("다시 연결") { Task { await model.connect() } }
-                        }
-                    }
-                    .foregroundStyle(.white)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 12) {
+                    screen
+                        .clipShape(.rect(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line))
+                    bottomBar
                 }
-                if isDropTarget {
-                    Text("놓으면 \(model.site.name)에 업로드 (SFTP)")
-                        .padding(12)
-                        .background(.ultraThinMaterial, in: .rect(cornerRadius: 8))
-                }
+                sidePanel
+                    .frame(width: 300)
             }
-            .onDrop(of: [.fileURL], isTargeted: $isDropTarget) { providers in
-                Task {
-                    var urls: [URL] = []
-                    for provider in providers {
-                        if let url = await withCheckedContinuation({ (continuation: CheckedContinuation<URL?, Never>) in
-                            _ = provider.loadObject(ofClass: NSURL.self) { object, _ in
-                                continuation.resume(returning: (object as? NSURL).map { $0 as URL })
-                            }
-                        }) { urls.append(url) }
-                    }
-                    model.upload(urls)
-                }
-                return true
-            }
-            Divider()
-            statusBar
+            .padding([.horizontal, .bottom], 12)
         }
+        .background(Palette.background)
         .navigationTitle("\(model.site.name) · \(model.kindName)")
         .sheet(item: $model.credentialRequest) { request in
             CredentialSheet(request: request, defaultUsername: model.username) { username, password, remember in
@@ -281,24 +254,83 @@ private struct ScreenView: View {
         }
     }
 
+    private var stopped: Bool {
+        !model.isConnected && (model.status.hasPrefix("연결이") || model.status.hasPrefix("연결을 끊었") || model.status.hasPrefix("터널을"))
+    }
+
+    private var screen: some View {
+        ZStack {
+            Color(light: 0x0E1014, dark: 0x0A0C10)
+            if let view = model.framebufferView {
+                FramebufferHost(view: view, scalesToFit: model.scalesToFit)
+                    .padding(10)
+            } else {
+                VStack(spacing: 10) {
+                    if !stopped {
+                        ProgressView().controlSize(.large)
+                    }
+                    Text(model.status).font(.ui(.callout))
+                    if stopped {
+                        Button("다시 연결") { Task { await model.connect() } }
+                            .buttonStyle(PanelButtonStyle())
+                            .fixedSize()
+                    }
+                }
+                .foregroundStyle(.white)
+            }
+            if isDropTarget {
+                Text("놓으면 \(model.site.name)에 업로드 (SFTP)")
+                    .font(.ui(.callout))
+                    .padding(12)
+                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 8))
+            }
+        }
+        .environment(\.colorScheme, .dark)
+        .onDrop(of: [.fileURL], isTargeted: $isDropTarget) { providers in
+            Task {
+                var urls: [URL] = []
+                for provider in providers {
+                    if let url = await withCheckedContinuation({ (continuation: CheckedContinuation<URL?, Never>) in
+                        _ = provider.loadObject(ofClass: NSURL.self) { object, _ in
+                            continuation.resume(returning: (object as? NSURL).map { $0 as URL })
+                        }
+                    }) { urls.append(url) }
+                }
+                model.upload(urls)
+            }
+            return true
+        }
+    }
+
+    private var route: String {
+        let jumps = model.site.proxyJump
+        return [
+            model.screen.throughTunnel ? "\(model.kindName) over SSH (자동 터널)" : "\(model.kindName) 직접 연결",
+            "\(model.host):\(String(model.screen.port))",
+        ].joined(separator: " · ") + (jumps.isEmpty ? "" : " · \(jumps.joined(separator: " → ")) 경유")
+    }
+
     private var toolbar: some View {
         HStack(spacing: 10) {
-            Image(systemName: "display")
-                .foregroundStyle(model.site.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
-            Text(model.site.name)
-                .font(.ui(.headline))
-            if let tag = model.site.tag {
-                TagChip(tag: tag)
+            BackButton(title: "파일로 돌아가기") { NSApp.keyWindow?.performClose(nil) }
+                .buttonStyle(PanelButtonStyle())
+                .fixedSize()
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text("\(model.site.name) · 원격 화면").font(.ui(.body, weight: .semibold))
+                    if let tag = model.site.tag {
+                        if tag == .prod { TagChip(tag: tag) } else { TagChip.outlined(tag) }
+                    }
+                }
+                Text(route).font(.themeMono(.caption2)).foregroundStyle(.secondary).lineLimit(1)
             }
-            Text(model.kindName)
-                .foregroundStyle(.secondary)
             Spacer()
-            Picker("크기", selection: $model.scalesToFit) {
-                Text("화면 맞춤").tag(true)
-                Text("1:1").tag(false)
+            HStack(spacing: 0) {
+                Button("화면 맞춤") { model.scalesToFit = true }
+                    .buttonStyle(ChoiceButtonStyle(isOn: model.scalesToFit))
+                Button("1:1") { model.scalesToFit = false }
+                    .buttonStyle(ChoiceButtonStyle(isOn: !model.scalesToFit))
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .fixedSize()
             .onChange(of: model.scalesToFit) { Task { await model.connect() } }
             Menu("키 보내기") {
@@ -307,38 +339,75 @@ private struct ScreenView: View {
             }
             .fixedSize()
             .onChange(of: model.forwardsShortcuts) { Task { await model.connect() } }
-            Toggle(isOn: $model.viewOnly) {
-                Label("보기만", systemImage: model.viewOnly ? "eye.fill" : "eye")
-            }
-            .toggleStyle(.button)
-            .help("마우스와 키보드를 보내지 않아요")
-            .onChange(of: model.viewOnly) { Task { await model.connect() } }
             Button(model.isConnected ? "연결 끊기" : "다시 연결") {
                 if model.isConnected { model.disconnect() } else { Task { await model.connect() } }
             }
+            .buttonStyle(PanelButtonStyle(destructive: model.isConnected))
+            .fixedSize()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(12)
     }
 
-    private var statusBar: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(model.isConnected ? Color.green : .orange)
-                .frame(width: 7, height: 7)
-            Text(model.status)
+    private var bottomBar: some View {
+        HStack(spacing: 16) {
+            Toggle("보기만 (조작 안 함)", isOn: $model.viewOnly)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .font(.ui(.callout))
+                .onChange(of: model.viewOnly) { Task { await model.connect() } }
             Spacer()
-            if model.screen.throughTunnel {
-                Label("SSH 터널 · 서버 방화벽에 \(String(model.screen.port)) 포트를 열 필요 없어요", systemImage: "lock.fill")
-            } else {
-                Label("직접 연결", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-            }
+            Text("Finder에서 파일을 화면 위로 끌어다 놓으면 원격 컴퓨터로 올라가요")
+                .font(.ui(.caption))
+                .foregroundStyle(.secondary)
         }
-        .font(.ui(.caption))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .card()
+    }
+
+    private var sidePanel: some View {
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("연결 상태").font(.ui(.body, weight: .semibold))
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    row("상태", model.isConnected ? "연결됨" : model.status)
+                    row("종류", model.screen.kind == .vnc ? "VNC (RFB)" : "macOS 화면 공유")
+                    row("주소", "\(model.host):\(String(model.screen.port))")
+                    if let size = model.framebufferView?.framebufferSize {
+                        row("원격 해상도", "\(Int(size.width)) × \(Int(size.height))")
+                    }
+                    row("암호화", model.screen.throughTunnel ? "SSH 터널" : "없음 · 직접 연결")
+                    if !model.site.proxyJump.isEmpty {
+                        row("경유", model.site.proxyJump.joined(separator: " → "))
+                    }
+                    row("표시", model.scalesToFit ? "화면 맞춤" : "1:1")
+                    row("입력", model.viewOnly ? "보기만" : model.forwardsShortcuts ? "⌘ 단축키까지" : "마우스 · 키보드")
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .card()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.screen.throughTunnel ? "왜 SSH 터널인가요?" : "직접 연결 중이에요").font(.ui(.callout, weight: .semibold))
+                Text(model.screen.throughTunnel
+                     ? "VNC는 기본적으로 암호화가 약해요. Bottari는 이미 저장된 SSH 연결로 터널을 열고 그 안으로 화면을 보내서, 서버 방화벽에 \(String(model.screen.port)) 포트를 열 필요가 없어요."
+                     : "화면이 암호화되지 않고 오갈 수 있어요. 연결 관리에서 'SSH 터널로 연결'을 켜는 걸 추천해요.")
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .well()
+            Spacer()
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).font(.ui(.caption)).foregroundStyle(.secondary)
+            Text(value).font(.themeMono(.caption)).lineLimit(2)
+        }
     }
 }
 

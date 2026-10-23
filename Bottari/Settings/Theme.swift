@@ -204,7 +204,8 @@ final class ThemeStore {
 
     private static func available(_ families: [String]) -> [String] {
         let installed = Set(NSFontManager.shared.availableFontFamilies)
-        return families.filter(installed.contains)
+        var seen = Set<String>()
+        return families.filter { installed.contains($0) && seen.insert($0).inserted }
     }
 
     private static func installed(_ family: String?) -> String? {

@@ -4,16 +4,71 @@ import BottariTransfer
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// ⌘, : transfers, looks, keys and iCloud sync.
+/// ⌘, : looks, keys, iCloud sync, transfers and connections, picked from a
+/// list on the left as the design shows.
 struct SettingsView: View {
+    @State private var section = SettingsSection.look
+
     var body: some View {
-        TabView {
-            Tab("일반", systemImage: "gearshape") { GeneralSettings() }
-            Tab("모양", systemImage: "paintpalette") { AppearanceSettings() }
-            Tab("단축키", systemImage: "keyboard") { KeySettings() }
-            Tab("iCloud 동기화", systemImage: "icloud") { SyncSettings(sync: .shared) }
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsSection.allCases, id: \.self) { item in
+                    Button {
+                        section = item
+                    } label: {
+                        Label(item.title, systemImage: item.symbol)
+                            .font(.ui(.body, weight: section == item ? .semibold : .regular))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(section == item ? Palette.selection : .clear, in: .rect(cornerRadius: 7))
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(10)
+            .frame(width: 190)
+            .card()
+            Group {
+                switch section {
+                case .look: AppearanceSettings()
+                case .keys: KeySettings()
+                case .sync: SyncSettings(sync: .shared)
+                case .transfers: GeneralSettings()
+                case .connections: ConnectionSettings()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .padding(12)
+        .frame(width: 1180, height: 780)
+        .background(Palette.background)
         .themed()
+    }
+}
+
+enum SettingsSection: CaseIterable {
+    case look, keys, sync, transfers, connections
+
+    var title: String {
+        switch self {
+        case .look: "모양"
+        case .keys: "단축키"
+        case .sync: "iCloud 동기화"
+        case .transfers: "전송"
+        case .connections: "연결"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .look: "paintpalette"
+        case .keys: "keyboard"
+        case .sync: "icloud"
+        case .transfers: "arrow.up.arrow.down"
+        case .connections: "server.rack"
+        }
     }
 }
 
@@ -22,7 +77,64 @@ extension Notification.Name {
     static let openOnMac = Notification.Name("BottariOpenOnMac")
 }
 
-// MARK: - 일반
+/// A titled group of settings in a card.
+private struct SettingsGroup<Content: View>: View {
+    let title: String
+    var footer: String?
+    @ViewBuilder let content: Content
+
+    init(_ title: String, footer: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.footer = footer
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(title)
+            VStack(alignment: .leading, spacing: 12) {
+                content
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .card()
+            if let footer {
+                Text(footer)
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// A switch with its title and what it does, inside a settings card.
+private struct SettingSwitch: View {
+    let title: String
+    var detail: String?
+    var badge: String?
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle(title, isOn: $isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.ui(.body, weight: .medium))
+                if let detail {
+                    Text(detail).font(.ui(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+            if let badge {
+                Badge(badge, color: Color(light: 0x8A6100, dark: 0xE0B44C))
+            }
+        }
+    }
+}
+
+// MARK: - 전송
 
 struct GeneralSettings: View {
     @AppStorage(TransferSettings.maxConcurrentKey) private var maxConcurrent = 3
@@ -30,37 +142,99 @@ struct GeneralSettings: View {
     @AppStorage(TransferSettings.verifiesChecksumsKey) private var verifiesChecksums = false
 
     var body: some View {
-        Form {
-            Section("전송") {
-                Stepper(value: $maxConcurrent, in: 1...8) {
-                    LabeledContent("동시에 보낼 파일", value: "\(maxConcurrent)개")
-                }
-                Picker("같은 이름의 파일이 있으면", selection: $policy) {
-                    ForEach(ConflictPolicy.allCases, id: \.self) { policy in
-                        Text(policy.label).tag(policy)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsGroup("전송") {
+                    HStack {
+                        Text("동시에 보낼 파일").font(.ui(.body, weight: .medium))
+                        Spacer()
+                        Button { maxConcurrent = max(1, maxConcurrent - 1) } label: { Image(systemName: "minus") }
+                            .buttonStyle(IconButtonStyle())
+                        Text("\(maxConcurrent)").font(.themeMono(.body)).frame(minWidth: 24)
+                        Button { maxConcurrent = min(8, maxConcurrent + 1) } label: { Image(systemName: "plus") }
+                            .buttonStyle(IconButtonStyle())
                     }
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("같은 이름의 파일이 있으면").font(.ui(.body, weight: .medium))
+                        HStack(spacing: 6) {
+                            ForEach(ConflictPolicy.allCases, id: \.self) { option in
+                                Button(option.label) { policy = option }
+                                    .buttonStyle(ChoiceButtonStyle(isOn: policy == option))
+                                    .fixedSize()
+                            }
+                        }
+                    }
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                    SettingSwitch(title: "보낸 뒤 체크섬 비교", detail: "양쪽에서 SHA-256을 계산해 비교해요. 서버는 명령을 실행할 수 있을 때만 돼요.", isOn: $verifiesChecksums)
                 }
-                Toggle(isOn: $verifiesChecksums) {
-                    Text("보낸 뒤 체크섬 비교")
-                    Text("양쪽에서 SHA-256을 계산해 비교해요. 서버는 명령을 실행할 수 있을 때만 돼요.")
-                }
-            }
-            Section("업데이트") {
-                if Updates.shared.isAvailable {
-                    Toggle("자동으로 업데이트 확인", isOn: Binding(get: { Updates.shared.automaticallyChecks }, set: { Updates.shared.automaticallyChecks = $0 }))
-                    Button("지금 확인") { Updates.shared.checkForUpdates() }
-                } else {
-                    LabeledContent("버전", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
-                    Text("이 빌드는 업데이트를 확인하지 않아요. 서명한 릴리스(scripts/release.sh)에서 켜져요.")
-                        .font(.ui(.caption))
-                        .foregroundStyle(.secondary)
+                SettingsGroup("업데이트") {
+                    if Updates.shared.isAvailable {
+                        SettingSwitch(title: "자동으로 업데이트 확인", isOn: Binding(get: { Updates.shared.automaticallyChecks }, set: { Updates.shared.automaticallyChecks = $0 }))
+                        Button("지금 확인") { Updates.shared.checkForUpdates() }
+                            .buttonStyle(PanelButtonStyle())
+                            .fixedSize()
+                    } else {
+                        HStack {
+                            Text("버전").font(.ui(.body, weight: .medium))
+                            Spacer()
+                            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").font(.themeMono(.body))
+                        }
+                        Text("이 빌드는 업데이트를 확인하지 않아요. 서명한 릴리스(scripts/release.sh)에서 켜져요.")
+                            .font(.ui(.caption))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 620, height: 380)
+        .scrollIndicators(.never)
         .onChange(of: maxConcurrent) { AppServices.transfers.maxConcurrentTransfers = maxConcurrent }
         .onChange(of: verifiesChecksums) { AppServices.transfers.verifiesChecksums = verifiesChecksums }
+    }
+}
+
+// MARK: - 연결
+
+/// Host keys trusted on first connection, to forget one after a server is reinstalled.
+struct ConnectionSettings: View {
+    @State private var keys = AppServices.knownHosts.remembered
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsGroup("믿은 호스트 키", footer: "처음 연결할 때 서버의 키를 기억해 두고, 다음부터 다르면 연결하지 않아요. 서버를 다시 설치했다면 여기서 지우고 다시 연결하세요.") {
+                    if keys.isEmpty {
+                        Text("아직 기억한 키가 없어요").font(.ui(.callout)).foregroundStyle(.secondary)
+                    }
+                    ForEach(keys, id: \.host) { entry in
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.host).font(.themeMono(.callout))
+                                Text(entry.key.prefix(60) + (entry.key.count > 60 ? "…" : ""))
+                                    .font(.themeMono(.caption2))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Button("잊기") {
+                                AppServices.knownHosts.forget(hostKeyID: entry.host)
+                                keys = AppServices.knownHosts.remembered
+                            }
+                            .buttonStyle(PanelButtonStyle(destructive: true))
+                            .fixedSize()
+                        }
+                        if entry.host != keys.last?.host {
+                            Rectangle().fill(Palette.line).frame(height: 1)
+                        }
+                    }
+                }
+                SettingsGroup("비밀번호와 키 암호") {
+                    Label("macOS 키체인에만 저장해요. 연결 목록 파일과 iCloud 동기화 파일에는 들어가지 않아요.", systemImage: "lock.fill")
+                        .font(.ui(.callout))
+                }
+            }
+        }
+        .scrollIndicators(.never)
     }
 }
 
@@ -72,97 +246,110 @@ struct AppearanceSettings: View {
     private var store: ThemeStore { .shared }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Form {
-                Section("테마") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                        ForEach(Theme.presets, id: \.theme.name) { preset in
-                            Button {
-                                store.choose(preset: preset.theme)
-                            } label: {
-                                PresetCard(theme: preset.theme, subtitle: preset.subtitle, isSelected: store.current.presetName == preset.theme.name)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                Section("강조 색") {
-                    HStack(spacing: 10) {
-                        swatch(nil, label: "시스템")
-                        ForEach(Theme.accents, id: \.hex) { accent in
-                            swatch(accent.hex, label: accent.name)
-                        }
-                        Divider().frame(height: 18)
-                        ColorPicker("직접 고르기", selection: accentBinding, supportsOpacity: false)
-                            .labelsHidden()
-                        TextField("색 코드", text: $accentText, prompt: Text(verbatim: "#3651C9"))
-                            .labelsHidden()
-                            .font(.themeMono(.body))
-                            .frame(width: 96)
-                            .onSubmit(applyAccentText)
-                    }
-                }
-                Section("글자와 간격") {
-                    Picker("밀도", selection: binding(\.density)) {
-                        ForEach(Theme.Density.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    fontPicker("본문 글꼴", system: "시스템 (SF)", choices: ThemeStore.uiFontChoices, selection: binding(\.font.ui))
-                    fontPicker("고정폭 글꼴 (경로 · 크기 · 코드)", system: "시스템 (SF Mono)", choices: ThemeStore.monoFontChoices, selection: binding(\.font.mono))
-                    Toggle("새 패인에서 숨김 파일 보기", isOn: binding(\.list.showHidden))
-                }
-                Section("서버 태그 색") {
-                    ForEach(Theme.tagChoices, id: \.tag) { choice in
-                        HStack(spacing: 10) {
-                            TagChip(tag: choice.tag)
-                                .frame(width: 70, alignment: .leading)
-                            ForEach(Array(choice.hexes.enumerated()), id: \.offset) { index, hex in
-                                let current = store.current.tags[choice.tag.label]
-                                let selected = current == hex || (current == nil && index == 0)
+        HStack(alignment: .top, spacing: 12) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    SettingsGroup("테마") {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 12) {
+                            ForEach(Theme.presets, id: \.theme.name) { preset in
                                 Button {
-                                    // The first is the design's own, with its hand-picked dark variant.
-                                    store.current.tags[choice.tag.label] = index == 0 ? nil : hex
+                                    store.choose(preset: preset.theme)
                                 } label: {
-                                    Circle()
-                                        .fill(Color(themeHex: hex, liftedInDark: true) ?? .gray)
-                                        .frame(width: 18, height: 18)
-                                        .padding(3)
-                                        .overlay(Circle().strokeBorder(selected ? Color(themeHex: hex) ?? .gray : .clear, lineWidth: 2))
+                                    PresetCard(theme: preset.theme, subtitle: preset.subtitle, isSelected: store.current.presetName == preset.theme.name)
                                 }
                                 .buttonStyle(.plain)
-                                .help(hex)
                             }
                         }
                     }
+                    SettingsGroup("강조 색") {
+                        HStack(spacing: 10) {
+                            swatch(nil, label: "시스템")
+                            ForEach(Theme.accents, id: \.hex) { accent in
+                                swatch(accent.hex, label: accent.name)
+                            }
+                            Rectangle().fill(Palette.line).frame(width: 1, height: 20)
+                            ColorPicker("직접 고르기", selection: accentBinding, supportsOpacity: false)
+                                .labelsHidden()
+                            TextField("색 코드", text: $accentText, prompt: Text(verbatim: "#3651C9"))
+                                .designField(mono: true)
+                                .frame(width: 100)
+                                .onSubmit(applyAccentText)
+                        }
+                    }
+                    SettingsGroup("글자와 간격") {
+                        HStack {
+                            Text("밀도").font(.ui(.body, weight: .medium))
+                            Spacer()
+                            ForEach(Theme.Density.allCases, id: \.self) { density in
+                                Button(density.title) { store.current.density = density }
+                                    .buttonStyle(ChoiceButtonStyle(isOn: store.current.density == density))
+                                    .fixedSize()
+                            }
+                        }
+                        Rectangle().fill(Palette.line).frame(height: 1)
+                        fontChoices("본문 글꼴", system: "시스템 (SF)", choices: ThemeStore.uiFontChoices, selection: binding(\.font.ui), mono: false)
+                        Rectangle().fill(Palette.line).frame(height: 1)
+                        fontChoices("고정폭 글꼴 (경로 · 크기 · 코드)", system: "시스템 (SF Mono)", choices: ThemeStore.monoFontChoices, selection: binding(\.font.mono), mono: true)
+                        Rectangle().fill(Palette.line).frame(height: 1)
+                        SettingSwitch(title: "새 패인에서 숨김 파일 보기", isOn: binding(\.list.showHidden))
+                        SettingSwitch(title: "Finder 아이콘 쓰기", detail: "선 아이콘 대신 Finder의 색 아이콘", isOn: binding(\.list.finderIcons))
+                    }
+                    SettingsGroup("서버 태그 색") {
+                        ForEach(Theme.tagChoices, id: \.tag) { choice in
+                            HStack(spacing: 10) {
+                                TagChip(tag: choice.tag)
+                                    .frame(width: 70, alignment: .leading)
+                                ForEach(Array(choice.hexes.enumerated()), id: \.offset) { index, hex in
+                                    let current = store.current.tags[choice.tag.label]
+                                    let selected = current == hex || (current == nil && index == 0)
+                                    Button {
+                                        // The first is the design's own, with its hand-picked dark variant.
+                                        store.current.tags[choice.tag.label] = index == 0 ? nil : hex
+                                    } label: {
+                                        Circle()
+                                            .fill(Color(themeHex: hex, liftedInDark: true) ?? .gray)
+                                            .frame(width: 18, height: 18)
+                                            .padding(3)
+                                            .overlay(Circle().strokeBorder(selected ? Color(themeHex: hex) ?? .gray : .clear, lineWidth: 2))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(hex)
+                                }
+                            }
+                        }
+                    }
+                    themeFiles
                 }
-                themeFiles
             }
-            .formStyle(.grouped)
-            .frame(width: 520)
+            .scrollIndicators(.never)
 
-            ThemePreview()
-                .padding(.top, 20)
-                .padding(.trailing, 20)
+            VStack(alignment: .leading, spacing: 12) {
+                ThemePreview()
+                    .padding(14)
+                    .card()
+            }
+            .frame(width: 370)
         }
-        .frame(width: 880, height: 700)
         .onAppear { accentText = store.current.colors.accent ?? "" }
         .onChange(of: store.current.colors.accent) { accentText = store.current.colors.accent ?? "" }
     }
 
     private var themeFiles: some View {
-        Section {
+        SettingsGroup("테마 파일", footer: "~/Library/Application Support/Bottari/themes/ 에 저장돼요. 다른 사람과 파일로 주고받을 수 있어요.") {
             HStack {
-                Button("가져오기…", action: importTheme)
-                Button("내보내기…", action: exportTheme)
+                Button("가져오기…", action: importTheme).buttonStyle(PanelButtonStyle()).fixedSize()
+                Button("내보내기…", action: exportTheme).buttonStyle(PanelButtonStyle()).fixedSize()
                 Spacer()
                 Button("폴더 열기") {
                     try? FileManager.default.createDirectory(at: store.folder, withIntermediateDirectories: true)
                     NSWorkspace.shared.open(store.folder)
                 }
+                .buttonStyle(PanelButtonStyle())
+                .fixedSize()
             }
             if let fileError {
                 Label(fileError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.ui(.caption))
                     .foregroundStyle(.orange)
             }
             ForEach(store.saved) { theme in
@@ -171,19 +358,21 @@ struct AppearanceSettings: View {
                         .fill(Color(themeHex: theme.colors.background ?? "#808080") ?? .gray)
                         .overlay(Circle().strokeBorder(Color(themeHex: theme.colors.accent ?? "#808080") ?? .gray, lineWidth: 3))
                         .frame(width: 16, height: 16)
-                    Text(theme.name)
+                    Text(theme.name).font(.ui(.callout))
                     if theme == store.current {
                         Text("사용 중").font(.ui(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button("쓰기") { store.current = theme }
+                        .buttonStyle(PanelButtonStyle())
+                        .fixedSize()
                         .disabled(theme == store.current)
                     Button {
                         store.delete(theme)
                     } label: {
                         Image(systemName: "trash")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(IconButtonStyle())
                     .help("이 테마 파일 지우기")
                 }
             }
@@ -192,13 +381,10 @@ struct AppearanceSettings: View {
                     .font(.themeMono(.caption))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .well()
             }
-        } header: {
-            Text("테마 파일")
-        } footer: {
-            Text("~/Library/Application Support/Bottari/themes/ 에 저장돼요. 다른 사람과 파일로 주고받을 수 있어요.")
-                .font(.ui(.caption))
-                .foregroundStyle(.secondary)
+            .font(.ui(.callout))
         }
     }
 
@@ -211,9 +397,9 @@ struct AppearanceSettings: View {
         } label: {
             Circle()
                 .fill(fill)
-                .frame(width: 18, height: 18)
+                .frame(width: 20, height: 20)
                 .padding(3)
-                .overlay(Circle().strokeBorder(selected ? Color.primary.opacity(0.6) : .clear, lineWidth: 2))
+                .overlay(Circle().strokeBorder(selected ? Palette.text.opacity(0.6) : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
         .help(label)
@@ -239,17 +425,40 @@ struct AppearanceSettings: View {
         Binding(get: { store.current[keyPath: keyPath] }, set: { store.current[keyPath: keyPath] = $0 })
     }
 
-    private func fontPicker(_ title: String, system: String, choices: [String], selection: Binding<String?>) -> some View {
-        Picker(title, selection: selection) {
-            Text(system).tag(String?.none)
-            ForEach(choices, id: \.self) { family in
-                Text(family).font(.custom(family, size: 13)).tag(Optional(family))
-            }
-            // A theme from elsewhere may name a font this Mac does not have.
-            if let missing = selection.wrappedValue, !choices.contains(missing) {
-                Text("\(missing) (설치 안 됨)").tag(Optional(missing))
+    /// The fonts as cards written in themselves.
+    private func fontChoices(_ title: String, system: String, choices: [String], selection: Binding<String?>, mono: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.ui(.body, weight: .medium))
+            HStack(spacing: 8) {
+                fontCard(nil, label: system, selection: selection, mono: mono)
+                ForEach(choices, id: \.self) { family in
+                    fontCard(family, label: family, selection: selection, mono: mono)
+                }
+                // A theme from elsewhere may name a font this Mac does not have.
+                if let missing = selection.wrappedValue, !choices.contains(missing) {
+                    fontCard(missing, label: "\(missing) (설치 안 됨)", selection: selection, mono: mono)
+                }
             }
         }
+    }
+
+    private func fontCard(_ family: String?, label: String, selection: Binding<String?>, mono: Bool) -> some View {
+        let selected = selection.wrappedValue == family
+        return Button {
+            selection.wrappedValue = family
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(mono ? "/var/www 2.8 KB" : "가나다 Aa")
+                    .font(family.map { .custom($0, size: 15) } ?? .system(size: 15, design: mono ? .monospaced : .default))
+                Text(label).font(.ui(.caption)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? Palette.selection : Palette.panel, in: .rect(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Color.themeAccent : Palette.line, lineWidth: selected ? 1.5 : 1))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 
     private func importTheme() {
@@ -291,10 +500,10 @@ private struct PresetCard: View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
                 if theme.colors.background == nil {
-                    // The system theme: half light, half dark.
+                    // The system theme: 종이 by day, 먹 by night.
                     HStack(spacing: 0) {
-                        miniature(background: .init(white: 0.93), panel: .white, line: .init(white: 0.85), text: .init(white: 0.1))
-                        miniature(background: .init(white: 0.08), panel: .init(white: 0.13), line: .init(white: 0.22), text: .init(white: 0.9))
+                        miniature(background: Color(themeHex: "#ECEEF2")!, panel: .white, line: Color(themeHex: "#DCE0E6")!, text: Color(themeHex: "#14171D")!)
+                        miniature(background: Color(themeHex: "#0E1014")!, panel: Color(themeHex: "#15181E")!, line: Color(themeHex: "#272C35")!, text: Color(themeHex: "#E6E8EC")!)
                     }
                 } else {
                     miniature(
@@ -305,10 +514,10 @@ private struct PresetCard: View {
                     )
                 }
             }
-            .frame(height: 54)
-            .clipShape(.rect(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(isSelected ? Color.themeAccent : Color.secondary.opacity(0.3), lineWidth: isSelected ? 2 : 1))
-            Text(theme.name).fontWeight(isSelected ? .semibold : .regular)
+            .frame(height: 56)
+            .clipShape(.rect(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(isSelected ? Color.themeAccent : Palette.line, lineWidth: isSelected ? 2 : 1))
+            Text(theme.name).font(.ui(.callout, weight: isSelected ? .semibold : .regular))
             Text(subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
         }
         .contentShape(.rect)
@@ -337,16 +546,16 @@ struct ThemePreview: View {
     private var store: ThemeStore { .shared }
 
     private let rows: [(name: String, size: String, symbol: String, hidden: Bool)] = [
-        ("assets", "—", "folder.fill", false), ("nginx.conf", "2.8 KB", "doc.text", false),
+        ("assets", "—", "folder", false), ("nginx.conf", "2.8 KB", "doc.text", false),
         ("hero.png", "2.1 MB", "photo", false), ("promo.mp4", "48.2 MB", "film", false),
         (".htaccess", "312 B", "doc", true), ("db-2026-10-21.sql.gz", "1.2 GB", "archivebox", false),
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("미리보기").font(.ui(.headline))
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel("미리보기")
             HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("서버").font(.ui(.caption2)).foregroundStyle(.secondary)
                     Label("prod-web", systemImage: "server.rack").foregroundStyle(SavedSite.Tag.prod.color)
                     Label("dev-api", systemImage: "server.rack")
@@ -356,54 +565,53 @@ struct ThemePreview: View {
                 }
                 .font(.ui(.caption))
                 .padding(8)
-                .frame(width: 104, alignment: .leading)
-                .background(Palette.background)
-                Divider()
+                .frame(width: 108, alignment: .leading)
+                .background(Palette.panel2)
+                Rectangle().fill(Palette.line).frame(width: 1)
                 VStack(spacing: 0) {
                     HStack(spacing: 5) {
                         Text("prod-web").font(.ui(.caption, weight: .bold)).foregroundStyle(SavedSite.Tag.prod.color)
                         TagChip(tag: .prod)
-                        Text("/var/www/site").font(.themeMono(.caption)).foregroundStyle(.secondary).lineLimit(1)
                         Spacer(minLength: 0)
                     }
-                    .padding(6)
-                    .background(Palette.panel2)
-                    .overlay(alignment: .top) { SavedSite.Tag.prod.color.frame(height: 2) }
-                    Divider()
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    Text("/var/www/site").font(.themeMono(.caption2)).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
                     ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                         if !row.hidden || store.current.list.showHidden {
                             HStack(spacing: 6) {
                                 Image(systemName: row.symbol)
-                                    .foregroundStyle(index == 1 ? Color.white : row.symbol == "folder.fill" ? Color.themeAccent : .secondary)
+                                    .foregroundStyle(row.symbol == "folder" ? Color.themeAccent : .secondary)
                                     .frame(width: 14)
                                 Text(row.name).lineLimit(1)
                                 Spacer(minLength: 4)
-                                Text(row.size).font(.themeMono(.caption))
-                                    .foregroundStyle(index == 1 ? Color.white.opacity(0.85) : .secondary)
+                                Text(row.size).font(.themeMono(.caption2)).foregroundStyle(.secondary)
                             }
                             .font(.ui(.caption))
-                            .foregroundStyle(index == 1 ? Color.white : .primary)
                             .padding(.horizontal, 6)
-                            .padding(.vertical, 2 + store.rowPadding)
-                            .background(index == 1 ? Color.themeAccent : .clear, in: .rect(cornerRadius: 4))
-                            .padding(.horizontal, 3)
+                            .padding(.vertical, 3 + store.rowPadding)
+                            .background(index == 1 ? Palette.selection : .clear, in: .rect(cornerRadius: 5))
+                            .padding(.horizontal, 4)
                         }
                     }
                     Spacer(minLength: 6)
                     HStack {
                         Button("편집하기") {}
+                            .buttonStyle(PanelButtonStyle(prominent: true))
                         Button("dev-api에 복사") {}
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PanelButtonStyle())
                     }
-                    .controlSize(.small)
                     .padding(8)
                 }
-                .padding(.top, 0)
                 .background(Palette.panel)
             }
-            .frame(width: 330, height: 300)
-            .clipShape(.rect(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
+            .frame(height: 300)
+            .background(Palette.background)
+            .clipShape(.rect(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Palette.line))
             Text("⌘K 이동 · 연결 · 명령").font(.ui(.caption)).foregroundStyle(.secondary)
         }
         .allowsHitTesting(false)
@@ -418,69 +626,68 @@ struct KeySettings: View {
     private var keymap: Keymap { .shared }
 
     var body: some View {
-        Form {
-            Section("기본 배열") {
-                HStack(spacing: 12) {
-                    ForEach(KeyLayout.allCases) { layout in
-                        let selected = keymap.layout == layout
-                        Button {
-                            keymap.layout = layout
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(layout.title).fontWeight(selected ? .semibold : .regular)
-                                Text(layout.subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                            .background(selected ? Color.themeAccent.opacity(0.12) : .clear, in: .rect(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Color.themeAccent : Color.secondary.opacity(0.3), lineWidth: selected ? 2 : 1))
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            Section {
-                ForEach(PaneAction.allCases) { action in
-                    HStack(spacing: 8) {
-                        Text(action.title)
-                        Spacer()
-                        if recording != action, let clash = keymap.clash(for: action) {
-                            Text("겹침 · \(clash)")
-                                .font(.ui(.caption))
-                                .foregroundStyle(.orange)
-                        }
-                        if keymap.isCustom(action) {
-                            Text("사용자 지정")
-                                .font(.ui(.caption))
-                                .foregroundStyle(Color.themeAccent)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsGroup("기본 배열") {
+                    HStack(spacing: 10) {
+                        ForEach(KeyLayout.allCases) { layout in
+                            let selected = keymap.layout == layout
                             Button {
-                                keymap.set(nil, for: action)
+                                keymap.layout = layout
                             } label: {
-                                Image(systemName: "arrow.uturn.backward")
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(layout.title).font(.ui(.body, weight: selected ? .semibold : .regular))
+                                    Text(layout.subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(selected ? Palette.selection : Palette.panel, in: .rect(cornerRadius: 9))
+                                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(selected ? Color.themeAccent : Palette.line, lineWidth: selected ? 1.5 : 1))
+                                .contentShape(.rect)
                             }
-                            .buttonStyle(.borderless)
-                            .help("\(keymap.layout.title) 기본값으로")
-                        }
-                        Button {
-                            recording == action ? stopRecording() : startRecording(action)
-                        } label: {
-                            Text(recording == action ? "키를 누르세요…" : keymap.combo(for: action).description)
-                                .font(.themeMono(.body))
-                                .frame(minWidth: 110)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
-            } header: {
-                Text("단축키 (눌러서 바꾸기)")
-            } footer: {
-                Text("단축키 칸을 누른 뒤 원하는 키를 누르면 바뀌어요. Esc로 취소. ⌘·⌃ 조합과 F 키는 메뉴에도 보이고, Space · ↵ · Tab 같은 키는 파일 목록에서만 들어요.")
-                    .font(.ui(.caption))
-                    .foregroundStyle(.secondary)
+                SettingsGroup("단축키 (눌러서 바꾸기)", footer: "단축키 칸을 누른 뒤 원하는 키를 누르면 바뀌어요. Esc로 취소. ⌘·⌃ 조합과 F 키는 메뉴에도 보이고, Space · ↵ · Tab 같은 키는 파일 목록에서만 들어요.") {
+                    ForEach(PaneAction.allCases) { action in
+                        HStack(spacing: 8) {
+                            Text(action.title).font(.ui(.body))
+                            Spacer()
+                            if recording != action, let clash = keymap.clash(for: action) {
+                                Badge("겹침 · \(clash)", color: .orange)
+                            }
+                            if keymap.isCustom(action) {
+                                Badge("사용자 지정", color: .themeAccent)
+                                Button {
+                                    keymap.set(nil, for: action)
+                                } label: {
+                                    Image(systemName: "arrow.uturn.backward")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("\(keymap.layout.title) 기본값으로")
+                            }
+                            Button {
+                                recording == action ? stopRecording() : startRecording(action)
+                            } label: {
+                                Text(recording == action ? "키를 누르세요…" : keymap.combo(for: action).description)
+                                    .font(.themeMono(.body))
+                                    .foregroundStyle(recording == action ? Color.themeAccent : Palette.text)
+                                    .frame(minWidth: 120)
+                                    .padding(.vertical, 5)
+                                    .background(recording == action ? Palette.selection : Palette.panel2, in: .rect(cornerRadius: 6))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(recording == action ? Color.themeAccent : Palette.line, lineWidth: recording == action ? 1.5 : 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        if action != PaneAction.allCases.last {
+                            Rectangle().fill(Palette.line).frame(height: 1)
+                        }
+                    }
+                }
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 620, height: 620)
+        .scrollIndicators(.never)
         .onDisappear(perform: stopRecording)
     }
 
@@ -507,124 +714,103 @@ struct KeySettings: View {
 
 struct SyncSettings: View {
     let sync: SettingsSync
-    var height: CGFloat = 700
+    var height: CGFloat?
     @AppStorage("sidebar.showsICloudDrive") private var showsICloudDrive = true
     @AppStorage("panes.showsCloudBadges") private var showsCloudBadges = true
 
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 12) {
-                    Image(systemName: sync.isEnabled ? "icloud.fill" : "icloud.slash")
-                        .font(.ui(.title))
-                        .foregroundStyle(sync.isEnabled ? Color.themeAccent : .secondary)
-                        .frame(width: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("iCloud로 설정 동기화").font(.ui(.headline))
-                        Text(status).font(.ui(.callout)).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+                    if sync.isEnabled {
+                        conflicts
                     }
-                    Spacer()
-                    Button(sync.isSyncing ? "동기화 중…" : "지금 동기화") { sync.syncNow() }
-                        .disabled(!sync.isEnabled || sync.isSyncing)
-                    Toggle("iCloud로 설정 동기화", isOn: Binding(get: { sync.isEnabled }, set: { sync.setEnabled($0) }))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
-                ForEach(sync.errors, id: \.self) { error in
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                }
-            }
-            if sync.isEnabled {
-                conflicts
-            }
-            if let resolution = sync.resolution {
-                Label(resolution, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
-            Section("무엇을 동기화할까요") {
-                ForEach(SettingsSync.Item.allCases) { item in
-                    Toggle(isOn: Binding(get: { sync.items.contains(item) }, set: { sync.set(item, on: $0) })) {
-                        Text(item.title)
-                        Text(item.subtitle)
+                    if let resolution = sync.resolution {
+                        Label(resolution, systemImage: "checkmark.circle.fill")
+                            .font(.ui(.callout))
+                            .foregroundStyle(Color(light: 0x0F7C5A, dark: 0x3CC48E))
                     }
-                }
-                Toggle(isOn: .constant(false)) {
-                    HStack {
-                        Text("비밀번호와 키 암호")
-                        Text("서명된 앱 필요")
-                            .font(.ui(.caption2))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.quaternary, in: .capsule)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel("무엇을 동기화할까요")
+                        ForEach(SettingsSync.Item.allCases) { item in
+                            SettingSwitch(title: item.title, detail: item.subtitle, isOn: Binding(get: { sync.items.contains(item) }, set: { sync.set(item, on: $0) }))
+                                .padding(12)
+                                .card()
+                        }
+                        SettingSwitch(title: "비밀번호와 키 암호", detail: "iCloud 키체인으로 나눠요. Developer ID로 서명하고 키체인 공유 권한을 받은 앱에서만 돼요.", badge: "서명된 앱 필요", isOn: .constant(false))
+                            .disabled(true)
+                            .padding(12)
+                            .card()
                     }
-                    Text("iCloud 키체인으로 나눠요. Developer ID로 서명하고 키체인 공유 권한을 받은 앱에서만 돼요.")
-                }
-                .disabled(true)
-            }
-            .disabled(!sync.isEnabled)
-            Section("저장 방식") {
-                method("iCloud Drive 폴더", recommended: true, detail: "설정을 JSON 파일로 iCloud Drive에 둬요. 개발자 계정 없이 되고, 파일이라 직접 열어 볼 수 있어요.", place: "~/iCloud Drive/Bottari/", available: true)
-                method("CloudKit", recommended: false, detail: "Apple 서버의 앱 전용 저장소예요. 바뀐 내용이 더 빨리 퍼지지만, Apple Developer 계정과 앱 서명이 필요해서 아직 쓰지 않아요.", place: "iCloud 비공개 데이터베이스", available: false)
-            }
-            Section("파일 창의 iCloud Drive") {
-                Toggle("사이드바에 iCloud Drive 보이기", isOn: $showsICloudDrive)
-                Toggle("파일 옆에 iCloud 상태 표시", isOn: $showsCloudBadges)
-            }
-            if !sync.devices.isEmpty {
-                Section("같은 설정을 쓰는 Mac") {
-                    ForEach(sync.devices) { device in
-                        HStack {
-                            Image(systemName: device.isLaptop ? "laptopcomputer" : "desktopcomputer")
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(device.name)
-                                Text("\(Self.time(device.lastSync)) 동기화").font(.ui(.caption)).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if device.id == sync.devices.last?.id {
-                                Text("이 Mac").font(.ui(.caption)).foregroundStyle(.secondary)
-                            }
+                    .disabled(!sync.isEnabled)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel("저장 방식")
+                        HStack(alignment: .top, spacing: 10) {
+                            method("iCloud Drive 폴더", recommended: true, detail: "설정을 JSON 파일로 iCloud Drive에 둬요. 개발자 계정 없이 되고, 파일이라 직접 열어 볼 수 있어요.", place: "~/iCloud Drive/Bottari/", available: true)
+                            method("CloudKit", recommended: false, detail: "Apple 서버의 앱 전용 저장소예요. 바뀐 내용이 더 빨리 퍼지지만, Apple Developer 계정과 앱 서명이 필요해서 아직 쓰지 않아요.", place: "iCloud 비공개 데이터베이스", available: false)
                         }
                     }
-                }
-            }
-            Section {
-                Text(tree)
-                    .font(.themeMono(.callout))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                HStack {
-                    Button("Bottari에서 이 폴더 열기") {
-                        if let folder = sync.folder {
-                            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                            NotificationCenter.default.post(name: .openOnMac, object: folder.path)
-                        }
+                    SettingsGroup("파일 창의 iCloud Drive") {
+                        SettingSwitch(title: "사이드바에 iCloud Drive 보이기", isOn: $showsICloudDrive)
+                        SettingSwitch(title: "파일 옆에 iCloud 상태 표시", isOn: $showsCloudBadges)
                     }
-                    .disabled(sync.folder == nil || !sync.isEnabled)
                 }
-            } header: {
-                Text("iCloud Drive에 저장되는 파일")
-            } footer: {
-                Text("Finder에서 직접 열어 볼 수 있어요. 지워도 다음 동기화 때 다시 만들어요.")
-                    .font(.ui(.caption))
-                    .foregroundStyle(.secondary)
             }
-            Section {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("비밀번호는 파일에 쓰지 않아요")
+            .scrollIndicators(.never)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    devicesCard
+                    filesCard
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("비밀번호는 파일에 쓰지 않아요").font(.ui(.callout, weight: .semibold))
                         Text("JSON에는 서버 주소와 설정만 들어가요. 비밀번호와 키 암호는 이 Mac의 키체인에만 있어요.")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } icon: {
-                    Image(systemName: "lock.fill")
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .well()
                 }
             }
+            .scrollIndicators(.never)
+            .frame(width: 330)
         }
-        .formStyle(.grouped)
-        .frame(width: 640, height: height)
+        .frame(height: height)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "icloud")
+                    .font(.system(size: 18))
+                    .foregroundStyle(sync.isEnabled ? Color.themeAccent : .secondary)
+                    .frame(width: 44, height: 44)
+                    .background(Palette.panel, in: .rect(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.line))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("iCloud로 설정 동기화").font(.ui(.body, weight: .semibold))
+                    Text(status).font(.ui(.caption)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("iCloud로 설정 동기화", isOn: Binding(get: { sync.isEnabled }, set: { sync.setEnabled($0) }))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                Button(sync.isSyncing ? "동기화 중…" : "지금 동기화") { sync.syncNow() }
+                    .buttonStyle(PanelButtonStyle())
+                    .fixedSize()
+                    .disabled(!sync.isEnabled || sync.isSyncing)
+            }
+            ForEach(sync.errors, id: \.self) { error in
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.ui(.caption))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(16)
+        .well(radius: 10)
     }
 
     @ViewBuilder
@@ -632,28 +818,92 @@ struct SyncSettings: View {
         ForEach(SettingsSync.Item.allCases) { item in
             let found = sync.conflicts.filter { $0.item == item }
             if !found.isEmpty {
-                Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("\(item.subject) 두 Mac에서 서로 다르게 바뀌었어요").font(.ui(.body, weight: .semibold))
                     ForEach(found) { conflict in
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(conflict.title).fontWeight(.semibold)
-                            Text(conflict.detail).font(.ui(.callout)).foregroundStyle(.secondary)
-                            HStack {
+                            Text("\(conflict.title) \(conflict.detail)")
+                                .font(.themeMono(.caption))
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
                                 Button("이 Mac 것 유지") { sync.resolve(conflict, .keepMine) }
+                                    .buttonStyle(PanelButtonStyle(prominent: true))
                                 Button("\(sync.otherMacName) 것 쓰기") { sync.resolve(conflict, .useTheirs) }
+                                    .buttonStyle(PanelButtonStyle())
                                 if conflict.canKeepBoth {
                                     Button("둘 다 남기기") { sync.resolve(conflict, .keepBoth) }
+                                        .buttonStyle(PanelButtonStyle())
                                 }
                             }
-                            .controlSize(.small)
+                            .fixedSize()
                         }
-                        .padding(.vertical, 2)
                     }
-                } header: {
-                    Label("\(item.subject) 두 Mac에서 서로 다르게 바뀌었어요", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.07), in: .rect(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.orange.opacity(0.45)))
             }
         }
+    }
+
+    private var devicesCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("같은 설정을 쓰는 Mac").font(.ui(.body, weight: .semibold))
+            if sync.devices.isEmpty {
+                Text("동기화를 켜면 이 Mac과 다른 Mac이 여기에 보여요")
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(sync.devices.reversed()) { device in
+                HStack(spacing: 10) {
+                    Image(systemName: device.isLaptop ? "laptopcomputer" : "desktopcomputer")
+                        .frame(width: 22)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(device.name).font(.ui(.callout, weight: .semibold))
+                        Text("\(Self.time(device.lastSync)) 동기화").font(.ui(.caption)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if device.id == sync.devices.last?.id {
+                        Badge("이 Mac", color: .themeAccent)
+                    }
+                }
+                .padding(10)
+                .well()
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private var filesCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("iCloud Drive에 저장되는 파일").font(.ui(.body, weight: .semibold))
+            Text(tree)
+                .font(.themeMono(.caption))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .well()
+            Text("Finder에서 직접 열어 볼 수 있어요. 지워도 다음 동기화 때 다시 만들어요.")
+                .font(.ui(.caption))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Bottari에서 이 폴더 열기") {
+                if let folder = sync.folder {
+                    try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    NotificationCenter.default.post(name: .openOnMac, object: folder.path)
+                }
+            }
+            .buttonStyle(.link)
+            .font(.ui(.caption))
+            .disabled(sync.folder == nil || !sync.isEnabled)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
     }
 
     private var status: String {
@@ -674,23 +924,21 @@ struct SyncSettings: View {
     }
 
     private func method(_ title: String, recommended: Bool, detail: String, place: String, available: Bool) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: available ? "largecircle.fill.circle" : "circle")
-                .foregroundStyle(available ? Color.themeAccent : .secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(title).fontWeight(.medium)
-                    if recommended {
-                        Text("추천").font(.ui(.caption2)).padding(.horizontal, 5).padding(.vertical, 1)
-                            .foregroundStyle(Color.themeAccent)
-                            .background(Color.themeAccent.opacity(0.12), in: .capsule)
-                    }
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(title).font(.ui(.callout, weight: .semibold))
+                if recommended {
+                    Badge("추천", color: .themeAccent)
                 }
-                Text(detail).font(.ui(.caption)).foregroundStyle(.secondary)
-                Text(place).font(.themeMono(.caption)).foregroundStyle(.secondary)
             }
+            Text(detail).font(.ui(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(place).font(.themeMono(.caption2)).foregroundStyle(.secondary)
         }
-        .opacity(available ? 1 : 0.55)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(available ? Palette.selection : Palette.panel, in: .rect(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(available ? Color.themeAccent : Palette.line, lineWidth: available ? 1.5 : 1))
+        .opacity(available ? 1 : 0.6)
     }
 
     static func time(_ date: Date) -> String {

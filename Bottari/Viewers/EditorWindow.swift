@@ -33,24 +33,36 @@ private struct EditorView: View {
     @Bindable var model: EditorModel
     @State private var confirmingSave = false
     @State private var showsDiff = false
-    @State private var showsCommand = false
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-            Divider()
-            if let conflict = model.conflict {
-                conflictBanner(conflict)
-                Divider()
+            header
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 0) {
+                    if let conflict = model.conflict {
+                        conflictBanner(conflict)
+                        Rectangle().fill(Palette.line).frame(height: 1)
+                    }
+                    if let notice = model.notice {
+                        noticeBanner(notice)
+                        Rectangle().fill(Palette.line).frame(height: 1)
+                    }
+                    content
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                    statusBar
+                }
+                .overlay(alignment: .top) {
+                    if model.site?.tag == .prod {
+                        Rectangle().fill(SavedSite.Tag.prod.color).frame(height: 3)
+                    }
+                }
+                .card()
+                sidePanel
+                    .frame(width: 300)
             }
-            if let notice = model.notice {
-                noticeBanner(notice)
-                Divider()
-            }
-            content
-            Divider()
-            statusBar
+            .padding([.horizontal, .bottom], 12)
         }
+        .background(Palette.background)
         .navigationTitle(model.item.name)
         .background(WindowCloseGuard(isDirty: model.isDirty, save: { await save() }))
         .confirmationDialog("운영 서버의 파일을 저장할까요?", isPresented: $confirmingSave) {
@@ -73,36 +85,41 @@ private struct EditorView: View {
         }
     }
 
-    private var toolbar: some View {
+    private var placeName: String {
+        model.site?.name ?? (model.provider.isLocal ? "Mac" : model.provider.displayName)
+    }
+
+    private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.provider.isLocal ? "laptopcomputer" : "server.rack")
-                .foregroundStyle(model.site?.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
-            Text(model.provider.displayName)
-                .font(.ui(.headline))
-            if let tag = model.site?.tag {
-                TagChip(tag: tag)
+            BackButton(title: "목록으로") { NSApp.keyWindow?.performClose(nil) }
+                .buttonStyle(PanelButtonStyle())
+                .fixedSize()
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(model.site?.tag?.color ?? Color.secondary.opacity(0.4))
+                    .frame(width: 3, height: 16)
+                Text(model.item.name).font(.ui(.callout, weight: .semibold))
+                Text(placeName).font(.themeMono(.caption)).foregroundStyle(.secondary)
+                if model.isDirty {
+                    Circle().fill(Palette.text.opacity(0.7)).frame(width: 6, height: 6)
+                        .help("저장 안 된 변경")
+                }
             }
-            Text(model.item.path.string)
-                .font(.themeMono(.callout))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.head)
-            Spacer()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Palette.panel, in: .rect(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line))
             if model.isReadOnly {
                 Label("읽기 전용", systemImage: "lock.fill")
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
-            if model.canRunCommands {
-                Button {
-                    showsCommand.toggle()
-                } label: {
-                    Label("저장한 뒤 실행", systemImage: model.postSaveCommand.isEmpty ? "terminal" : "terminal.fill")
-                }
-                .popover(isPresented: $showsCommand) { commandPopover }
-            }
+            Spacer()
             Button("외부 에디터로 열기") {
                 ExternalEdits.shared.start(item: model.item, provider: model.provider, site: model.site)
             }
+            .buttonStyle(PanelButtonStyle())
+            .fixedSize()
             .disabled(model.phase != .ready)
             Button {
                 Task { await save() }
@@ -110,30 +127,92 @@ private struct EditorView: View {
                 if model.isSaving {
                     ProgressView().controlSize(.small)
                 } else {
-                    Text("저장")
+                    Text("저장 ⌘S")
                 }
             }
+            .buttonStyle(PanelButtonStyle(prominent: true))
+            .fixedSize()
             .keyboardShortcut("s")
             .disabled(model.phase != .ready || model.isReadOnly || model.isSaving)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(12)
     }
 
-    private var commandPopover: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("저장한 뒤 서버에서 실행")
-                .font(.ui(.headline))
-            TextField("예: nginx -t", text: $model.postSaveCommand)
-                .font(.themeMono(.body))
-                .frame(width: 320)
-            Text("명령이 실패하면 방금 올린 파일을 이전 버전으로 되돌려요. 이 파일에만 적용돼요.")
-                .font(.ui(.caption))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// What saving does, the command after it, and other files open elsewhere.
+    private var sidePanel: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("저장할 때 일어나는 일").font(.ui(.body, weight: .semibold))
+                    step("원격 수정 시각 · 크기 확인", model.remoteModified.map { "연 시각 \($0.formatted(date: .omitted, time: .shortened)) 와 비교" })
+                    step("임시 이름으로 업로드", model.item.path.partialWritePath.string)
+                    step("원래 이름으로 바꾸기", "rename 이라 중간에 끊겨도 원본은 그대로")
+                    if !model.postSaveCommand.isEmpty {
+                        step("검사 명령 실행", model.postSaveCommand)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .card()
+
+                if model.canRunCommands {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("저장한 뒤 명령 실행").font(.ui(.body, weight: .semibold))
+                        TextField("예: sudo nginx -t && sudo systemctl reload nginx", text: $model.postSaveCommand, axis: .vertical)
+                            .lineLimit(2...4)
+                            .designField(mono: true)
+                        Text("검사가 실패하면 방금 올린 파일을 이전 버전으로 되돌려요. 이 파일에만 적용돼요.")
+                            .font(.ui(.caption))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .card()
+                }
+
+                if !ExternalEdits.shared.sessions.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("외부 에디터에서 편집 중").font(.ui(.body, weight: .semibold))
+                        ForEach(ExternalEdits.shared.sessions) { session in
+                            HStack(spacing: 8) {
+                                StatusDot(on: !session.blockedByServerChange, color: session.blockedByServerChange ? .orange : Color(light: 0x0F7C5A, dark: 0x3CC48E))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(session.item.name).font(.ui(.callout, weight: .semibold))
+                                    Text("\(session.provider.displayName) · \(session.status)")
+                                        .font(.themeMono(.caption2))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .well()
+                        }
+                        Text("임시 폴더에 받아 두고, 저장을 감지하면 자동으로 올려요.")
+                            .font(.ui(.caption))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .card()
+                }
+            }
         }
-        .padding(14)
-        .frame(width: 350)
+        .scrollIndicators(.never)
+    }
+
+    private func step(_ title: String, _ detail: String?) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .strokeBorder(Palette.line, lineWidth: 1.5)
+                .frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.ui(.callout))
+                if let detail {
+                    Text(detail).font(.themeMono(.caption2)).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -183,7 +262,7 @@ private struct EditorView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.08))
+        .background(Color.orange.opacity(0.08))
     }
 
     private func noticeBanner(_ notice: String) -> some View {
@@ -204,24 +283,22 @@ private struct EditorView: View {
 
     private var statusBar: some View {
         HStack(spacing: 14) {
+            Text("\(placeName):\(model.item.path.string)")
+                .lineLimit(1)
+                .truncationMode(.head)
             Text(model.format.label)
-            Text("줄 \(model.cursor.line), 칸 \(model.cursor.column)")
-                .monospacedDigit()
             if let language = model.language {
                 Text(language)
             }
             Spacer()
-            if model.isDirty {
-                Text("저장 안 됨")
-                    .foregroundStyle(.orange)
-            } else if let savedAt = model.savedAt {
-                Text("저장됨 \(savedAt.formatted(date: .omitted, time: .shortened))")
-            }
+            Text((model.isDirty ? "저장 안 된 변경 · " : model.savedAt.map { "저장됨 \($0.formatted(date: .omitted, time: .shortened)) · " } ?? "") + "줄 \(model.cursor.line), 칸 \(model.cursor.column)")
+                .foregroundStyle(model.isDirty ? Color.orange : .secondary)
         }
-        .font(.ui(.caption))
+        .font(.themeMono(.caption))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Palette.panel2)
     }
 }
 

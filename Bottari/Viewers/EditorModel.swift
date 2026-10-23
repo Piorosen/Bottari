@@ -51,7 +51,8 @@ final class EditorModel {
     /// The text as last opened or saved: the base for merging and for undoing a failed check.
     @ObservationIgnored private var savedText = ""
     @ObservationIgnored private var savedData = Data()
-    @ObservationIgnored private var remoteModified: Date?
+    /// When the server's copy was last changed, as of opening or the last save.
+    @ObservationIgnored private(set) var remoteModified: Date?
     @ObservationIgnored private var remoteSize: Int64?
     private let commandKey: String
 

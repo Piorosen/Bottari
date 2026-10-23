@@ -183,18 +183,20 @@ private struct GalleryView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider()
+            Rectangle().fill(Palette.line).frame(height: 1)
             HStack(spacing: 0) {
-                imageArea
+                VStack(spacing: 0) {
+                    imageArea
+                    filmstrip
+                }
                 if model.showsInfo, let item = model.current {
-                    Divider()
+                    Rectangle().fill(Palette.line).frame(width: 1)
                     info(item)
-                        .frame(width: 240)
+                        .frame(width: 290)
                 }
             }
-            Divider()
-            filmstrip
         }
+        .background(Palette.background)
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(.leftArrow) { model.step(-1); return .handled }
@@ -204,49 +206,59 @@ private struct GalleryView: View {
         .navigationTitle(model.current?.name ?? "이미지")
     }
 
+    private var placeName: String {
+        model.site?.name ?? (model.provider.isLocal ? "Mac" : model.provider.displayName)
+    }
+
     private var toolbar: some View {
         HStack(spacing: 10) {
-            Image(systemName: model.provider.isLocal ? "laptopcomputer" : "server.rack")
-                .foregroundStyle(model.site?.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
-            Text(model.provider.displayName)
-                .font(.ui(.headline))
+            BackButton(title: "목록으로", action: close)
+                .buttonStyle(PanelButtonStyle())
+                .fixedSize()
             if let tag = model.site?.tag {
-                TagChip(tag: tag)
+                if tag == .prod { TagChip(tag: tag) } else { TagChip.outlined(tag) }
             }
-            Text(model.current?.path.parent?.string ?? "")
+            Text("\(placeName):\(model.current?.path.parent?.string ?? "")")
                 .font(.themeMono(.callout))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.head)
+            Text("\(model.index + 1) / \(model.items.count)")
+                .font(.themeMono(.callout))
+                .foregroundStyle(.secondary)
             Spacer()
             if let status = model.status {
                 Text(status)
-                    .font(.ui(.callout))
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
-            Text("\(model.index + 1) / \(model.items.count)")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-            Picker("크기", selection: $model.actualSize) {
-                Text("맞춤").tag(false)
-                Text("100%").tag(true)
+            HStack(spacing: 0) {
+                Button("맞춤") { model.actualSize = false }
+                    .buttonStyle(ChoiceButtonStyle(isOn: !model.actualSize))
+                Button("100%") { model.actualSize = true }
+                    .buttonStyle(ChoiceButtonStyle(isOn: model.actualSize))
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .fixedSize()
-            Toggle(isOn: $model.showsInfo) {
-                Image(systemName: "info.circle")
+            Button("정보") { model.showsInfo.toggle() }
+                .buttonStyle(ChoiceButtonStyle(isOn: model.showsInfo))
+                .fixedSize()
+            if let item = model.current {
+                Button("보따리에 담기") {
+                    BottariBundle.shared.add([item], from: model.provider, site: model.site)
+                }
+                .buttonStyle(PanelButtonStyle(prominent: true))
+                .fixedSize()
+                .disabled(BottariBundle.shared.entries.contains { $0.item.path == item.path && $0.provider.locationID == model.provider.locationID })
             }
-            .toggleStyle(.button)
-            .help("정보")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Palette.panel2)
     }
 
     private var imageArea: some View {
         ZStack {
-            Color.black.opacity(0.92)
+            Color(light: 0x0E1014, dark: 0x0A0C10)
             if let image = model.image {
                 if model.actualSize, let pixels = model.pixelSize {
                     ScrollView([.horizontal, .vertical]) {
@@ -260,7 +272,7 @@ private struct GalleryView: View {
                         .resizable()
                         .interpolation(.high)
                         .scaledToFit()
-                        .padding(12)
+                        .padding(40)
                 }
             } else {
                 ProgressView()
@@ -271,7 +283,12 @@ private struct GalleryView: View {
                 Spacer()
                 arrow("chevron.right", enabled: model.index < model.items.count - 1) { model.step(1) }
             }
-            .padding(12)
+            .padding(16)
+            Text("← → 넘기기 · Space 닫기")
+                .font(.ui(.caption))
+                .foregroundStyle(.white.opacity(0.55))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.colorScheme, .dark)
@@ -280,9 +297,10 @@ private struct GalleryView: View {
     private func arrow(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.ui(.title2, weight: .semibold))
-                .frame(width: 36, height: 36)
-                .background(.ultraThinMaterial, in: .circle)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.1), in: .circle)
         }
         .buttonStyle(.plain)
         .opacity(enabled ? 1 : 0)
@@ -290,41 +308,94 @@ private struct GalleryView: View {
     }
 
     private func info(_ item: FileItem) -> some View {
-        Form {
-            LabeledContent("이름", value: item.name)
-            if let pixels = model.pixelSize {
-                LabeledContent("크기", value: "\(Int(pixels.width)) × \(Int(pixels.height))")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.name).font(.ui(.title3, weight: .semibold))
+                    Text([item.formattedSize, item.path.pathExtension.uppercased()].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.themeMono(.caption))
+                        .foregroundStyle(.secondary)
+                }
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    if let pixels = model.pixelSize {
+                        row("해상도", "\(Int(pixels.width)) × \(Int(pixels.height))")
+                    }
+                    row("수정", item.formattedModified)
+                    if let permissions = item.permissionString {
+                        row("권한", [permissions, item.owner].compactMap { $0 }.joined(separator: " "))
+                    }
+                    row("경로", item.path.string)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionLabel("불러오는 방식")
+                    loadRow("썸네일", "\(model.thumbnails.count) / \(model.items.count)장", done: model.thumbnails[item.path] != nil)
+                    loadRow("원본", model.provider.isLocal ? "이 Mac의 파일" : model.status == nil && model.image != nil ? "받음 · \(item.formattedSize)" : "받는 중", done: model.status == nil && model.image != nil)
+                    if !model.provider.isLocal {
+                        Text("캐시 키는 경로 + 수정 시각 + 크기라서, 서버에서 파일이 바뀌면 자동으로 새로 받아요.")
+                            .font(.ui(.caption))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(12)
+                .well()
             }
-            LabeledContent("용량", value: item.formattedSize)
-            LabeledContent("수정한 날짜", value: item.formattedModified)
-            LabeledContent("위치", value: item.path.parent?.string ?? "/")
+            .padding(16)
         }
-        .formStyle(.grouped)
+        .background(Palette.panel)
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).font(.ui(.caption)).foregroundStyle(.secondary)
+            Text(value).font(.themeMono(.caption)).textSelection(.enabled).lineLimit(3)
+        }
+    }
+
+    private func loadRow(_ label: String, _ value: String, done: Bool) -> some View {
+        HStack {
+            Text(label).font(.ui(.callout))
+            Spacer()
+            Text(value)
+                .font(.themeMono(.caption))
+                .foregroundStyle(done ? Color(light: 0x0F7C5A, dark: 0x3CC48E) : .secondary)
+        }
     }
 
     private var filmstrip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 6) {
+                LazyHStack(spacing: 8) {
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         Button {
                             model.show(index)
                         } label: {
-                            Group {
-                                if let thumbnail = model.thumbnails[item.path] {
-                                    Image(nsImage: thumbnail)
-                                        .resizable()
-                                        .scaledToFill()
-                                } else {
-                                    Image(systemName: "photo")
-                                        .foregroundStyle(.tertiary)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Group {
+                                    if let thumbnail = model.thumbnails[item.path] {
+                                        Image(nsImage: thumbnail)
+                                            .resizable()
+                                            .scaledToFill()
+                                    } else {
+                                        Image(systemName: "photo")
+                                            .foregroundStyle(.tertiary)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                            .background(Palette.panel2)
+                                    }
                                 }
+                                .frame(width: 96, height: 62)
+                                .clipShape(.rect(cornerRadius: 5))
+                                Text(item.name)
+                                    .font(.ui(.caption))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(width: 96, alignment: .leading)
                             }
-                            .frame(width: 64, height: 48)
-                            .clipShape(.rect(cornerRadius: 4))
+                            .padding(6)
+                            .background(Palette.panel, in: .rect(cornerRadius: 8))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .strokeBorder(index == model.index ? Color.themeAccent : .clear, lineWidth: 2)
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(index == model.index ? Color.themeAccent : Palette.line, lineWidth: index == model.index ? 2 : 1)
                             }
                         }
                         .buttonStyle(.plain)
@@ -332,9 +403,10 @@ private struct GalleryView: View {
                         .id(index)
                     }
                 }
-                .padding(8)
+                .padding(12)
             }
-            .frame(height: 64)
+            .frame(height: 112)
+            .background(Palette.background)
             .onChange(of: model.index) {
                 withAnimation { proxy.scrollTo(model.index, anchor: .center) }
             }
