@@ -4,7 +4,8 @@ import BottariTransfer
 import QuickLook
 import SwiftUI
 
-/// A Finder-style list of one folder, with history buttons and a clickable path.
+/// One folder in a card: history, the place's name and tag, a clickable path,
+/// and the files as a list or a grid.
 struct PaneView: View {
     let workspace: Workspace
     let side: PaneSide
@@ -27,31 +28,44 @@ struct PaneView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-                .background(ThemeStore.shared.panel2 ?? .clear)
             if let message = model.errorMessage {
                 ErrorBanner(message: message, dismiss: model.dismissError)
             }
-            Divider()
-            fileTable
-            Divider()
+            Group {
+                switch model.viewMode {
+                case .list: fileTable
+                case .grid: fileGrid
+                }
+            }
+            .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
+                workspace.drop(providers, onto: side)
+            }
+            .overlay {
+                if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
+                    ContentUnavailableView("비어 있어요", systemImage: "folder")
+                }
+            }
+            Rectangle().fill(Palette.line).frame(height: 1)
             footer
-                .background(ThemeStore.shared.panel2 ?? .clear)
         }
         .overlay(alignment: .top) {
             // A PROD pane keeps its warning band even when it is not the active one.
-            Rectangle()
-                .fill(isProd ? SavedSite.Tag.prod.color : isActive ? Color.themeAccent : .clear)
-                .frame(height: isProd ? 3 : 2)
+            if isProd {
+                Rectangle()
+                    .fill(SavedSite.Tag.prod.color)
+                    .frame(height: 3)
+            }
         }
+        .card(highlighted: isActive)
         .overlay {
             if isDropTarget {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.themeAccent, lineWidth: 2)
-                    .background(Color.themeAccent.opacity(0.06))
+                    .background(Color.themeAccent.opacity(0.06), in: .rect(cornerRadius: 10))
                     .allowsHitTesting(false)
             }
         }
-        .frame(minWidth: 360)
+        .frame(minWidth: 340)
         .task { await model.start() }
         .onDisappear {
             Task { await model.disconnect() }
@@ -86,108 +100,143 @@ struct PaneView: View {
         }
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        HStack(spacing: 6) {
-            Button { Task { await model.goBack() } } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(!model.canGoBack)
-            .help("뒤로 (⌫)")
-
-            Button { Task { await model.goForward() } } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(!model.canGoForward)
-            .help("앞으로")
-
-            Menu {
-                Button("이 Mac", systemImage: "laptopcomputer") {
-                    Task { await model.switchProvider(to: LocalFileProvider()) }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                HStack(spacing: 2) {
+                    Button { Task { await model.goBack() } } label: {
+                        Image(systemName: "chevron.left").frame(width: 20, height: 20)
+                    }
+                    .disabled(!model.canGoBack)
+                    .help("뒤로 (⌫)")
+                    Button { Task { await model.goForward() } } label: {
+                        Image(systemName: "chevron.right").frame(width: 20, height: 20)
+                    }
+                    .disabled(!model.canGoForward)
+                    .help("앞으로")
                 }
-                let sites = model.library.sites
-                if !sites.isEmpty {
-                    Section("저장된 연결") {
-                        ForEach(sites) { site in
-                            Button {
-                                Task { await open(site) }
-                            } label: {
-                                Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, systemImage: site.symbol)
-                            }
-                        }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+
+                placeMenu
+
+                if let site = model.site {
+                    if let tag = site.tag {
+                        if tag == .prod { TagChip(tag: tag) } else { TagChip.outlined(tag) }
+                    }
+                    if site.readOnly {
+                        Image(systemName: "lock.fill")
+                            .font(.ui(.caption))
+                            .foregroundStyle(.secondary)
+                            .help("읽기 전용으로 열었어요")
                     }
                 }
-                if model.provider is SFTPFileProvider {
-                    Section("이 서버") {
-                        Button("SSH 터미널 열기", systemImage: "terminal") { workspace.openTerminal(in: side) }
-                        if model.site?.remoteScreen != nil {
-                            Button("원격 화면 열기", systemImage: "display") { workspace.openScreen(in: side) }
-                        }
-                    }
-                }
-                Divider()
-                Button("연결 관리…", systemImage: "list.bullet.rectangle") {
-                    siteManager = SiteManagerRequest(selection: model.site?.id)
-                }
-            } label: {
-                Label(model.provider.displayName, systemImage: model.isLocal ? "laptopcomputer" : "server.rack")
-                    .font(.headline)
-                    .foregroundStyle(isProd ? SavedSite.Tag.prod.color : .primary)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("이 패인에서 열 위치")
-            .padding(.leading, 4)
-            .disabled(model.connectingSite != nil)
+                Text(model.provider.kindLabel)
+                    .font(.themeMono(.caption))
+                    .foregroundStyle(.secondary)
 
-            if let site = model.site {
-                if let tag = site.tag {
-                    TagChip(tag: tag)
-                }
-                if site.readOnly {
-                    Image(systemName: "lock.fill")
+                Spacer(minLength: 6)
+
+                if let site = model.connectingSite {
+                    ProgressView().controlSize(.small)
+                    Text("\(site.name)에 연결하는 중…")
+                        .font(.ui(.caption))
                         .foregroundStyle(.secondary)
-                        .help("읽기 전용으로 열었어요")
+                        .lineLimit(1)
+                } else if model.isLoading {
+                    ProgressView().controlSize(.small)
                 }
+                tools
             }
-
             PathBar(path: model.path) { target in
                 Task { await model.open(target) }
             }
+            .padding(.leading, 4)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
 
-            Spacer(minLength: 8)
-
-            if let site = model.connectingSite {
-                ProgressView().controlSize(.small)
-                Text("\(site.name)에 연결하는 중…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else if model.isLoading {
-                ProgressView().controlSize(.small)
+    /// The place's name, which is also where another place is chosen.
+    private var placeMenu: some View {
+        Menu {
+            Button("이 Mac", systemImage: "laptopcomputer") {
+                Task { await model.switchProvider(to: LocalFileProvider()) }
             }
+            let sites = model.library.sites
+            if !sites.isEmpty {
+                Section("저장된 연결") {
+                    ForEach(sites) { site in
+                        Button {
+                            Task { await open(site) }
+                        } label: {
+                            Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, systemImage: site.symbol)
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("연결 관리…", systemImage: "list.bullet.rectangle") {
+                siteManager = SiteManagerRequest(selection: model.site?.id)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: model.provider.symbol)
+                    .foregroundStyle(isProd ? SavedSite.Tag.prod.color : .secondary)
+                Text(model.provider.displayName)
+                    .font(.ui(.body, weight: .semibold))
+                    .foregroundStyle(isProd ? SavedSite.Tag.prod.color : Palette.text)
+                    .lineLimit(1)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("이 패인에서 열 위치")
+        .disabled(model.connectingSite != nil)
+    }
 
-            Toggle(isOn: $model.showsHiddenFiles) {
+    private var tools: some View {
+        HStack(spacing: 6) {
+            if model.provider is SFTPFileProvider {
+                Button { workspace.openTerminal(in: side) } label: { Image(systemName: "terminal") }
+                    .help("여기서 SSH 터미널 열기 (⌃`)")
+                if model.site?.remoteScreen != nil {
+                    Button { workspace.openScreen(in: side) } label: { Image(systemName: "display") }
+                        .help("원격 화면 열기")
+                }
+            }
+            Button { model.showsHiddenFiles.toggle() } label: {
                 Image(systemName: model.showsHiddenFiles ? "eye" : "eye.slash")
             }
-            .toggleStyle(.button)
+            .buttonStyle(IconButtonStyle(isOn: model.showsHiddenFiles))
             .help("숨김 파일 보기")
-
-            Button { Task { await model.reload() } } label: {
-                Image(systemName: "arrow.clockwise")
+            Button { Task { await model.reload() } } label: { Image(systemName: "arrow.clockwise") }
+                .help("새로고침")
+            HStack(spacing: 0) {
+                ForEach(PaneModel.ViewMode.allCases, id: \.self) { mode in
+                    Button { model.viewMode = mode } label: {
+                        Image(systemName: mode == .list ? "list.bullet" : "square.grid.2x2")
+                    }
+                    .buttonStyle(IconButtonStyle(isOn: model.viewMode == mode))
+                    .help(mode == .list ? "목록으로 보기" : "격자로 보기")
+                }
             }
-            .help("새로고침")
         }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .buttonStyle(IconButtonStyle())
     }
+
+    // MARK: - Files
 
     private var fileTable: some View {
         Table(of: FileItem.self, selection: $model.selection) {
             TableColumn("이름") { item in
-                HStack(spacing: 6) {
-                    FileIcon.image(for: item, isLocal: model.isLocal)
-                        .resizable()
-                        .frame(width: 16, height: 16)
+                HStack(spacing: 8) {
+                    FileGlyph(item: item, isLocal: model.isLocal)
                     if model.renaming == item.id {
                         RenameField(original: item.name, isDirectory: item.isDirectory) { name in
                             Task { await model.rename(item, to: name) }
@@ -198,6 +247,9 @@ struct PaneView: View {
                         Text(item.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        if item.looksSecret {
+                            Badge("비밀값").fixedSize()
+                        }
                         if showsCloudBadges, let cloud = item.cloud, cloud != .downloaded {
                             Image(systemName: cloud == .downloading ? "icloud.and.arrow.down" : "icloud")
                                 .foregroundStyle(.secondary)
@@ -207,25 +259,26 @@ struct PaneView: View {
                 }
                 .padding(.vertical, ThemeStore.shared.rowPadding)
             }
+            .width(min: 120, ideal: 170)
             TableColumn("크기") { item in
                 Text(item.formattedSize)
-                    .monospacedDigit()
+                    .font(.themeMono(.callout))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .width(min: 60, ideal: 80, max: 120)
-            TableColumn("수정한 날짜") { item in
-                Text(item.formattedModified)
-                    .monospacedDigit()
+            .width(min: 50, ideal: 64, max: 110)
+            TableColumn("수정") { item in
+                Text(item.shortModified)
+                    .font(.themeMono(.callout))
                     .foregroundStyle(.secondary)
             }
-            .width(min: 110, ideal: 140, max: 200)
+            .width(min: 76, ideal: 88, max: 140)
             TableColumn("권한") { item in
                 Text(item.permissionString ?? "—")
                     .font(.themeMono(.caption))
                     .foregroundStyle(.secondary)
             }
-            .width(min: 80, ideal: 90, max: 110)
+            .width(min: 68, ideal: 76, max: 110)
         } rows: {
             ForEach(model.visibleItems) { item in
                 TableRow(item)
@@ -238,41 +291,78 @@ struct PaneView: View {
             guard ids.count == 1, let item = model.items.first(where: { ids.contains($0.id) }) else { return }
             workspace.open(item, in: side)
         }
+        .alternatingRowBackgrounds(.disabled)
+        .background(PlainTableRows())
+        .scrollContentBackground(.hidden)
+        .background(Palette.panel)
         .focused($listFocused)
-        // Keys the keymap gives the list (plain ones like Space, ↵ and ⇥; the rest
-        // are menu shortcuts). While a name is being edited, keys belong to the text field.
-        .onKeyPress(phases: .down) { press in
-            guard model.renaming == nil else { return .ignored }
-            let combo = KeyCombo(press)
-            if let action = Keymap.shared.listAction(for: combo) {
-                workspace.perform(action, in: side)
-                return .handled
-            }
-            switch combo {
-            case KeyCombo("delete"):
-                Task { await model.goBack() }
-                return .handled
-            case KeyCombo("return"):
-                // Commander layouts rename with F2; Return opens instead.
-                guard model.selectedItems.count == 1, let item = model.selectedItems.first else { return .ignored }
-                workspace.open(item, in: side)
-                return .handled
-            default:
-                return .ignored
-            }
-        }
+        .onKeyPress(phases: .down, action: handleKey)
         .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
-        // A theme's own panel colour shows through, without the system's stripes.
-        .scrollContentBackground(ThemeStore.shared.panel == nil ? .automatic : .hidden)
-        .alternatingRowBackgrounds(ThemeStore.shared.panel == nil ? .enabled : .disabled)
-        .background(ThemeStore.shared.panel ?? .clear)
-        .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
-            workspace.drop(providers, onto: side)
-        }
-        .overlay {
-            if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
-                ContentUnavailableView("비어 있어요", systemImage: "folder")
+    }
+
+    /// Big icons, for folders of pictures and the like.
+    private var fileGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96, maximum: 120), spacing: 8)], spacing: 8) {
+                ForEach(model.visibleItems) { item in
+                    let selected = model.selection.contains(item.id)
+                    VStack(spacing: 6) {
+                        FileGlyph(item: item, isLocal: model.isLocal, size: 34)
+                            .frame(height: 40)
+                        Text(item.name)
+                            .font(.ui(.caption))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .truncationMode(.middle)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, minHeight: 92)
+                    .background(selected ? Palette.selection : .clear, in: .rect(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Color.themeAccent.opacity(0.5) : .clear))
+                    .contentShape(.rect)
+                    .onTapGesture(count: 2) { workspace.open(item, in: side) }
+                    .simultaneousGesture(TapGesture().onEnded {
+                        if NSEvent.modifierFlags.contains(.command) {
+                            if selected { model.selection.remove(item.id) } else { model.selection.insert(item.id) }
+                        } else {
+                            model.selection = [item.id]
+                        }
+                        listFocused = true
+                    })
+                    .contextMenu { contextMenu(for: selected ? model.selectedItems : [item]) }
+                    .onDrag { workspace.dragProvider(for: item, from: side) }
+                }
             }
+            .padding(10)
+        }
+        .background(Palette.panel)
+        .focusable()
+        .focusEffectDisabled()
+        .focused($listFocused)
+        .onKeyPress(phases: .down, action: handleKey)
+        .quickLookPreview($model.quickLookURL, in: model.quickLookURLs)
+    }
+
+    /// Keys the keymap gives the list (plain ones like Space, ↵ and ⇥; the rest
+    /// are menu shortcuts). While a name is being edited, keys belong to the text field.
+    private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        guard model.renaming == nil else { return .ignored }
+        let combo = KeyCombo(press)
+        if let action = Keymap.shared.listAction(for: combo) {
+            workspace.perform(action, in: side)
+            return .handled
+        }
+        switch combo {
+        case KeyCombo("delete"):
+            Task { await model.goBack() }
+            return .handled
+        case KeyCombo("return"):
+            // Commander layouts rename with F2; Return opens instead.
+            guard model.selectedItems.count == 1, let item = model.selectedItems.first else { return .ignored }
+            workspace.open(item, in: side)
+            return .handled
+        default:
+            return .ignored
         }
     }
 
@@ -383,15 +473,16 @@ struct PaneView: View {
         HStack {
             Text(model.downloadStatus ?? summary)
             Spacer()
-            Text(model.remoteAddress.map { "\($0):\(model.path.string)" } ?? model.path.string)
+            Text(model.remoteAddress ?? model.path.string)
                 .font(.themeMono(.caption))
                 .lineLimit(1)
                 .truncationMode(.head)
         }
-        .font(.caption)
+        .font(.ui(.caption))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.vertical, 7)
+        .background(Palette.panel)
     }
 
     private var summary: String {
@@ -399,27 +490,67 @@ struct PaneView: View {
         let selected = model.selectedItems
         guard !selected.isEmpty else { return count }
         let bytes = selected.compactMap(\.size).reduce(0, +)
-        let size = bytes > 0 ? " (\(bytes.formatted(.byteCount(style: .file))))" : ""
+        let size = bytes > 0 ? " (\(ByteFormat.string(bytes)))" : ""
         return "\(count) · \(selected.count)개 선택\(size)"
     }
 }
 
-/// Clickable breadcrumbs for the current folder.
+/// Takes the grid lines off the table SwiftUI draws, so rows sit on the card
+/// like the design's.
+private struct PlainTableRows: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { Self.tidy(from: view) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { Self.tidy(from: view) }
+    }
+
+    /// The table this view sits behind: the one under its centre.
+    private static func tidy(from view: NSView) {
+        guard let root = view.window?.contentView else { return }
+        let frame = view.convert(view.bounds, to: nil)
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        guard let table = tables(in: root).first(where: { table in
+            let scroll = table.enclosingScrollView ?? table
+            return scroll.convert(scroll.bounds, to: nil).contains(center)
+        }) else { return }
+        table.gridStyleMask = []
+        table.intercellSpacing = NSSize(width: 8, height: table.intercellSpacing.height)
+        if table.numberOfRows > 0, let row = table.rowView(atRow: 0, makeIfNecessary: true) {
+            TableRowLook.hideSeparators(in: type(of: row))
+            TableRowLook.useFaintSelection(in: type(of: row))
+        }
+        // The name column takes what the pane gains or loses.
+        if table.columnAutoresizingStyle != .firstColumnOnlyAutoresizingStyle {
+            table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+            table.sizeToFit()
+        }
+    }
+
+    private static func tables(in view: NSView) -> [NSTableView] {
+        if let table = view as? NSTableView { return [table] }
+        return view.subviews.flatMap(tables)
+    }
+}
+
+/// The current folder in mono, each part clickable.
 private struct PathBar: View {
     let path: RemotePath
     let open: (RemotePath) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
+            HStack(spacing: 0) {
                 ForEach(path.lineage, id: \.self) { crumb in
-                    if !crumb.isRoot {
-                        Image(systemName: "chevron.compact.right")
-                            .foregroundStyle(.tertiary)
+                    if !crumb.isRoot, crumb.parent?.isRoot == false {
+                        Text("/").foregroundStyle(.tertiary)
                     }
-                    Button(crumb.name) { open(crumb) }
+                    Button(crumb.isRoot ? "/" : crumb.name) { open(crumb) }
                         .buttonStyle(.plain)
-                        .foregroundStyle(crumb == path ? .primary : .secondary)
+                        .foregroundStyle(crumb == path ? AnyShapeStyle(Palette.text) : AnyShapeStyle(.secondary))
                 }
             }
             .font(.themeMono(.callout))
@@ -442,7 +573,7 @@ private struct ErrorBanner: View {
             Button("닫기", action: dismiss)
                 .buttonStyle(.borderless)
         }
-        .font(.callout)
+        .font(.ui(.callout))
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.orange.opacity(0.1))
@@ -450,7 +581,7 @@ private struct ErrorBanner: View {
 }
 
 /// Opens the connection manager, optionally on one site with why it failed to open.
-private struct SiteManagerRequest: Identifiable {
+struct SiteManagerRequest: Identifiable {
     let id = UUID()
     var selection: SavedSite.ID?
     var error: (any Error)?

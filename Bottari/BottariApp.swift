@@ -5,6 +5,11 @@ import SwiftUI
 struct BottariApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
+    init() {
+        BundledFonts.register()
+        TableRowLook.hideSeparators()
+    }
+
     var body: some Scene {
         WindowGroup(id: "main") {
             // Rendering snapshots lists no real folders at all.
@@ -38,6 +43,11 @@ struct BottariApp: App {
             }
         }
         .defaultSize(width: 1100, height: 700)
+
+        Window("전송 센터", id: "transfers") {
+            TransferCenter()
+        }
+        .defaultSize(width: 1280, height: 760)
 
         Window("터널", id: "tunnels") {
             TunnelWindow()

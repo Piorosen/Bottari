@@ -65,7 +65,7 @@ private struct TunnelRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -142,7 +142,7 @@ private struct TunnelDetail: View {
             Section {
                 HStack {
                     TextField("이름", text: $profile.name)
-                        .font(.title3.weight(.semibold))
+                        .font(.ui(.title3, weight: .semibold))
                         .textFieldStyle(.plain)
                     Spacer()
                     statusBadge
@@ -172,7 +172,7 @@ private struct TunnelDetail: View {
                 if !profile.invalidRoutes.isEmpty {
                     Label("“\(profile.invalidRoutes.joined(separator: "”, “"))” 은 대역 · IP · 호스트 · *.도메인 형식이 아니에요", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                        .font(.caption)
+                        .font(.ui(.caption))
                 }
             } header: {
                 Text("터널로 보낼 주소")
@@ -221,7 +221,7 @@ private struct TunnelDetail: View {
                         }
                     }
                     Text("sudo가 필요해서 터미널 창에서 실행해요. 비밀번호는 macOS가 직접 묻고, Bottari는 받지 않아요. sshuttle은 이름 규칙(*.도메인)을 모르니 대역으로 적어 주세요.")
-                        .font(.caption)
+                        .font(.ui(.caption))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -250,7 +250,7 @@ private struct TunnelDetail: View {
                                 .font(.themeMono(.callout))
                             Spacer()
                             Text(connection.opened.formatted(date: .omitted, time: .standard))
-                                .font(.caption)
+                                .font(.ui(.caption))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -267,7 +267,7 @@ private struct TunnelDetail: View {
                             .font(.themeMono(.caption))
                             .foregroundStyle(.secondary)
                         Text(line.text)
-                            .font(.caption)
+                            .font(.ui(.caption))
                             .textSelection(.enabled)
                     }
                 }
@@ -285,7 +285,7 @@ private struct TunnelDetail: View {
         case .off: ("꺼짐", .secondary)
         }
         return Label(text, systemImage: "circle.fill")
-            .font(.caption)
+            .font(.ui(.caption))
             .foregroundStyle(color)
             .lineLimit(1)
     }
@@ -297,13 +297,13 @@ private struct TunnelDetail: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Label(mode.title, systemImage: mode.symbol)
-                    .font(.callout.weight(.semibold))
+                    .font(.ui(.callout, weight: .semibold))
                 Text(mode.detail)
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(mode.caveat)
-                    .font(.caption2)
+                    .font(.ui(.caption2))
                     .foregroundStyle(.tertiary)
             }
             .padding(10)
@@ -350,7 +350,7 @@ private struct TunnelDetail: View {
         return ForEach(lines, id: \.0) { line in
             VStack(alignment: .leading, spacing: 2) {
                 Text(line.0)
-                    .font(.caption.weight(.semibold))
+                    .font(.ui(.caption, weight: .semibold))
                 Text(line.1)
                     .font(.themeMono(.caption))
                     .textSelection(.enabled)

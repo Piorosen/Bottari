@@ -55,7 +55,7 @@ public final class TransferQueue {
         return job
     }
 
-    static func route(_ kind: TransferKind, from source: any FileProvider, to destination: any FileProvider) -> TransferRoute {
+    public static func route(_ kind: TransferKind, from source: any FileProvider, to destination: any FileProvider) -> TransferRoute {
         if source.locationID == destination.locationID {
             if kind == .move || source.capabilities.contains(.serverSideCopy) { return .withinLocation }
             return source.isLocal ? .local : .viaMac

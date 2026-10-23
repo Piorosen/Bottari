@@ -67,7 +67,7 @@ public final class TransferJob: Identifiable {
 
     // Bookkeeping for the queue.
     @ObservationIgnored var policy: ConflictPolicy
-    @ObservationIgnored var verifiesChecksums = false
+    @ObservationIgnored public internal(set) var verifiesChecksums = false
     @ObservationIgnored var rememberedAnswer: ConflictAnswer?
     @ObservationIgnored var pending: [WorkItem] = []
     @ObservationIgnored var running: [UUID: (work: WorkItem, counter: ByteCounter, task: Task<Void, Never>)] = [:]

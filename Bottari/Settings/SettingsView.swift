@@ -52,7 +52,7 @@ struct GeneralSettings: View {
                 } else {
                     LabeledContent("버전", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
                     Text("이 빌드는 업데이트를 확인하지 않아요. 서명한 릴리스(scripts/release.sh)에서 켜져요.")
-                        .font(.caption)
+                        .font(.ui(.caption))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -173,7 +173,7 @@ struct AppearanceSettings: View {
                         .frame(width: 16, height: 16)
                     Text(theme.name)
                     if theme == store.current {
-                        Text("사용 중").font(.caption).foregroundStyle(.secondary)
+                        Text("사용 중").font(.ui(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button("쓰기") { store.current = theme }
@@ -197,7 +197,7 @@ struct AppearanceSettings: View {
             Text("테마 파일")
         } footer: {
             Text("~/Library/Application Support/Bottari/themes/ 에 저장돼요. 다른 사람과 파일로 주고받을 수 있어요.")
-                .font(.caption)
+                .font(.ui(.caption))
                 .foregroundStyle(.secondary)
         }
     }
@@ -309,7 +309,7 @@ private struct PresetCard: View {
             .clipShape(.rect(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(isSelected ? Color.themeAccent : Color.secondary.opacity(0.3), lineWidth: isSelected ? 2 : 1))
             Text(theme.name).fontWeight(isSelected ? .semibold : .regular)
-            Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            Text(subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
         }
         .contentShape(.rect)
     }
@@ -344,30 +344,30 @@ struct ThemePreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("미리보기").font(.headline)
+            Text("미리보기").font(.ui(.headline))
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("서버").font(.caption2).foregroundStyle(.secondary)
+                    Text("서버").font(.ui(.caption2)).foregroundStyle(.secondary)
                     Label("prod-web", systemImage: "server.rack").foregroundStyle(SavedSite.Tag.prod.color)
                     Label("dev-api", systemImage: "server.rack")
-                    Text("클라우드").font(.caption2).foregroundStyle(.secondary).padding(.top, 4)
+                    Text("클라우드").font(.ui(.caption2)).foregroundStyle(.secondary).padding(.top, 4)
                     Label("Google Drive", systemImage: "cloud")
                     Spacer()
                 }
-                .font(.caption)
+                .font(.ui(.caption))
                 .padding(8)
                 .frame(width: 104, alignment: .leading)
-                .background(store.background ?? Color(nsColor: .windowBackgroundColor))
+                .background(Palette.background)
                 Divider()
                 VStack(spacing: 0) {
                     HStack(spacing: 5) {
-                        Text("prod-web").font(.caption.bold()).foregroundStyle(SavedSite.Tag.prod.color)
+                        Text("prod-web").font(.ui(.caption, weight: .bold)).foregroundStyle(SavedSite.Tag.prod.color)
                         TagChip(tag: .prod)
                         Text("/var/www/site").font(.themeMono(.caption)).foregroundStyle(.secondary).lineLimit(1)
                         Spacer(minLength: 0)
                     }
                     .padding(6)
-                    .background(store.panel2 ?? Color(nsColor: .controlBackgroundColor))
+                    .background(Palette.panel2)
                     .overlay(alignment: .top) { SavedSite.Tag.prod.color.frame(height: 2) }
                     Divider()
                     ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
@@ -381,7 +381,7 @@ struct ThemePreview: View {
                                 Text(row.size).font(.themeMono(.caption))
                                     .foregroundStyle(index == 1 ? Color.white.opacity(0.85) : .secondary)
                             }
-                            .font(.caption)
+                            .font(.ui(.caption))
                             .foregroundStyle(index == 1 ? Color.white : .primary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2 + store.rowPadding)
@@ -399,12 +399,12 @@ struct ThemePreview: View {
                     .padding(8)
                 }
                 .padding(.top, 0)
-                .background(store.panel ?? Color(nsColor: .textBackgroundColor))
+                .background(Palette.panel)
             }
             .frame(width: 330, height: 300)
             .clipShape(.rect(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(store.line ?? Color.secondary.opacity(0.3)))
-            Text("⌘K 이동 · 연결 · 명령").font(.caption).foregroundStyle(.secondary)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
+            Text("⌘K 이동 · 연결 · 명령").font(.ui(.caption)).foregroundStyle(.secondary)
         }
         .allowsHitTesting(false)
     }
@@ -428,7 +428,7 @@ struct KeySettings: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(layout.title).fontWeight(selected ? .semibold : .regular)
-                                Text(layout.subtitle).font(.caption).foregroundStyle(.secondary)
+                                Text(layout.subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
@@ -447,12 +447,12 @@ struct KeySettings: View {
                         Spacer()
                         if recording != action, let clash = keymap.clash(for: action) {
                             Text("겹침 · \(clash)")
-                                .font(.caption)
+                                .font(.ui(.caption))
                                 .foregroundStyle(.orange)
                         }
                         if keymap.isCustom(action) {
                             Text("사용자 지정")
-                                .font(.caption)
+                                .font(.ui(.caption))
                                 .foregroundStyle(Color.themeAccent)
                             Button {
                                 keymap.set(nil, for: action)
@@ -475,7 +475,7 @@ struct KeySettings: View {
                 Text("단축키 (눌러서 바꾸기)")
             } footer: {
                 Text("단축키 칸을 누른 뒤 원하는 키를 누르면 바뀌어요. Esc로 취소. ⌘·⌃ 조합과 F 키는 메뉴에도 보이고, Space · ↵ · Tab 같은 키는 파일 목록에서만 들어요.")
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -516,12 +516,12 @@ struct SyncSettings: View {
             Section {
                 HStack(spacing: 12) {
                     Image(systemName: sync.isEnabled ? "icloud.fill" : "icloud.slash")
-                        .font(.title)
+                        .font(.ui(.title))
                         .foregroundStyle(sync.isEnabled ? Color.themeAccent : .secondary)
                         .frame(width: 36)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("iCloud로 설정 동기화").font(.headline)
-                        Text(status).font(.callout).foregroundStyle(.secondary)
+                        Text("iCloud로 설정 동기화").font(.ui(.headline))
+                        Text(status).font(.ui(.callout)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button(sync.isSyncing ? "동기화 중…" : "지금 동기화") { sync.syncNow() }
@@ -553,7 +553,7 @@ struct SyncSettings: View {
                     HStack {
                         Text("비밀번호와 키 암호")
                         Text("서명된 앱 필요")
-                            .font(.caption2)
+                            .font(.ui(.caption2))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(.quaternary, in: .capsule)
@@ -579,11 +579,11 @@ struct SyncSettings: View {
                                 .frame(width: 24)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(device.name)
-                                Text("\(Self.time(device.lastSync)) 동기화").font(.caption).foregroundStyle(.secondary)
+                                Text("\(Self.time(device.lastSync)) 동기화").font(.ui(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if device.id == sync.devices.last?.id {
-                                Text("이 Mac").font(.caption).foregroundStyle(.secondary)
+                                Text("이 Mac").font(.ui(.caption)).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -607,7 +607,7 @@ struct SyncSettings: View {
                 Text("iCloud Drive에 저장되는 파일")
             } footer: {
                 Text("Finder에서 직접 열어 볼 수 있어요. 지워도 다음 동기화 때 다시 만들어요.")
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -615,7 +615,7 @@ struct SyncSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("비밀번호는 파일에 쓰지 않아요")
                         Text("JSON에는 서버 주소와 설정만 들어가요. 비밀번호와 키 암호는 이 Mac의 키체인에만 있어요.")
-                            .font(.caption)
+                            .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
@@ -636,7 +636,7 @@ struct SyncSettings: View {
                     ForEach(found) { conflict in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(conflict.title).fontWeight(.semibold)
-                            Text(conflict.detail).font(.callout).foregroundStyle(.secondary)
+                            Text(conflict.detail).font(.ui(.callout)).foregroundStyle(.secondary)
                             HStack {
                                 Button("이 Mac 것 유지") { sync.resolve(conflict, .keepMine) }
                                 Button("\(sync.otherMacName) 것 쓰기") { sync.resolve(conflict, .useTheirs) }
@@ -681,12 +681,12 @@ struct SyncSettings: View {
                 HStack {
                     Text(title).fontWeight(.medium)
                     if recommended {
-                        Text("추천").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                        Text("추천").font(.ui(.caption2)).padding(.horizontal, 5).padding(.vertical, 1)
                             .foregroundStyle(Color.themeAccent)
                             .background(Color.themeAccent.opacity(0.12), in: .capsule)
                     }
                 }
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+                Text(detail).font(.ui(.caption)).foregroundStyle(.secondary)
                 Text(place).font(.themeMono(.caption)).foregroundStyle(.secondary)
             }
         }

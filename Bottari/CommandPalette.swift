@@ -48,7 +48,7 @@ struct CommandPalette: View {
                     .foregroundStyle(.secondary)
                 TextField("폴더 이동, 서버 연결, 명령 실행…", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.title3)
+                    .font(.ui(.title3))
                     .focused($focused)
                     .onSubmit(runSelected)
                     .onKeyPress(.downArrow) { move(1); return .handled }
@@ -85,7 +85,7 @@ struct CommandPalette: View {
                 Spacer()
                 Text("대상: \(workspace.pane(workspace.activeSide).provider.displayName) 패인")
             }
-            .font(.caption)
+            .font(.ui(.caption))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -107,7 +107,7 @@ struct CommandPalette: View {
                 Text(command.title)
                 if !command.subtitle.isEmpty {
                     Text(command.subtitle)
-                        .font(.caption)
+                        .font(.ui(.caption))
                         .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
                         .lineLimit(1)
                 }
@@ -205,8 +205,11 @@ struct CommandPalette: View {
             PaletteCommand(id: "hidden", title: pane.showsHiddenFiles ? "숨김 파일 감추기" : "숨김 파일 보기", symbol: "eye", keywords: "hidden dotfiles") {
                 pane.showsHiddenFiles.toggle()
             },
-            PaletteCommand(id: "transfers", title: workspace.showsTransfers ? "전송 목록 닫기" : "전송 목록 열기", symbol: "arrow.up.arrow.down", keywords: "transfers queue 전송") {
-                workspace.showsTransfers.toggle()
+            PaletteCommand(id: "transfers", title: "전송 센터 열기", symbol: "arrow.up.arrow.down", keywords: "transfers queue 전송") {
+                openWindow(id: "transfers")
+            },
+            PaletteCommand(id: "inspector", title: workspace.showsInspector ? "미리보기 닫기" : "미리보기 열기", symbol: "sidebar.right", keywords: "inspector preview 미리보기") {
+                workspace.showsInspector.toggle()
             },
             PaletteCommand(id: "tunnels", title: "터널 관리", symbol: "point.3.connected.trianglepath.dotted", keywords: "tunnel vpn proxy socks 터널") {
                 openWindow(id: "tunnels")

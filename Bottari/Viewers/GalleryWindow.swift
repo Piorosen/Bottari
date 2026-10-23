@@ -48,11 +48,11 @@ final class GalleryModel {
         image = thumbnails[item.path]
         pixelSize = nil
         status = provider.isLocal ? nil : "원본 받는 중…"
-        let total = item.size.map { $0.formatted(.byteCount(style: .file)) }
+        let total = item.size.map { ByteFormat.string($0) }
         loading = Task {
             do {
                 let url = try await AppServices.fileCache.localURL(for: item, from: provider) { received in
-                    let text = "원본 받는 중 · \(received.formatted(.byteCount(style: .file)))" + (total.map { " / \($0)" } ?? "")
+                    let text = "원본 받는 중 · \(ByteFormat.string(received))" + (total.map { " / \($0)" } ?? "")
                     Task { @MainActor in
                         if self.current == item, self.status != nil { self.status = text }
                     }
@@ -209,7 +209,7 @@ private struct GalleryView: View {
             Image(systemName: model.provider.isLocal ? "laptopcomputer" : "server.rack")
                 .foregroundStyle(model.site?.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
             Text(model.provider.displayName)
-                .font(.headline)
+                .font(.ui(.headline))
             if let tag = model.site?.tag {
                 TagChip(tag: tag)
             }
@@ -221,7 +221,7 @@ private struct GalleryView: View {
             Spacer()
             if let status = model.status {
                 Text(status)
-                    .font(.callout)
+                    .font(.ui(.callout))
                     .foregroundStyle(.secondary)
             }
             Text("\(model.index + 1) / \(model.items.count)")
@@ -280,7 +280,7 @@ private struct GalleryView: View {
     private func arrow(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.title2.weight(.semibold))
+                .font(.ui(.title2, weight: .semibold))
                 .frame(width: 36, height: 36)
                 .background(.ultraThinMaterial, in: .circle)
         }

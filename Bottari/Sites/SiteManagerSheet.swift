@@ -89,10 +89,10 @@ struct SiteManagerSheet: View {
     private var header: some View {
         HStack {
             Text("연결 관리")
-                .font(.title3.weight(.semibold))
+                .font(.ui(.title3, weight: .semibold))
             Spacer()
             Label("비밀번호와 키 암호는 macOS 키체인에만 저장해요.", systemImage: "key")
-                .font(.caption)
+                .font(.ui(.caption))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
@@ -105,7 +105,7 @@ struct SiteManagerSheet: View {
         VStack(spacing: 0) {
             if let error = library.storageError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.orange)
                     .padding(10)
             }
@@ -134,11 +134,11 @@ struct SiteManagerSheet: View {
                 if library.sites.isEmpty {
                     VStack(spacing: 6) {
                         Image(systemName: "server.rack")
-                            .font(.title2)
+                            .font(.ui(.title2))
                         Text("저장된 연결이 없어요")
-                            .font(.callout.weight(.medium))
+                            .font(.ui(.callout, weight: .medium))
                         Text("아래 + 로 새 연결을 만들어요.")
-                            .font(.caption)
+                            .font(.ui(.caption))
                     }
                     .foregroundStyle(.secondary)
                 }
@@ -168,13 +168,13 @@ struct SiteManagerSheet: View {
     private var importBanner: some View {
         VStack(alignment: .leading, spacing: 5) {
             Label("~/.ssh/config 에서 새 호스트 \(library.importableHosts.count)개", systemImage: "square.and.arrow.down")
-                .font(.callout.weight(.semibold))
+                .font(.ui(.callout, weight: .semibold))
             Text(library.importableHosts.map(\.alias).joined(separator: " · "))
                 .font(.themeMono(.caption))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             Text("ProxyJump, IdentityFile 설정도 그대로 가져와요.")
-                .font(.caption)
+                .font(.ui(.caption))
                 .foregroundStyle(.secondary)
             Button("가져오기") {
                 let added = library.importSSHConfig()
@@ -227,7 +227,7 @@ struct SiteManagerSheet: View {
                 }
             }
         }
-        .font(.callout)
+        .font(.ui(.callout))
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.orange.opacity(0.08))
@@ -377,7 +377,7 @@ private struct SiteRow: View {
                         .lineLimit(1)
                     if isNew {
                         Text("가져옴")
-                            .font(.caption2)
+                            .font(.ui(.caption2))
                             .padding(.horizontal, 4)
                             .background(Color.themeAccent.opacity(0.15), in: .rect(cornerRadius: 3))
                     }

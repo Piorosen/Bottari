@@ -78,7 +78,7 @@ private struct EditorView: View {
             Image(systemName: model.provider.isLocal ? "laptopcomputer" : "server.rack")
                 .foregroundStyle(model.site?.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
             Text(model.provider.displayName)
-                .font(.headline)
+                .font(.ui(.headline))
             if let tag = model.site?.tag {
                 TagChip(tag: tag)
             }
@@ -123,12 +123,12 @@ private struct EditorView: View {
     private var commandPopover: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("저장한 뒤 서버에서 실행")
-                .font(.headline)
+                .font(.ui(.headline))
             TextField("예: nginx -t", text: $model.postSaveCommand)
                 .font(.themeMono(.body))
                 .frame(width: 320)
             Text("명령이 실패하면 방금 올린 파일을 이전 버전으로 되돌려요. 이 파일에만 적용돼요.")
-                .font(.caption)
+                .font(.ui(.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -159,16 +159,16 @@ private struct EditorView: View {
     private func conflictBanner(_ conflict: EditorModel.Conflict) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("편집하는 사이 서버에서 이 파일이 바뀌었어요", systemImage: "exclamationmark.triangle.fill")
-                .font(.callout.weight(.semibold))
+                .font(.ui(.callout, weight: .semibold))
                 .foregroundStyle(.orange)
             if let modified = conflict.modified {
                 Text("서버 쪽 수정 시각 \(modified.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
             if conflict.merged != nil {
                 Text("서로 다른 줄을 고쳤어요. 둘 다 반영해서 저장할 수 있어요.")
-                    .font(.caption)
+                    .font(.ui(.caption))
             }
             HStack {
                 Button("차이 보기") { showsDiff = true }
@@ -197,7 +197,7 @@ private struct EditorView: View {
             Button("닫기") { model.notice = nil }
                 .buttonStyle(.borderless)
         }
-        .font(.callout)
+        .font(.ui(.callout))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
@@ -218,7 +218,7 @@ private struct EditorView: View {
                 Text("저장됨 \(savedAt.formatted(date: .omitted, time: .shortened))")
             }
         }
-        .font(.caption)
+        .font(.ui(.caption))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
@@ -235,7 +235,7 @@ private struct DiffSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Text("서버 버전 → 내 버전")
-                    .font(.headline)
+                    .font(.ui(.headline))
                 Spacer()
                 Button("닫기") { dismiss() }
                     .keyboardShortcut(.cancelAction)

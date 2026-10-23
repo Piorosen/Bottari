@@ -176,7 +176,7 @@ private struct PlayerView: View {
                 ProgressView()
                     .controlSize(.large)
                 Text(model.state.duration == 0 ? "여는 중…" : "버퍼링 · 새 위치부터 읽는 중")
-                    .font(.callout)
+                    .font(.ui(.callout))
             }
             .padding(16)
             .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
@@ -207,7 +207,7 @@ private struct PlayerView: View {
                 Button { model.seek(by: -10) } label: { Image(systemName: "gobackward.10") }
                 Button { model.togglePause() } label: {
                     Image(systemName: model.state.isPaused ? "play.fill" : "pause.fill")
-                        .font(.title2)
+                        .font(.ui(.title2))
                         .frame(width: 28)
                 }
                 Button { model.seek(by: 10) } label: { Image(systemName: "goforward.10") }
@@ -246,7 +246,7 @@ private struct PlayerView: View {
                     .help(hardware ? "Mac 하드웨어(VideoToolbox)로 풀어요" : "이 코덱은 Mac 하드웨어가 못 풀어서 CPU로 풀어요")
             }
         }
-        .font(.caption)
+        .font(.ui(.caption))
         .foregroundStyle(.secondary)
     }
 
@@ -315,7 +315,7 @@ private struct PlayerView: View {
                             .font(.themeMono(.caption))
                         Spacer()
                         Text(read.at.formatted(date: .omitted, time: .standard))
-                            .font(.caption)
+                            .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                     }
                 }

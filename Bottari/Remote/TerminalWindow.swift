@@ -181,13 +181,13 @@ private struct TerminalScreen: View {
             Image(systemName: "terminal")
                 .foregroundStyle(model.site?.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
             Text(model.provider.displayName)
-                .font(.headline)
+                .font(.ui(.headline))
             if let tag = model.site?.tag {
                 TagChip(tag: tag)
             }
             if let jumps = model.site?.proxyJump, !jumps.isEmpty {
                 Text("via \(jumps.joined(separator: " → "))")
-                    .font(.caption)
+                    .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
             Text(model.folder.string)
@@ -243,7 +243,7 @@ private struct TerminalScreen: View {
                     .foregroundStyle(.orange)
             }
         }
-        .font(.caption)
+        .font(.ui(.caption))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
@@ -252,10 +252,10 @@ private struct TerminalScreen: View {
     private var snippetList: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("명령 조각")
-                .font(.headline)
+                .font(.ui(.headline))
                 .padding(12)
             Text("누르면 실행해요")
-                .font(.caption)
+                .font(.ui(.caption))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
             List {

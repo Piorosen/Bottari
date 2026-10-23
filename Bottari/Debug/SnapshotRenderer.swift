@@ -82,6 +82,7 @@ enum SnapshotRenderer {
         await checkScreen(into: directory)
         await renderTunnels(into: directory, library: library)
         await renderSidebar(into: directory, folder: folder)
+        await renderMain(into: directory, library: library)
         await renderSettings(into: directory, folder: folder)
         await checkSync(into: directory)
         try? FileManager.default.removeItem(at: folder)
@@ -124,15 +125,13 @@ enum SnapshotRenderer {
         _ = done
 
         let workspace = Workspace()
-        workspace.showsTransfers = true
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             await render(
                 VStack(spacing: 0) {
-                    TransferPanel(workspace: workspace)
-                    Divider()
+                    TransferCenter()
                     TransferBar(workspace: workspace)
                 },
-                size: CGSize(width: 1180, height: 430), appearance: appearance,
+                size: CGSize(width: 1440, height: 860), appearance: appearance,
                 to: directory.appending(path: "transfers-\(name).png")
             )
         }
@@ -301,6 +300,63 @@ enum SnapshotRenderer {
         }
     }
 
+    /// The whole main window as the design shows it: a PROD server on the left
+    /// with nginx.conf selected, a backup folder on the right, two things in the bundle.
+    private static func renderMain(into directory: URL, library: SiteLibrary) async {
+        let root = FileManager.default.temporaryDirectory.appending(path: "bottari-main-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let site = root.appending(path: "site"), backup = root.appending(path: "백업")
+        for folder in [site.appending(path: "assets"), site.appending(path: "releases"), backup.appending(path: "2026-10")] {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        let nginx = """
+        server {
+            listen 443 ssl http2;
+            server_name example.com;
+            root /var/www/site;
+
+            location /assets/ {
+                expires 30d;
+                add_header Cache-Control "public";
+            }
+
+            location / {
+                try_files $uri /index.html;
+            }
+        }
+        """
+        for (name, text) in [("index.html", String(repeating: "<p>hello</p>\n", count: 300)), ("nginx.conf", nginx), ("app.env", "DATABASE_URL=postgres://…\n")] {
+            try? text.write(to: site.appending(path: name), atomically: true, encoding: .utf8)
+        }
+        try? Data(count: 480_000).write(to: site.appending(path: "promo.mp4"))
+        try? Data(count: 1_200_000).write(to: site.appending(path: "db-2026-10-21.sql.gz"))
+        try? Data(count: 1_100_000).write(to: backup.appending(path: "db-2026-09-30.sql.gz"))
+        try? Data(count: 840_000).write(to: backup.appending(path: "site-assets.zip"))
+
+        var prod = library.sites[0]
+        prod.startPath = site.path
+        let left = PaneModel(provider: LocalFileProvider(), library: library)
+        await left.switchProvider(to: PreviewServer(prod.name), site: prod)
+        left.selection = [RemotePath(site.path).appending("nginx.conf")]
+        let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(backup.path), library: library)
+        await right.start()
+        let workspace = Workspace(left: left, right: right)
+        let local = LocalFileProvider()
+        if let items = try? await local.list(RemotePath(site.path)) {
+            BottariBundle.shared.add(items.filter { $0.name == "nginx.conf" || $0.name == "index.html" }, from: local, site: nil)
+        }
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            // The split view's sidebar does not draw off-screen; lay the two side by side instead.
+            await render(HStack(spacing: 0) {
+                Sidebar(workspace: workspace).frame(width: 240)
+                Rectangle().fill(Palette.line).frame(width: 1)
+                MainContent(workspace: workspace)
+            }.themed(), size: CGSize(width: 1440, height: 860), appearance: appearance,
+                         to: directory.appending(path: "main-\(name).png"))
+        }
+        BottariBundle.shared.clear()
+    }
+
     /// The sidebar with a few things in the bundle.
     private static func renderSidebar(into directory: URL, folder: URL) async {
         let local = LocalFileProvider()
@@ -349,7 +405,7 @@ enum SnapshotRenderer {
                 Divider()
                 PaneView(workspace: workspace, side: .right)
             }
-            .background(themes.background ?? .clear)
+            .background(Palette.background)
             .themed(),
             size: CGSize(width: 1100, height: 300), appearance: .darkAqua,
             to: directory.appending(path: "pane-night.png")
@@ -518,6 +574,20 @@ enum SnapshotRenderer {
         // Let SwiftUI lay out, run onAppear and fill its lists.
         try? await Task.sleep(for: .milliseconds(800))
         host.layoutSubtreeIfNeeded()
+        if url.lastPathComponent == "main-light.png" {
+            var lines: [String] = []
+            func walk(_ view: NSView, depth: Int) {
+                if let table = view as? NSTableView {
+                    lines.append("table style=\(table.style.rawValue) grid=\(table.gridStyleMask.rawValue) alt=\(table.usesAlternatingRowBackgroundColors) cols=\(table.tableColumns.map { Int($0.width) }) resizing=\(table.columnAutoresizingStyle.rawValue) width=\(Int(table.bounds.width)) clip=\(Int(table.enclosingScrollView?.contentView.bounds.width ?? 0))")
+                    if let row = table.rowView(atRow: 0, makeIfNecessary: false) {
+                        lines.append("  row \(type(of: row)) super=\(String(describing: type(of: row).superclass()))")
+                    }
+                }
+                view.subviews.forEach { walk($0, depth: depth + 1) }
+            }
+            walk(host, depth: 0)
+            try? lines.joined(separator: "\n").write(to: url.deletingLastPathComponent().appending(path: "tables-debug.txt"), atomically: true, encoding: .utf8)
+        }
         if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
             host.cacheDisplay(in: host.bounds, to: bitmap)
             try? bitmap.representation(using: .png, properties: [:])?.write(to: url)

@@ -38,8 +38,13 @@ final class Workspace {
     var pendingDeletion: DeletionRequest?
     /// Why the last transfer was refused, e.g. a read-only site.
     var refusal: String?
-    var showsTransfers = false
     var showsPalette = false
+    /// The preview column right of the panes.
+    var showsInspector = true
+    /// How much of the width the left pane takes.
+    var paneRatio: CGFloat = 0.5
+    /// The connection manager, opened from the toolbar or the sidebar.
+    var siteManager: SiteManagerRequest?
     /// The pane that should take keyboard focus next, e.g. after ⇥.
     var focusRequest: PaneSide?
     /// Opens viewer windows; the main window sets it, since only views can open windows.

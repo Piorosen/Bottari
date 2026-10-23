@@ -20,7 +20,7 @@ struct DeleteConfirmationSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label {
                     Text("\(deletion.items.count)개 항목을 삭제할까요?")
-                        .font(.title3.weight(.semibold))
+                        .font(.ui(.title3, weight: .semibold))
                 } icon: {
                     Image(systemName: "trash.fill")
                         .foregroundStyle(.red)
@@ -30,7 +30,7 @@ struct DeleteConfirmationSheet: View {
                         Image(systemName: "server.rack")
                             .foregroundStyle(isProd ? SavedSite.Tag.prod.color : .secondary)
                         Text(site.name)
-                            .font(.headline)
+                            .font(.ui(.headline))
                         if let tag = site.tag {
                             TagChip(tag: tag)
                         }

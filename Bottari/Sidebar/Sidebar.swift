@@ -1,64 +1,281 @@
 import BottariCore
 import BottariSFTP
+import SystemConfiguration
 import SwiftUI
 
-/// Places to open in the active pane, and the bundle (보따리) underneath.
+/// Places to open in the active pane — favorites, servers, clouds and this
+/// Mac — with the bundle (보따리) underneath.
 struct Sidebar: View {
+    let workspace: Workspace
+    @AppStorage("sidebar.showsICloudDrive") private var showsICloudDrive = true
+
+    private var library: SiteLibrary { workspace.left.library }
+    private var sites: [SavedSite] { library.sites }
+    private var activePane: PaneModel { workspace.pane(workspace.activeSide) }
+
+    private static let macFolders: [(String, String, String)] = [
+        ("데스크탑", "menubar.dock.rectangle", "Desktop"), ("문서", "doc", "Documents"),
+        ("다운로드", "arrow.down.circle", "Downloads"),
+    ]
+
+    private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "이 Mac"
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if !Favorites.shared.items.isEmpty {
+                        group("즐겨찾기") {
+                            ForEach(Favorites.shared.items) { favorite in
+                                SidebarRow(symbol: "star", title: favorite.name, isCurrent: isCurrent(favorite)) {
+                                    Text(favorite.siteID.flatMap { library.site($0)?.name } ?? "이 Mac")
+                                        .font(.themeMono(.caption2))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                } action: {
+                                    workspace.open(favorite)
+                                }
+                                .contextMenu {
+                                    Button("사이드바에서 빼기", role: .destructive) { Favorites.shared.remove(favorite.id) }
+                                }
+                            }
+                        }
+                    }
+                    let servers = sites.filter(\.isSFTP)
+                    if !servers.isEmpty {
+                        group("서버") {
+                            ForEach(servers, content: siteRow)
+                        }
+                    }
+                    let clouds = sites.filter { !$0.isSFTP }
+                    let iCloud = showsICloudDrive ? LocalFileProvider.iCloudDrive : nil
+                    if !clouds.isEmpty || iCloud != nil {
+                        group("클라우드") {
+                            if let iCloud {
+                                SidebarRow(symbol: "icloud", title: "iCloud Drive", isCurrent: activePane.isLocal && activePane.path.string.hasPrefix(iCloud.string)) {
+                                    EmptyView()
+                                } action: {
+                                    workspace.openOnMac(iCloud)
+                                }
+                            }
+                            ForEach(clouds, content: siteRow)
+                        }
+                    }
+                    group("이 Mac") {
+                        let home = RemotePath(NSHomeDirectory())
+                        SidebarRow(symbol: "laptopcomputer", title: Self.computerName, isCurrent: activePane.isLocal && activePane.path == home) {
+                            StatusDot(on: true)
+                        } action: {
+                            workspace.openOnMac(home)
+                        }
+                        ForEach(Self.macFolders, id: \.0) { name, symbol, folder in
+                            let path = home.appending(folder)
+                            SidebarRow(symbol: symbol, title: name, isCurrent: activePane.isLocal && activePane.path == path) {
+                                EmptyView()
+                            } action: {
+                                workspace.openOnMac(path)
+                            }
+                        }
+                        SidebarRow(symbol: "square.grid.2x2", title: "응용 프로그램", isCurrent: activePane.isLocal && activePane.path == "/Applications") {
+                            EmptyView()
+                        } action: {
+                            workspace.openOnMac("/Applications")
+                        }
+                    }
+                    Button {
+                        workspace.siteManager = SiteManagerRequest()
+                    } label: {
+                        Label("새 연결 추가", systemImage: "plus")
+                            .font(.ui(.callout))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 12)
+            }
+            .scrollIndicators(.never)
+            BundleCard(workspace: workspace)
+                .padding(10)
+        }
+        .background(Palette.panel2)
+    }
+
+    private func group(_ title: String, @ViewBuilder rows: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            SectionLabel(title)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
+            rows()
+        }
+    }
+
+    private func siteRow(_ site: SavedSite) -> some View {
+        let open = workspace.isOpen(site)
+        return SidebarRow(symbol: site.symbol, title: site.name, isCurrent: activePane.site?.id == site.id, isBold: open,
+                          tint: site.tag == .prod ? SavedSite.Tag.prod.color : nil) {
+            HStack(spacing: 6) {
+                if let tag = site.tag {
+                    TagChip.outlined(tag)
+                }
+                StatusDot(on: open)
+                    .help(open ? "패인에서 열려 있어요" : "연결 안 됨")
+            }
+        } action: {
+            workspace.open(site)
+        }
+        .contextMenu {
+            Button("연결 관리에서 열기") { workspace.siteManager = SiteManagerRequest(selection: site.id) }
+        }
+    }
+
+    private func isCurrent(_ favorite: Favorites.Favorite) -> Bool {
+        activePane.path == favorite.path && activePane.site?.id == favorite.siteID && (favorite.siteID != nil || activePane.isLocal)
+    }
+}
+
+/// One place in the sidebar.
+private struct SidebarRow<Accessory: View>: View {
+    let symbol: String
+    let title: String
+    var isCurrent = false
+    var isBold = false
+    var tint: Color?
+    @ViewBuilder let accessory: Accessory
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 13))
+                    .foregroundStyle(tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
+                    .frame(width: 18)
+                Text(title)
+                    .font(.ui(.body, weight: isBold || isCurrent ? .semibold : .regular))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                accessory
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(isCurrent ? Palette.selection : hovering ? Palette.line.opacity(0.5) : .clear, in: .rect(cornerRadius: 7))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// The bundle the app is named after, as a card at the bottom of the sidebar:
+/// files gathered from anywhere, unpacked into the active pane at once.
+private struct BundleCard: View {
     let workspace: Workspace
     @State private var isDropTarget = false
     @State private var presetName = ""
     @State private var namingPreset = false
-    @AppStorage("sidebar.showsICloudDrive") private var showsICloudDrive = true
 
     private var bundle: BottariBundle { .shared }
-    private var sites: [SavedSite] { AppServices.sites.sites }
-
-    private static let macFolders: [(String, String, String)] = [
-        ("홈", "house", ""), ("데스크탑", "menubar.dock.rectangle", "Desktop"), ("문서", "doc", "Documents"),
-        ("다운로드", "arrow.down.circle", "Downloads"),
-    ]
 
     var body: some View {
-        List {
-            Section("이 Mac") {
-                ForEach(Self.macFolders, id: \.0) { name, symbol, folder in
-                    Button {
-                        workspace.openOnMac(RemotePath(NSHomeDirectory()).appending(folder))
-                    } label: {
-                        Label(name, systemImage: symbol)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "shippingbox")
+                    .foregroundStyle(Color.themeAccent)
+                Text("보따리").font(.ui(.body, weight: .semibold))
+                Spacer()
+                if !bundle.entries.isEmpty {
+                    Text("\(bundle.entries.count)")
+                        .font(.ui(.caption, weight: .semibold))
+                        .foregroundStyle(Color.themeAccent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 1)
+                        .background(Palette.selection, in: .capsule)
                 }
-                Button {
-                    workspace.openOnMac("/Applications")
+                Menu {
+                    Button("지금 보따리를 프리셋으로 저장…") { namingPreset = true }
+                        .disabled(bundle.entries.isEmpty)
+                    if !bundle.presets.isEmpty {
+                        Section("프리셋 담기") {
+                            ForEach(bundle.presets) { preset in
+                                Button(preset.name) {
+                                    Task {
+                                        let missing = await bundle.load(preset)
+                                        if !missing.isEmpty { workspace.refusal = "찾지 못한 항목: \(missing.joined(separator: ", "))" }
+                                    }
+                                }
+                            }
+                        }
+                        Menu("프리셋 지우기") {
+                            ForEach(bundle.presets) { preset in
+                                Button(preset.name, role: .destructive) { bundle.deletePreset(preset.id) }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button("비우기") { bundle.clear() }
+                        .disabled(bundle.entries.isEmpty)
                 } label: {
-                    Label("응용 프로그램", systemImage: "square.grid.2x2")
+                    Image(systemName: "ellipsis")
                 }
-                if showsICloudDrive, let iCloud = LocalFileProvider.iCloudDrive {
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .foregroundStyle(.secondary)
+            }
+            if bundle.entries.isEmpty {
+                Text("⌘B로 담거나 여기로 끌어다 놓으세요. 여러 서버의 파일을 모아 한 번에 보내요.")
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(bundle.entries.prefix(6)) { entry in
+                HStack(spacing: 6) {
+                    Image(systemName: entry.item.glyph)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14)
+                    Text(entry.item.name)
+                        .font(.ui(.callout))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Text(entry.sourceName)
+                        .font(.themeMono(.caption2))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     Button {
-                        workspace.openOnMac(iCloud)
+                        bundle.remove(entry.id)
                     } label: {
-                        Label("iCloud Drive", systemImage: "icloud")
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
                     }
-                }
-                ForEach(Favorites.shared.items) { favorite in
-                    Button {
-                        workspace.open(favorite)
-                    } label: {
-                        Label(favorite.name, systemImage: favorite.siteID == nil ? "folder" : "folder.badge.gearshape")
-                    }
-                    .contextMenu {
-                        Button("사이드바에서 빼기", role: .destructive) { Favorites.shared.remove(favorite.id) }
-                    }
+                    .buttonStyle(.plain)
+                    .help("보따리에서 빼기")
                 }
             }
-            siteSection("서버", sites.filter(\.isSFTP))
-            siteSection("클라우드", sites.filter { !$0.isSFTP })
-            bundleSection
+            if bundle.entries.count > 6 {
+                Text("외 \(bundle.entries.count - 6)개").font(.ui(.caption)).foregroundStyle(.secondary)
+            }
+            if !bundle.entries.isEmpty {
+                Button("\(targetName)에 한 번에 풀기") {
+                    bundle.send(to: workspace.activeSide, in: workspace)
+                }
+                .buttonStyle(PanelButtonStyle(prominent: true))
+                .padding(.top, 2)
+                Button("프리셋으로 저장") { namingPreset = true }
+                    .buttonStyle(PanelButtonStyle())
+            }
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(ThemeStore.shared.background == nil ? .automatic : .hidden)
-        .background(ThemeStore.shared.background ?? .clear)
-        .buttonStyle(.plain)
+        .padding(12)
+        .card(highlighted: isDropTarget)
+        .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
+            workspace.dropIntoBundle(providers)
+        }
         .alert("보따리 프리셋 이름", isPresented: $namingPreset) {
             TextField("예: 배포 보따리", text: $presetName)
             Button("저장") {
@@ -69,98 +286,8 @@ struct Sidebar: View {
         }
     }
 
-    @ViewBuilder
-    private func siteSection(_ title: String, _ sites: [SavedSite]) -> some View {
-        if !sites.isEmpty {
-            Section(title) {
-                ForEach(sites) { site in
-                    Button {
-                        workspace.open(site)
-                    } label: {
-                        HStack {
-                            Label(site.name, systemImage: site.symbol)
-                                .foregroundStyle(site.tag == .prod ? SavedSite.Tag.prod.color : .primary)
-                            Spacer()
-                            if let tag = site.tag {
-                                TagChip(tag: tag)
-                            }
-                            if workspace.isOpen(site) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 6, height: 6)
-                                    .help("패인에서 열려 있어요")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var bundleSection: some View {
-        Section {
-            if bundle.entries.isEmpty {
-                Text("⌘B로 담거나 여기로 끌어다 놓으세요. 여러 서버의 파일을 모아 한 번에 보내요.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(bundle.entries) { entry in
-                HStack(spacing: 6) {
-                    Image(systemName: entry.item.isDirectory ? "folder" : "doc")
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(entry.item.name)
-                            .lineLimit(1)
-                        Text(entry.sourceName)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button {
-                        bundle.remove(entry.id)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .help("보따리에서 빼기")
-                }
-            }
-            if !bundle.entries.isEmpty {
-                HStack {
-                    Button("지금 패인으로 보내기") {
-                        bundle.send(to: workspace.activeSide, in: workspace)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    Button("비우기") { bundle.clear() }
-                        .controlSize(.small)
-                        .buttonStyle(.bordered)
-                }
-            }
-            Menu("프리셋") {
-                Button("지금 보따리를 프리셋으로 저장…") { namingPreset = true }
-                    .disabled(bundle.entries.isEmpty)
-                if !bundle.presets.isEmpty { Divider() }
-                ForEach(bundle.presets) { preset in
-                    Menu(preset.name) {
-                        Button("담기") {
-                            Task {
-                                let missing = await bundle.load(preset)
-                                if !missing.isEmpty { workspace.refusal = "찾지 못한 항목: \(missing.joined(separator: ", "))" }
-                            }
-                        }
-                        Button("지우기", role: .destructive) { bundle.deletePreset(preset.id) }
-                    }
-                }
-            }
-            .controlSize(.small)
-            .buttonStyle(.bordered)
-        } header: {
-            Label("보따리\(bundle.entries.isEmpty ? "" : " · \(bundle.entries.count)개")", systemImage: "shippingbox")
-        }
-        .listRowBackground(isDropTarget ? Color.themeAccent.opacity(0.12) : nil)
-        .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
-            workspace.dropIntoBundle(providers)
-        }
+    private var targetName: String {
+        let pane = workspace.pane(workspace.activeSide)
+        return pane.site?.name ?? (pane.isLocal ? pane.path.name : pane.provider.displayName)
     }
 }

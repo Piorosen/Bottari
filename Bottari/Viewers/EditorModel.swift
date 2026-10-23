@@ -80,7 +80,7 @@ final class EditorModel {
         do {
             let current = try await provider.stat(item.path)
             if let size = current.size, size > Self.sizeLimit {
-                phase = .failed("\(size.formatted(.byteCount(style: .file)))라서 편집기로 열지 않아요. 빠른 미리보기를 쓰세요.")
+                phase = .failed("\(ByteFormat.string(size))라서 편집기로 열지 않아요. 빠른 미리보기를 쓰세요.")
                 return
             }
             let data = try await provider.readData(item.path)

@@ -39,14 +39,24 @@ nonisolated struct Theme: Codable, Hashable, Identifiable, Sendable {
     }
 
     struct Fonts: Codable, Hashable, Sendable {
-        /// Family names; nil means the system font.
-        var ui: String?
-        var mono: String?
+        /// Family names; nil means the system font. IBM Plex ships with the app.
+        var ui: String? = "IBM Plex Sans KR"
+        var mono: String? = "IBM Plex Mono"
     }
 
     struct ListOptions: Codable, Hashable, Sendable {
         /// Whether new panes show dotfiles.
         var showHidden = false
+        /// Finder's colour icons instead of the design's line icons.
+        var finderIcons = false
+
+        init() {}
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            showHidden = try container.decodeIfPresent(Bool.self, forKey: .showHidden) ?? false
+            finderIcons = try container.decodeIfPresent(Bool.self, forKey: .finderIcons) ?? false
+        }
     }
 
     var id: String { name }
@@ -167,11 +177,6 @@ final class ThemeStore {
         current.colors.accent.flatMap { Color(themeHex: $0, liftedInDark: true) } ?? .accentColor
     }
 
-    var background: Color? { current.colors.background.flatMap { Color(themeHex: $0) } }
-    var panel: Color? { current.colors.panel.flatMap { Color(themeHex: $0) } }
-    var panel2: Color? { current.colors.panel2.flatMap { Color(themeHex: $0) } }
-    var line: Color? { current.colors.line.flatMap { Color(themeHex: $0) } }
-
     func tagColor(_ tag: SavedSite.Tag) -> Color? {
         current.tags[tag.label].flatMap { Color(themeHex: $0, liftedInDark: true) }
     }
@@ -194,8 +199,8 @@ final class ThemeStore {
     var rowPadding: CGFloat { current.density == .compact ? 0 : 3 }
 
     /// Font families worth offering that are installed on this Mac.
-    static let uiFontChoices = available(["IBM Plex Sans KR", "Pretendard", "Noto Sans KR", "Spoqa Han Sans Neo", "Apple SD Gothic Neo"])
-    static let monoFontChoices = available(["JetBrains Mono", "IBM Plex Mono", "D2Coding", "Fira Code", "Menlo", "Monaco"])
+    static let uiFontChoices = available([BundledFonts.sans, "Pretendard", "Noto Sans KR", "Spoqa Han Sans Neo", "Apple SD Gothic Neo"])
+    static let monoFontChoices = available([BundledFonts.mono, "JetBrains Mono", "IBM Plex Mono", "D2Coding", "Fira Code", "Menlo", "Monaco"])
 
     private static func available(_ families: [String]) -> [String] {
         let installed = Set(NSFontManager.shared.availableFontFamilies)
@@ -207,7 +212,7 @@ final class ThemeStore {
         return family
     }
 
-    private static func pointSize(_ style: Font.TextStyle) -> CGFloat {
+    static func pointSize(_ style: Font.TextStyle) -> CGFloat {
         switch style {
         case .largeTitle: 26
         case .title: 22
@@ -355,18 +360,13 @@ func settingsChanged() {
     NotificationCenter.default.post(name: .settingsChanged, object: nil)
 }
 
-/// The theme's accent, UI font and light/dark for a window's content.
+/// The theme's accent, colours and UI font for a window's content.
 struct ThemedWindow: ViewModifier {
     func body(content: Content) -> some View {
-        let store = ThemeStore.shared
-        if let family = store.uiFontFamily {
-            content
-                .tint(store.accent)
-                .font(.custom(family, size: 13, relativeTo: .body))
-        } else {
-            content
-                .tint(store.accent)
-        }
+        content
+            .tint(ThemeStore.shared.accent)
+            .foregroundStyle(Palette.text)
+            .font(.ui(.body))
     }
 }
 

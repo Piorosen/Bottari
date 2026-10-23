@@ -286,7 +286,7 @@ private struct ScreenView: View {
             Image(systemName: "display")
                 .foregroundStyle(model.site.tag == .prod ? SavedSite.Tag.prod.color : .secondary)
             Text(model.site.name)
-                .font(.headline)
+                .font(.ui(.headline))
             if let tag = model.site.tag {
                 TagChip(tag: tag)
             }
@@ -335,7 +335,7 @@ private struct ScreenView: View {
                     .foregroundStyle(.orange)
             }
         }
-        .font(.caption)
+        .font(.ui(.caption))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 5)

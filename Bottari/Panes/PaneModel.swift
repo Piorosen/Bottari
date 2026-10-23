@@ -17,6 +17,11 @@ final class PaneModel {
     private(set) var connectingSite: SavedSite?
     var selection: Set<FileItem.ID> = []
     var showsHiddenFiles = ThemeStore.shared.current.list.showHidden
+    var viewMode = ViewMode.list
+
+    enum ViewMode: CaseIterable {
+        case list, grid
+    }
     /// The row whose name is being edited in place.
     var renaming: FileItem.ID?
     /// What Quick Look shows (Space), and the files it can step through.
@@ -216,11 +221,11 @@ final class PaneModel {
 
     /// A local copy of a server file through the cache, reporting progress in the footer.
     func download(_ item: FileItem) async throws -> URL {
-        let total = item.size.map { $0.formatted(.byteCount(style: .file)) }
+        let total = item.size.map { ByteFormat.string($0) }
         downloadStatus = "받는 중…"
         defer { downloadStatus = nil }
         return try await AppServices.fileCache.localURL(for: item, from: provider) { [weak self] received in
-            let text = "받는 중 · \(received.formatted(.byteCount(style: .file)))" + (total.map { " / \($0)" } ?? "")
+            let text = "받는 중 · \(ByteFormat.string(received))" + (total.map { " / \($0)" } ?? "")
             Task { @MainActor in
                 if self?.downloadStatus != nil { self?.downloadStatus = text }
             }

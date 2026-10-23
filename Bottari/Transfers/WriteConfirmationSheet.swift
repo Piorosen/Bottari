@@ -47,7 +47,7 @@ struct WriteConfirmationSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label {
                     Text(title)
-                        .font(.title3.weight(.semibold))
+                        .font(.ui(.title3, weight: .semibold))
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(band)
@@ -56,7 +56,7 @@ struct WriteConfirmationSheet: View {
                     Image(systemName: "server.rack")
                         .foregroundStyle(band)
                     Text(site?.name ?? "")
-                        .font(.headline)
+                        .font(.ui(.headline))
                     if let tag = site?.tag {
                         TagChip(tag: tag)
                     }
