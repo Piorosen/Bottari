@@ -61,13 +61,20 @@ import Testing
 
         let sites = [
             SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "203.0.113.10", username: "deploy"), authentication: .agent(socket: nil), tag: .prod),
-            SavedSite(name: "nas", endpoint: SFTPEndpoint(host: "nas.local", port: 2222, username: "admin"), authentication: .password, startPath: "/volume1"),
+            SavedSite(name: "nas", endpoint: SFTPEndpoint(host: "nas.local", port: 2222, username: "admin"), authentication: .password, startPath: "/volume1", readOnly: true),
         ]
         try store.save(sites)
 
         #expect(try store.load() == sites)
         let json = try String(contentsOf: url, encoding: .utf8)
         #expect(!json.contains("password\":\""))
+    }
+
+    @Test func prodSitesConfirmWritesByDefault() {
+        let endpoint = SFTPEndpoint(host: "h", username: "u")
+        #expect(SavedSite(name: "p", endpoint: endpoint, authentication: .password, tag: .prod).confirmsWrites)
+        #expect(!SavedSite(name: "d", endpoint: endpoint, authentication: .password, tag: .dev).confirmsWrites)
+        #expect(!SavedSite(name: "p", endpoint: endpoint, authentication: .password, tag: .prod, confirmsWrites: false).confirmsWrites)
     }
 
     @Test func secretKeysAreScopedToTheSite() {

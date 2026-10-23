@@ -26,6 +26,10 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public var startPath: String?
     /// The `~/.ssh/config` alias this site was imported from, so importing again skips it.
     public var sshConfigAlias: String?
+    /// Hide actions that change files on this server.
+    public var readOnly: Bool
+    /// Ask before copying onto, overwriting or deleting on this server. PROD sites start with it on.
+    public var confirmsWrites: Bool
 
     public init(
         id: UUID = UUID(),
@@ -35,7 +39,9 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         proxyJump: [String] = [],
         tag: Tag? = nil,
         startPath: String? = nil,
-        sshConfigAlias: String? = nil
+        sshConfigAlias: String? = nil,
+        readOnly: Bool = false,
+        confirmsWrites: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -45,6 +51,8 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         self.tag = tag
         self.startPath = startPath
         self.sshConfigAlias = sshConfigAlias
+        self.readOnly = readOnly
+        self.confirmsWrites = confirmsWrites ?? (tag == .prod)
     }
 
     /// A site for an `~/.ssh/config` host: its IdentityAgent if set, otherwise its
