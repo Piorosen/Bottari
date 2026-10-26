@@ -31,24 +31,44 @@ public enum SFTPCredential: Equatable, Sendable {
     case privateKey(String, passphrase: String? = nil)
     /// Keys held by an SSH agent such as ssh-agent or 1Password; `socket` nil
     /// means `SSH_AUTH_SOCK`. Only the agent's Ed25519 keys are used for now.
-    case agent(socket: String? = nil)
+    /// `fallbackKeys` (OpenSSH private keys, e.g. `~/.ssh/id_ed25519`) are tried
+    /// after the agent's, the way `ssh` falls back to its default key files;
+    /// ones that need a passphrase or are of an unsupported kind are skipped.
+    case agent(socket: String? = nil, fallbackKeys: [String] = [])
+    /// Tries `first`, then `then` if the server refuses it or it has nothing
+    /// to offer: keys first and a password after, as `ssh` does.
+    indirect case fallback(SFTPCredential, then: SFTPCredential)
 
     /// One authentication method per connection attempt, tried in order until one
-    /// is accepted. Only an agent with several keys yields more than one.
+    /// is accepted. Only an agent, with several keys or fallback keys, or a
+    /// fallback yields more than one.
     func authenticationAttempts(username: String) throws -> [SSHAuthenticationMethod] {
-        guard case .agent(let socket) = self else {
+        if case .fallback(let first, let then) = self {
+            let firstAttempts = (try? first.authenticationAttempts(username: username)) ?? []
+            return firstAttempts + (try then.authenticationAttempts(username: username))
+        }
+        guard case .agent(let socket, let fallbackKeys) = self else {
             return [try authenticationMethod(username: username)]
         }
-        guard let agent = SSHAgentClient(socket: socket), let identities = try? agent.identities() else {
-            throw SFTPConnectError.agentUnavailable
+        var attempts: [SSHAuthenticationMethod] = []
+        // Reported only if neither the agent nor the fallback keys leave anything to try.
+        let nothingToTry: SFTPConnectError
+        if let agent = SSHAgentClient(socket: socket), let identities = try? agent.identities() {
+            let keys = identities.compactMap { AgentEd25519PrivateKey(agent: agent, identity: $0) }
+            attempts = keys.map { .custom(SingleKeyOffer(username: username, key: NIOSSHPrivateKey(custom: $0))) }
+            nothingToTry = identities.isEmpty ? .agentHasNoKeys : .agentHasNoUsableKeys
+        } else {
+            nothingToTry = .agentUnavailable
         }
-        let keys = identities.compactMap { AgentEd25519PrivateKey(agent: agent, identity: $0) }
-        guard !keys.isEmpty else { throw SFTPConnectError.agentHasNoUsableKeys }
-        return keys.map { .custom(SingleKeyOffer(username: username, key: NIOSSHPrivateKey(custom: $0))) }
+        attempts += fallbackKeys.compactMap { try? SFTPCredential.privateKey($0).authenticationMethod(username: username) }
+        guard !attempts.isEmpty else { throw nothingToTry }
+        return attempts
     }
 
     func authenticationMethod(username: String) throws -> SSHAuthenticationMethod {
         switch self {
+        case .fallback:
+            preconditionFailure("Fallback credentials go through authenticationAttempts(username:)")
         case .agent:
             preconditionFailure("Agent credentials go through authenticationAttempts(username:)")
         case .password(let password):
@@ -90,12 +110,27 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     /// The key text could not be parsed, or the passphrase is wrong.
     case unreadableKey
     case agentUnavailable
+    /// The agent holds no keys at all, and no fallback key file could be used.
+    case agentHasNoKeys
+    /// The agent holds keys, but none of a kind Bottari can use through it.
     case agentHasNoUsableKeys
     /// A jump host on the way failed; `reason` says how.
     case jumpHostFailed(host: String, reason: String)
+    /// Nothing answered at the address before the timeout.
+    case noResponse(address: String, seconds: Int)
+    /// Something answered, but nothing takes connections on that port.
+    case refused(address: String)
+    /// The host name does not resolve.
+    case unknownHost(String)
+    /// This network has no way to reach the host.
+    case noRoute(address: String)
     case unreachable(String)
 
-    static func wrap(_ error: any Error) -> any Error {
+    /// `error` as an `SFTPConnectError`, naming `endpoint` when the network was the problem.
+    static func wrap(_ error: any Error, dialling endpoint: SFTPEndpoint? = nil) -> any Error {
+        if let endpoint, let failure = networkFailure(error, dialling: endpoint) {
+            return failure
+        }
         switch error {
         case is SFTPConnectError, is CancellationError:
             return error
@@ -112,27 +147,62 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
             return SFTPConnectError.unreachable(String(describing: error))
         }
     }
+
+    /// What NIO's socket errors mean for someone trying to reach `endpoint`.
+    static func networkFailure(_ error: any Error, dialling endpoint: SFTPEndpoint) -> SFTPConnectError? {
+        let address = endpoint.port == 22 ? endpoint.host : "\(endpoint.host):\(endpoint.port)"
+        func failure(errno code: CInt) -> SFTPConnectError? {
+            switch code {
+            case ECONNREFUSED: .refused(address: address)
+            case EHOSTUNREACH, ENETUNREACH: .noRoute(address: address)
+            default: nil
+            }
+        }
+        switch error {
+        case ChannelError.connectTimeout(let timeout):
+            return .noResponse(address: address, seconds: Int(timeout.nanoseconds / 1_000_000_000))
+        case let error as NIOConnectionError:
+            if error.connectionErrors.isEmpty, error.dnsAError != nil || error.dnsAAAAError != nil {
+                return .unknownHost(endpoint.host)
+            }
+            return error.connectionErrors.lazy.compactMap { ($0.error as? IOError).flatMap { failure(errno: $0.errnoCode) } }.first
+        case let error as IOError:
+            return failure(errno: error.errnoCode)
+        default:
+            return nil
+        }
+    }
 }
 
 extension SFTPConnectError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .hostKeyChanged(let host, let expected, let presented):
-            "\(host)의 호스트 키가 바뀌었어요. 서버를 다시 설치한 게 아니라면 연결하지 마세요.\n저장된 키: \(expected)\n받은 키: \(presented)"
+            "\(host)의 호스트 키가 변경되었습니다. 서버를 재설치하지 않았다면 연결하지 마십시오.\n저장된 키: \(expected)\n받은 키: \(presented)"
         case .authenticationFailed:
-            "로그인하지 못했어요. 사용자 이름과 비밀번호 또는 키를 확인하세요."
+            "로그인할 수 없습니다. 사용자 이름과 비밀번호 또는 키를 확인하십시오."
         case .unsupportedKey(let type):
-            "아직 지원하지 않는 키 형식이에요: \(type)"
+            "지원하지 않는 키 형식입니다: \(type)"
         case .unreadableKey:
-            "키를 읽지 못했어요. 형식이나 암호를 확인하세요."
+            "키를 읽을 수 없습니다. 키 형식이나 암호를 확인하십시오."
         case .agentUnavailable:
-            "SSH 에이전트에 연결하지 못했어요. ssh-agent 나 1Password 에이전트가 켜져 있는지 확인하세요."
+            "SSH 에이전트에 연결할 수 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_rsa)도 없습니다. ssh-agent 또는 1Password 에이전트가 실행 중인지 확인하거나 연결 관리에서 키 파일을 선택하십시오."
+        case .agentHasNoKeys:
+            "SSH 에이전트에 키가 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_rsa)도 없습니다. ssh-add로 키를 추가하거나 연결 관리에서 키 파일을 선택하십시오."
         case .agentHasNoUsableKeys:
-            "에이전트에 쓸 수 있는 키가 없어요. Ed25519 키를 ssh-add 로 추가하세요. (RSA · ECDSA 에이전트 키는 아직 지원하지 않아요)"
+            "SSH 에이전트에 사용할 수 있는 키가 없습니다. RSA 및 ECDSA 에이전트 키는 아직 지원되지 않습니다. Ed25519 키를 ssh-add로 추가하거나 연결 관리에서 키 파일을 선택하십시오."
         case .jumpHostFailed(let host, let reason):
-            "점프 호스트 \(host)에서 막혔어요. \(reason)"
+            "점프 호스트 \(host)에서 연결에 실패했습니다. \(reason)"
+        case .noResponse(let address, let seconds):
+            "\(address)에서 \(seconds)초 동안 응답이 없습니다. 서버가 꺼져 있거나, 방화벽 또는 VPN 때문에 이 네트워크에서는 닿지 않을 수 있습니다."
+        case .refused(let address):
+            "\(address)에서 연결을 거부했습니다. 포트 번호가 맞는지, 서버에서 SSH가 실행 중인지 확인하십시오."
+        case .unknownHost(let host):
+            "\(host) 주소를 찾을 수 없습니다. 호스트 이름을 확인하고, 사내 주소라면 VPN 연결을 확인하십시오."
+        case .noRoute(let address):
+            "\(address)로 가는 경로가 없습니다. 네트워크 또는 VPN 연결을 확인하십시오."
         case .unreachable(let reason):
-            "서버에 연결하지 못했어요: \(reason)"
+            "서버에 연결할 수 없습니다: \(reason)"
         }
     }
 }
@@ -270,7 +340,7 @@ final class SFTPConnection: @unchecked Sendable {
                     throw error
                 }
             } catch {
-                let reason = SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error)
+                let reason = SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error, dialling: hop.endpoint)
                 if case SFTPConnectError.authenticationFailed = reason { continue }
                 throw reason
             }

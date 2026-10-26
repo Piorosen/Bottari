@@ -222,8 +222,10 @@ public struct ConnectionPlan: Equatable, Sendable {
 
 /// Why a saved site could not be turned into a connection plan.
 public enum SiteConnectError: Error, Equatable, Sendable {
-    /// No password was given and none is stored for this site.
-    case passwordMissing(site: String)
+    /// No password was given and none is stored for the site named `site`
+    /// (the one connected to, or a jump host on the way). `key` is where its
+    /// password goes in the secret store, so it can be asked for and kept.
+    case passwordMissing(site: String, key: String)
     case keyFileUnreadable(path: String)
     /// Jump hosts refer back to each other.
     case jumpLoop(String)
@@ -232,9 +234,9 @@ public enum SiteConnectError: Error, Equatable, Sendable {
 extension SiteConnectError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .passwordMissing(let site): "\(site)의 비밀번호가 저장되어 있지 않아요."
-        case .keyFileUnreadable(let path): "키 파일을 읽지 못했어요: \(path)"
-        case .jumpLoop(let name): "점프 호스트가 서로를 가리키고 있어요: \(name)"
+        case .passwordMissing(let site, _): "\(site)의 비밀번호가 저장되어 있지 않습니다."
+        case .keyFileUnreadable(let path): "키 파일을 읽을 수 없습니다: \(path)"
+        case .jumpLoop(let name): "점프 호스트가 서로를 참조하고 있습니다: \(name)"
         }
     }
 }
@@ -244,28 +246,47 @@ extension SavedSite {
 
     public static let readFile: FileReader = { try? String(contentsOfFile: $0, encoding: .utf8) }
 
+    /// The key files `ssh` falls back to when a host names none, limited to the
+    /// kinds Bottari can read, Ed25519 first.
+    public static let defaultKeyFiles = ["id_ed25519", "id_rsa"]
+
+    /// An agent credential that, like `ssh`, goes on to the default key files
+    /// in `sshDirectory` (none when it is nil or empty).
+    static func agentCredential(socket: String?, sshDirectory: String?, readFile: FileReader) -> SFTPCredential {
+        guard let sshDirectory, !sshDirectory.isEmpty else { return .agent(socket: socket) }
+        let keys = defaultKeyFiles.compactMap { readFile((sshDirectory as NSString).appendingPathComponent($0)) }
+        return .agent(socket: socket, fallbackKeys: keys)
+    }
+
     /// The site's credential, with secrets taken from `secrets`. A `password`
-    /// passed in (just typed by the user) wins over a stored one.
-    public func credential(secrets: SecretStore, password: String? = nil, readFile: FileReader = SavedSite.readFile) throws -> SFTPCredential {
+    /// passed in (just typed by the user) wins over a stored one. An agent
+    /// falls back to the default key files in `sshDirectory`. A site that logs
+    /// in with keys but also has a password tries the keys first, then the
+    /// password, the way `ssh` does.
+    public func credential(secrets: SecretStore, password: String? = nil, sshDirectory: String? = nil, readFile: FileReader = SavedSite.readFile) throws -> SFTPCredential {
+        let keys: SFTPCredential
         switch authentication {
         case .agent(let socket):
-            return .agent(socket: socket)
+            keys = Self.agentCredential(socket: socket, sshDirectory: sshDirectory, readFile: readFile)
         case .keyFile(let path):
             guard let text = readFile((path as NSString).expandingTildeInPath) else {
                 throw SiteConnectError.keyFileUnreadable(path: path)
             }
-            return .privateKey(text, passphrase: try secrets.secret(for: passphraseKey))
+            keys = .privateKey(text, passphrase: try secrets.secret(for: passphraseKey))
         case .password:
             guard let password = try password ?? secrets.secret(for: passwordKey) else {
-                throw SiteConnectError.passwordMissing(site: name)
+                throw SiteConnectError.passwordMissing(site: name, key: passwordKey)
             }
             return .password(password)
         }
+        guard let password = try password ?? secrets.secret(for: passwordKey) else { return keys }
+        return .fallback(keys, then: .password(password))
     }
 
     /// The endpoint, credential and jump hosts to connect to this site. Each
     /// ProxyJump name is looked up among `sites`, then in `sshConfig`, and is
-    /// otherwise read as `[user@]host[:port]` and tried with the default agent.
+    /// otherwise read as `[user@]host[:port]` and tried with the default agent
+    /// and key files.
     public func connectionPlan(
         sites: [SavedSite],
         sshConfig: SSHConfig,
@@ -277,7 +298,7 @@ extension SavedSite {
         let resolver = HopResolver(sites: sites, sshConfig: sshConfig, secrets: secrets, defaultUser: defaultUser, readFile: readFile)
         return ConnectionPlan(
             endpoint: endpoint,
-            credential: try credential(secrets: secrets, password: password, readFile: readFile),
+            credential: try credential(secrets: secrets, password: password, sshDirectory: sshConfig.directory, readFile: readFile),
             hops: try resolver.hops(for: proxyJump, visiting: [name])
         )
     }
@@ -317,9 +338,10 @@ private struct HopResolver {
             if let site {
                 // A jump host can have its own jump hosts; those come first.
                 hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
-                hops.append(SSHHop(endpoint: site.endpoint, credential: try site.credential(secrets: secrets, readFile: readFile)))
+                hops.append(SSHHop(endpoint: site.endpoint, credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile)))
             } else {
-                hops.append(SSHHop(endpoint: SavedSite.endpoint(parsingHop: name, defaultUser: defaultUser), credential: .agent()))
+                let credential = SavedSite.agentCredential(socket: nil, sshDirectory: sshConfig.directory, readFile: readFile)
+                hops.append(SSHHop(endpoint: SavedSite.endpoint(parsingHop: name, defaultUser: defaultUser), credential: credential))
             }
         }
         return hops

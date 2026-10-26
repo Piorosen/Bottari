@@ -88,16 +88,16 @@ nonisolated struct Theme: Codable, Hashable, Identifiable, Sendable {
 
     /// The design's colour sets. Choosing one keeps the accent, fonts and the rest.
     static let presets: [(theme: Theme, subtitle: String)] = [
-        (Theme(name: "시스템"), "macOS 밝기 따라"),
-        (Theme(name: "종이", base: .light, colors: Colors(background: "#ECEEF2", panel: "#FFFFFF", panel2: "#F6F7F9", line: "#DCE0E6", text: "#14171D")), "밝은 기본"),
-        (Theme(name: "먹", base: .dark, colors: Colors(background: "#0E1014", panel: "#15181E", panel2: "#1A1E25", line: "#272C35", text: "#E6E8EC")), "어두운 기본"),
+        (Theme(name: "시스템"), "macOS 설정 따름"),
+        (Theme(name: "종이", base: .light, colors: Colors(background: "#EFECE6", panel: "#FDFCFA", panel2: "#F5F2EC", line: "#E0DBD2", text: "#1C1A17")), "밝은 기본"),
+        (Theme(name: "먹", base: .dark, colors: Colors(background: "#131211", panel: "#1B1A18", panel2: "#211F1C", line: "#2F2C28", text: "#ECE8E1")), "어두운 기본"),
         (Theme(name: "쪽빛 밤", base: .dark, colors: Colors(background: "#0D1022", panel: "#141A33", panel2: "#1A2140", line: "#2A3358", text: "#E4E8F7")), "푸른 어둠"),
         (Theme(name: "모시", base: .light, colors: Colors(background: "#EEEDEA", panel: "#FBFAF8", panel2: "#F4F3F0", line: "#DEDBD5", text: "#1C1B19")), "따뜻한 회색"),
         (Theme(name: "고대비", base: .light, colors: Colors(background: "#FFFFFF", panel: "#FFFFFF", panel2: "#F0F0F0", line: "#1A1A1A", text: "#000000")), "선명하게"),
     ]
 
     static let accents: [(name: String, hex: String)] = [
-        ("쪽빛", "#3651C9"), ("청록", "#0F7C78"), ("자주", "#8A3FA0"), ("송진", "#9A6700"), ("진달래", "#B0306A"), ("먹", "#2B2F38"),
+        ("쪽빛", "#2D5A8C"), ("청록", "#0F7C78"), ("자주", "#8A3FA0"), ("송진", "#9A6700"), ("진달래", "#B0306A"), ("먹", "#2B2F38"),
     ]
 
     /// Choices per tag; the first is the default.

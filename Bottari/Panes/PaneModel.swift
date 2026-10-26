@@ -64,11 +64,12 @@ final class PaneModel {
         await load(path)
     }
 
-    /// Connects to a saved site and shows it in this pane.
-    func connect(to site: SavedSite) async throws {
+    /// Connects to a saved site and shows it in this pane. `typedSecrets` are
+    /// passwords the user just typed for it (see `SiteLibrary.connect`).
+    func connect(to site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true) async throws {
         connectingSite = site
         defer { connectingSite = nil }
-        let provider = try await library.connect(site)
+        let provider = try await library.connect(site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
         await switchProvider(to: provider, site: site)
     }
 
@@ -86,7 +87,7 @@ final class PaneModel {
         forwardStack = []
         hasStarted = true
         if await !load(start), start != newProvider.home, await load(newProvider.home) {
-            errorMessage = "시작 폴더를 열지 못해서 홈 폴더를 열었어요: \(start.string)"
+            errorMessage = "시작 폴더를 열 수 없어 홈 폴더를 열었습니다: \(start.string)"
         }
         await AppServices.connections.release(previous)
     }

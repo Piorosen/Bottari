@@ -42,10 +42,21 @@ enum SnapshotRenderer {
                 to: directory.appending(path: "sites-drive-\(name).png")
             )
             await render(
-                SiteManagerSheet(library: library, initialSelection: nas.id, initialError: SiteConnectError.passwordMissing(site: nas.name)) { (_: any FileProvider, _: SavedSite) in },
+                SiteManagerSheet(library: library, initialSelection: nas.id, initialError: SiteConnectError.passwordMissing(site: nas.name, key: nas.passwordKey)) { (_: any FileProvider, _: SavedSite) in },
                 size: CGSize(width: 1100, height: 820), appearance: appearance,
                 to: directory.appending(path: "sites-password-\(name).png")
             )
+            // Asked on connecting: no password saved, and keys the server refused.
+            for (file, error) in [("password-missing", SiteConnectError.passwordMissing(site: nas.name, key: nas.passwordKey) as any Error),
+                                  ("password-keys", SFTPConnectError.authenticationFailed)] {
+                if let request = PasswordRequest(site: file == "password-keys" ? prod : nas, side: .left, error: error, typed: [:], sites: library.sites, failed: nil, then: nil) {
+                    await render(
+                        PasswordSheet(request: request) { _, _ in }.background(Palette.panel),
+                        size: CGSize(width: 400, height: 260), appearance: appearance,
+                        to: directory.appending(path: "\(file)-\(name).png")
+                    )
+                }
+            }
             // A pane showing a PROD site; local sample files stand in for the server.
             let pane = PaneModel(provider: LocalFileProvider(), library: library)
             var site = prod
@@ -290,7 +301,7 @@ enum SnapshotRenderer {
         let gpu = TunnelProfile(name: "GPU 클러스터", siteID: library.sites[1].id, mode: .bottariOnly, routes: "10.0.4.0/24")
         TunnelStore.shared.showPreview(
             [proxy, office, gpu],
-            states: [proxy.id: .on("SOCKS5 :1080 · HTTP :8118 · 시스템 프록시에 PAC 적용"), office.id: .off, gpu.id: .on("Bottari 연결이 dev-api을(를) 거쳐요")],
+            states: [proxy.id: .on("SOCKS5 :1080 · HTTP :8118 · 시스템 프록시에 PAC 적용"), office.id: .off, gpu.id: .on("Bottari 연결만 dev-api 경유")],
             connections: [proxy.id: [
                 .init(id: UUID(), host: "photos.home.arpa", port: 443, kind: "SOCKS", opened: Date()),
                 .init(id: UUID(), host: "192.168.0.20", port: 5000, kind: "HTTP", opened: Date()),

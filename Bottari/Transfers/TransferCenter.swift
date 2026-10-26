@@ -51,7 +51,7 @@ struct TransferCenter: View {
                 filterBar
                 Rectangle().fill(Palette.line).frame(height: 1)
                 if shown.isEmpty {
-                    ContentUnavailableView(filter == .all ? "전송 기록이 없어요" : "\(filter.title) 전송이 없어요", systemImage: "arrow.up.arrow.down")
+                    ContentUnavailableView(filter == .all ? "전송 기록 없음" : "\(filter.title) 항목 없음", systemImage: "arrow.up.arrow.down")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
@@ -74,7 +74,7 @@ struct TransferCenter: View {
                     TransferDetail(job: selected)
                         .padding(16)
                 } else {
-                    Text("전송을 고르면 경로와 진행 순서가 보여요")
+                    Text("선택한 전송 없음")
                         .font(.ui(.callout))
                         .foregroundStyle(.secondary)
                         .padding(16)
@@ -89,7 +89,7 @@ struct TransferCenter: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 BackButton(title: "메인으로") { dismissWindow(id: "transfers") }
-                WindowHeading(title: "전송 센터", subtitle: "경로는 자동으로 골라요")
+                WindowHeading(title: "전송 센터")
             }
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 14) {
@@ -139,7 +139,7 @@ struct TransferCenter: View {
             Group {
                 Button("모두 일시정지") { queue.pauseAll() }
                 Button("모두 재개") { queue.resumeAll() }
-                Button("완료 항목 지우기") { queue.removeEnded() }
+                Button("완료 항목 제거") { queue.removeEnded() }
             }
             .buttonStyle(PanelButtonStyle())
             .fixedSize()
@@ -159,7 +159,7 @@ struct TransferCenter: View {
                 .buttonStyle(IconButtonStyle())
             }
             VStack(alignment: .leading, spacing: 6) {
-                SectionLabel("같은 이름의 파일이 있으면")
+                SectionLabel("같은 이름의 파일")
                 HStack(spacing: 6) {
                     ForEach(ConflictPolicy.allCases, id: \.self) { option in
                         Button(option.label) { policy = option }
@@ -168,14 +168,14 @@ struct TransferCenter: View {
                     }
                 }
             }
-            .help("새로 시작하는 전송부터 적용돼요.")
+            .help("새 전송부터 적용")
             VStack(alignment: .leading, spacing: 6) {
                 SectionLabel("무결성 확인")
                 Toggle("전송 후 체크섬 비교", isOn: $verifiesChecksums)
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .font(.ui(.callout))
-                    .help("전송한 뒤 양쪽에서 SHA-256을 계산해 비교해요. 서버는 명령을 실행할 수 있을 때만 돼요.")
+                    .help("양쪽의 SHA-256 비교 (명령을 실행할 수 있는 서버만)")
             }
             Spacer()
         }
@@ -277,7 +277,7 @@ struct TransferRow: View {
             }
             if job.state.hasEnded {
                 Button { queue.remove(job) } label: { Image(systemName: "xmark") }
-                    .help("목록에서 지우기")
+                    .help("목록에서 제거")
             } else {
                 Button { queue.cancel(job) } label: { Image(systemName: "stop.fill") }
                     .help("취소")
@@ -294,9 +294,9 @@ struct TransferRow: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("같은 이름이 이미 있어요: \(conflict.existing.name)")
+                Text("같은 이름의 파일이 이미 있습니다: \(conflict.existing.name)")
                     .font(.ui(.callout, weight: .medium))
-                Text("있는 파일 \(describe(conflict.existing)) · 보낼 파일 \(describe(conflict.incoming))")
+                Text("기존 파일 \(describe(conflict.existing)) · 보내는 파일 \(describe(conflict.incoming))")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -372,13 +372,13 @@ private struct TransferDetail: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                SectionLabel("데이터가 흐르는 길")
+                SectionLabel("데이터 흐름")
                 flow
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel("경로")
-                routeCard(title: "서버 간 직접", detail: "두 서버가 서로 바로 보내요. Mac 인터넷을 쓰지 않지만, 서버 사이 SSH 에이전트 포워딩이 필요해서 아직 쓰지 않아요.", chosen: false, available: false)
+                routeCard(title: "서버 간 직접", detail: "서버 간 SSH 에이전트 포워딩이 필요해 아직 지원하지 않음", chosen: false, available: false)
                 routeCard(title: job.route == .viaMac ? "Mac 경유" : job.routeTitle, detail: job.routeExplanation, chosen: true, available: true)
             }
 
@@ -393,7 +393,7 @@ private struct TransferDetail: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel("안전하게 쓰는 순서")
+                SectionLabel("쓰기 단계")
                 ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                     HStack(alignment: .top, spacing: 10) {
                         StepMark(state: step.state)
@@ -425,8 +425,7 @@ private struct TransferDetail: View {
                     .frame(minWidth: 30)
                 }
                 VStack(spacing: 6) {
-                    Image(systemName: symbol(for: stop, at: index))
-                        .font(.system(size: 16))
+                    Glyph(symbol(for: stop, at: index), size: 20)
                         .frame(width: 40, height: 40)
                         .background(Palette.panel, in: .rect(cornerRadius: 9))
                         .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Palette.line))
@@ -442,13 +441,13 @@ private struct TransferDetail: View {
     }
 
     private func symbol(for stop: RouteStop, at index: Int) -> String {
-        if stop.passingThrough { return "laptopcomputer" }
+        if stop.passingThrough { return "bt.mac" }
         let provider = index == 0 ? job.source.provider : job.destination.provider
         return provider.symbol
     }
 
     private func caption(for stop: RouteStop, at index: Int) -> String {
-        if stop.passingThrough { return "파이프 · 임시 파일 없음" }
+        if stop.passingThrough { return "중계" }
         let provider = index == 0 ? job.source.provider : job.destination.provider
         let verb = index == 0 && job.stops.count > 1 ? "읽기" : "쓰기"
         if job.stops.count == 1 { return job.kind == .move ? "이름 바꾸기" : "서버에서 복사" }
@@ -476,13 +475,13 @@ private struct TransferDetail: View {
         let to = "\(job.destination.name):\(job.destinationFolder.appending(job.items.first?.name ?? "").string)"
         switch job.route {
         case .withinLocation:
-            return job.kind == .move ? "rename \(from)\n  → \(to)" : "cp -a \(from)\n  → \(to)\n내려받지 않고 서버에서 바로"
+            return job.kind == .move ? "rename \(from)\n  → \(to)" : "cp -a \(from)\n  → \(to)\n다운로드 없이 서버에서 복사"
         case .local:
             return "read  \(from)\n  ↳ write \(to)"
         default:
             let reader = job.source.provider.isLocal ? "read " : "\(job.source.provider.kindLabel) read "
             let writer = job.destination.provider.isLocal ? "write" : "\(job.destination.provider.kindLabel) write"
-            return "\(reader) \(from)\n  ↳ \(writer) \(to)\n실패하면 받은 데까지 두고 이어서"
+            return "\(reader) \(from)\n  ↳ \(writer) \(to)\n실패 시 받은 부분부터 이어서 전송"
         }
     }
 
@@ -497,13 +496,13 @@ private struct TransferDetail: View {
         let finished = job.state == .finished
         let partName = job.items.first.map { RemotePath("/").appending($0.name).partialWritePath.name } ?? ".bottari-part"
         var steps = [
-            Step(title: "받는 쪽 크기 · 권한 확인", state: started ? .done : job.state == .preparing ? .current : .waiting),
+            Step(title: "대상 크기 및 권한 확인", state: started ? .done : job.state == .preparing ? .current : .waiting),
             Step(title: "임시 이름으로 쓰기", note: partName, state: finished ? .done : started ? .current : .waiting),
         ]
         if job.verifiesChecksums {
             steps.append(Step(title: "체크섬 비교 (SHA-256)", state: finished ? .done : .waiting))
         }
-        steps.append(Step(title: "원래 이름으로 바꾸기 (rename)", note: "중간에 끊겨도 원본은 그대로", state: finished ? .done : .waiting))
+        steps.append(Step(title: "원래 이름으로 바꾸기 (rename)", note: "중단되어도 기존 파일 유지", state: finished ? .done : .waiting))
         return steps
     }
 }
@@ -534,7 +533,7 @@ extension TransferJob {
     var routeDescription: String {
         let names = "\(source.name) → \(destination.name)"
         return switch route {
-        case .withinLocation: source.provider.isLocal ? "Mac 안에서 · \(source.name)" : "서버 내부 \(kind == .move ? "이동" : "복사") · \(source.name)"
+        case .withinLocation: source.provider.isLocal ? "Mac 안에서 · \(source.name)" : "서버 안에서 \(kind == .move ? "이동" : "복사") · \(source.name)"
         case .upload: "업로드 · \(names)"
         case .download: "다운로드 · \(names)"
         case .viaMac: "Mac 경유 · \(names)"
@@ -554,11 +553,11 @@ extension TransferJob {
 
     var routeExplanation: String {
         switch route {
-        case .viaMac: "Mac이 받아서 바로 넘겨요. 어디서든 되지만 Mac의 대역폭을 써요."
-        case .withinLocation: "같은 서버 안이라 내려받지 않고 서버에서 바로 해요."
-        case .upload: "Mac에서 읽어 바로 올려요."
-        case .download: "서버에서 받아 Mac에 써요."
-        case .local: "Mac 안에서 복사해요."
+        case .viaMac: "Mac이 중계하며 Mac의 대역폭 사용"
+        case .withinLocation: "다운로드 없이 서버에서 직접 처리"
+        case .upload: "Mac에서 읽어 바로 업로드"
+        case .download: "서버에서 받아 Mac에 저장"
+        case .local: "Mac 안에서 복사"
         }
     }
 }

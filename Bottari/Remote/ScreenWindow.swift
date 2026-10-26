@@ -23,7 +23,7 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
     let screen: SavedSite.RemoteScreen
     let host: String
     let username: String
-    private(set) var status = "연결하는 중…"
+    private(set) var status = "연결 중…"
     private(set) var isConnected = false
     private(set) var framebufferView: VNCCAFramebufferView?
     var credentialRequest: CredentialRequest?
@@ -59,7 +59,7 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
                 host = "127.0.0.1"
                 port = forward.localPort
             }
-            status = "\(kindName)에 연결하는 중…"
+            status = "\(kindName)에 연결 중…"
             let settings = VNCConnection.Settings(
                 isDebugLoggingEnabled: false,
                 hostname: host,
@@ -77,7 +77,7 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             self.connection = connection
             connection.connect()
         } catch {
-            status = "터널을 열지 못했어요: \(error.localizedDescription)"
+            status = "터널을 열 수 없습니다: \(error.localizedDescription)"
         }
     }
 
@@ -111,7 +111,7 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             let desktop = provider.home.appending("Desktop")
             let folder = (try? await provider.list(provider.home))?.contains { $0.name == "Desktop" && $0.isDirectory } == true ? desktop : provider.home
             AppServices.transfers.enqueue(.copy, items, from: TransferEndpoint(local), to: TransferEndpoint(provider, name: site.name), into: folder, policy: TransferSettings.conflictPolicy)
-            status = "\(items.count)개 항목을 \(folder.string)에 올리는 중"
+            status = "\(items.count)개 항목을 \(folder.string)에 업로드 중"
         }
     }
 
@@ -124,16 +124,16 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             MainActor.assumeIsolated {
                 switch status {
                 case .connecting:
-                    self.status = "\(self.kindName)에 연결하는 중…"
+                    self.status = "\(self.kindName)에 연결 중…"
                 case .connected:
                     self.isConnected = true
                     self.status = "연결됨"
                 case .disconnecting:
-                    self.status = "연결을 끊는 중…"
+                    self.status = "연결 해제 중…"
                 case .disconnected:
                     self.isConnected = false
                     self.framebufferView = nil
-                    self.status = error.map { "연결이 끊겼어요 · \($0)" } ?? "연결을 끊었어요 · SSH 터널도 함께 닫았어요"
+                    self.status = error.map { "연결 끊김: \($0)" } ?? "연결 해제됨"
                     let forward = self.forward
                     self.forward = nil
                     Task { await forward?.close() }
@@ -205,7 +205,7 @@ struct ScreenWindow: View {
             if let model {
                 ScreenView(model: model)
             } else {
-                ContentUnavailableView("원격 화면을 열 수 없어요", systemImage: "display", description: Text("연결 관리에서 이 서버의 원격 제어를 켜 주세요."))
+                ContentUnavailableView("원격 화면을 열 수 없습니다", systemImage: "display", description: Text("연결 관리에서 이 서버의 원격 제어를 설정하십시오."))
             }
         }
         .frame(minWidth: 720, minHeight: 480)
@@ -255,7 +255,7 @@ struct ScreenView: View {
     }
 
     private var stopped: Bool {
-        !model.isConnected && (model.status.hasPrefix("연결이") || model.status.hasPrefix("연결을 끊었") || model.status.hasPrefix("터널을"))
+        !model.isConnected && (model.status.hasPrefix("연결 끊김") || model.status.hasPrefix("연결 해제됨") || model.status.hasPrefix("터널을"))
     }
 
     private var screen: some View {
@@ -279,7 +279,7 @@ struct ScreenView: View {
                 .foregroundStyle(.white)
             }
             if isDropTarget {
-                Text("놓으면 \(model.site.name)에 업로드 (SFTP)")
+                Text("\(model.site.name)에 업로드 (SFTP)")
                     .font(.ui(.callout))
                     .padding(12)
                     .background(.ultraThinMaterial, in: .rect(cornerRadius: 8))
@@ -305,7 +305,7 @@ struct ScreenView: View {
     private var route: String {
         let jumps = model.site.proxyJump
         return [
-            model.screen.throughTunnel ? "\(model.kindName) over SSH (자동 터널)" : "\(model.kindName) 직접 연결",
+            model.screen.throughTunnel ? "\(model.kindName) (SSH 터널)" : "\(model.kindName) 직접 연결",
             "\(model.host):\(String(model.screen.port))",
         ].joined(separator: " · ") + (jumps.isEmpty ? "" : " · \(jumps.joined(separator: " → ")) 경유")
     }
@@ -339,7 +339,7 @@ struct ScreenView: View {
             }
             .fixedSize()
             .onChange(of: model.forwardsShortcuts) { Task { await model.connect() } }
-            Button(model.isConnected ? "연결 끊기" : "다시 연결") {
+            Button(model.isConnected ? "연결 해제" : "다시 연결") {
                 if model.isConnected { model.disconnect() } else { Task { await model.connect() } }
             }
             .buttonStyle(PanelButtonStyle(destructive: model.isConnected))
@@ -350,13 +350,13 @@ struct ScreenView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 16) {
-            Toggle("보기만 (조작 안 함)", isOn: $model.viewOnly)
+            Toggle("보기 전용", isOn: $model.viewOnly)
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .font(.ui(.callout))
                 .onChange(of: model.viewOnly) { Task { await model.connect() } }
             Spacer()
-            Text("Finder에서 파일을 화면 위로 끌어다 놓으면 원격 컴퓨터로 올라가요")
+            Text("파일을 화면으로 드래그하면 원격 데스크탑에 업로드")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
         }
@@ -376,22 +376,22 @@ struct ScreenView: View {
                     if let size = model.framebufferView?.framebufferSize {
                         row("원격 해상도", "\(Int(size.width)) × \(Int(size.height))")
                     }
-                    row("암호화", model.screen.throughTunnel ? "SSH 터널" : "없음 · 직접 연결")
+                    row("암호화", model.screen.throughTunnel ? "SSH 터널" : "없음 (직접 연결)")
                     if !model.site.proxyJump.isEmpty {
                         row("경유", model.site.proxyJump.joined(separator: " → "))
                     }
                     row("표시", model.scalesToFit ? "화면 맞춤" : "1:1")
-                    row("입력", model.viewOnly ? "보기만" : model.forwardsShortcuts ? "⌘ 단축키까지" : "마우스 · 키보드")
+                    row("입력", model.viewOnly ? "보기 전용" : model.forwardsShortcuts ? "마우스 · 키보드 · ⌘ 단축키" : "마우스 · 키보드")
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .card()
             VStack(alignment: .leading, spacing: 6) {
-                Text(model.screen.throughTunnel ? "왜 SSH 터널인가요?" : "직접 연결 중이에요").font(.ui(.callout, weight: .semibold))
+                Text(model.screen.throughTunnel ? "SSH 터널 사용 중" : "직접 연결 중").font(.ui(.callout, weight: .semibold))
                 Text(model.screen.throughTunnel
-                     ? "VNC는 기본적으로 암호화가 약해요. Bottari는 이미 저장된 SSH 연결로 터널을 열고 그 안으로 화면을 보내서, 서버 방화벽에 \(String(model.screen.port)) 포트를 열 필요가 없어요."
-                     : "화면이 암호화되지 않고 오갈 수 있어요. 연결 관리에서 'SSH 터널로 연결'을 켜는 걸 추천해요.")
+                     ? "VNC 자체 암호화가 약해 저장된 SSH 연결 안으로 화면을 전송합니다. 서버 방화벽에서 \(String(model.screen.port)) 포트를 열 필요가 없습니다."
+                     : "화면이 암호화되지 않은 채 전송될 수 있습니다. 연결 관리에서 ‘SSH 터널로 연결’을 켜십시오.")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -60,7 +60,7 @@ public final class MPVPlayer: @unchecked Sendable {
 
     public init(layer: CAMetalLayer?) throws {
         setlocale(LC_NUMERIC, "C")
-        guard let handle = mpv_create() else { throw PlayerError("mpv를 시작하지 못했어요") }
+        guard let handle = mpv_create() else { throw PlayerError("mpv를 시작할 수 없습니다") }
         self.handle = handle
         if let layer {
             // mpv draws into the layer through MoltenVK; "wid" is the layer's address.
@@ -84,7 +84,7 @@ public final class MPVPlayer: @unchecked Sendable {
         guard mpv_initialize(handle) >= 0 else {
             mpv_terminate_destroy(handle)
             self.handle = nil
-            throw PlayerError("mpv를 초기화하지 못했어요")
+            throw PlayerError("mpv를 초기화할 수 없습니다")
         }
         mpv_stream_cb_add_ro(handle, "bottari", Unmanaged.passUnretained(self).toOpaque(), openStream)
         for (name, format) in [
@@ -234,7 +234,7 @@ public final class MPVPlayer: @unchecked Sendable {
                     }
                 case MPV_EVENT_END_FILE:
                     if let end = event.data?.assumingMemoryBound(to: mpv_event_end_file.self).pointee, end.reason == MPV_END_FILE_REASON_ERROR {
-                        self.state.error = "재생할 수 없어요: \(String(cString: mpv_error_string(end.error)))"
+                        self.state.error = "재생할 수 없습니다: \(String(cString: mpv_error_string(end.error)))"
                         changed = true
                     }
                 case MPV_EVENT_SHUTDOWN:

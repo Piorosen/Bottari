@@ -26,7 +26,7 @@ struct TunnelWindow: View {
                         .background(Color(light: 0x0F7C5A, dark: 0x3CC48E).opacity(0.12), in: .capsule)
                 }
                 Spacer()
-                Text("SSH만 되는 곳이면 어디서든 켜는 VPN · Bottari만 → 프록시 쓰는 앱 → Mac 전체")
+                Text("SSH 서버를 거치는 VPN")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -38,8 +38,11 @@ struct TunnelWindow: View {
                     TunnelDetail(profile: Binding(get: { store.profiles.first { $0.id == id } ?? profile }, set: { store.update($0) }))
                         .id(id)
                 } else {
-                    ContentUnavailableView("터널을 골라 주세요", systemImage: "point.3.connected.trianglepath.dotted",
-                                           description: Text("왼쪽 아래 + 로 터널을 만들어요"))
+                    ContentUnavailableView {
+                        Label("터널 선택", glyph: "bt.tunnel", size: 40)
+                    } description: {
+                        Text("왼쪽의 ‘새 터널’로 추가")
+                    }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .card()
                 }
@@ -58,7 +61,7 @@ struct TunnelWindow: View {
                     TunnelCard(profile: profile, state: store.state(profile.id), isSelected: selection == profile.id)
                         .onTapGesture { selection = profile.id }
                         .contextMenu {
-                            Button("지우기", role: .destructive) { store.remove(profile.id) }
+                            Button("삭제", role: .destructive) { store.remove(profile.id) }
                         }
                 }
                 Button {
@@ -69,7 +72,7 @@ struct TunnelWindow: View {
                 .buttonStyle(PanelButtonStyle(dashed: true))
                 if !store.profiles.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("메뉴 막대에서는 이렇게", systemImage: "menubar.rectangle")
+                        Label("메뉴 막대 미리보기", systemImage: "menubar.rectangle")
                             .font(.ui(.callout, weight: .semibold))
                         ForEach(store.profiles) { profile in
                             HStack(spacing: 8) {
@@ -101,7 +104,7 @@ private struct TunnelCard: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(profile.name).font(.ui(.body, weight: .semibold)).lineLimit(1)
-                Text(route).font(.themeMono(.caption2)).foregroundStyle(.secondary).lineLimit(1)
+                Text(route).font(.ui(.caption)).foregroundStyle(.secondary).lineLimit(1)
                 Text(subtitle).font(.ui(.caption, weight: .medium)).foregroundStyle(color).lineLimit(1)
             }
             Spacer()
@@ -119,8 +122,8 @@ private struct TunnelCard: View {
     }
 
     private var route: String {
-        let via = profile.siteID.flatMap(AppServices.sites.site)?.name ?? "서버 미지정"
-        return "via \(via) · \(profile.mode.title)"
+        guard let via = profile.siteID.flatMap(AppServices.sites.site) else { return "경유 서버 없음 · \(profile.mode.title)" }
+        return "\(via.name) 경유 · \(profile.mode.title)"
     }
 
     private var color: Color {
@@ -135,7 +138,7 @@ private struct TunnelCard: View {
     private var subtitle: String {
         switch state {
         case .on(let detail): "켜짐 · \(detail)"
-        case .connecting: "연결하는 중…"
+        case .connecting: "연결 중…"
         case .failed(let reason): reason
         case .off: "꺼짐"
         }
@@ -145,33 +148,33 @@ private struct TunnelCard: View {
 extension TunnelProfile.Mode {
     var title: String {
         switch self {
-        case .bottariOnly: "Bottari 안에서만"
-        case .proxy: "프록시 쓰는 앱"
+        case .bottariOnly: "Bottari만"
+        case .proxy: "프록시 사용 앱"
         case .wholeMac: "Mac 전체 (sshuttle)"
         }
     }
 
     var detail: String {
         switch self {
-        case .bottariOnly: "Bottari의 SFTP · 터미널 · VNC · 영상 연결만 이 서버를 거쳐요."
-        case .proxy: "내 Mac에 SOCKS5 · HTTP 프록시를 열어요. 브라우저, DB 툴, git, curl이 정한 주소만 터널로 보내요."
-        case .wholeMac: "방화벽 규칙으로 정한 대역의 모든 TCP를 돌려요. 프록시를 모르는 앱도 따라와요."
+        case .bottariOnly: "Bottari의 연결만 이 서버 경유"
+        case .proxy: "Mac에 SOCKS5·HTTP 프록시를 열고, 프록시를 설정한 앱의 지정 주소만 터널로 전송"
+        case .wholeMac: "지정한 대역의 모든 TCP 연결을 터널로 전송 (프록시 미지원 앱 포함)"
         }
     }
 
     var caveat: String {
         switch self {
-        case .bottariOnly: "다른 앱은 그대로 바로 나가요"
-        case .proxy: "시스템 프록시 자동 적용 시 관리자 확인"
-        case .wholeMac: "sudo · 서버에 Python 3 · UDP 제외 · sshuttle 설치 필요"
+        case .bottariOnly: "다른 앱은 직접 연결"
+        case .proxy: "시스템 프록시 자동 적용 시 관리자 인증 필요"
+        case .wholeMac: "sshuttle, sudo, 서버의 Python 3 필요 (UDP 제외)"
         }
     }
 
     var symbol: String {
         switch self {
-        case .bottariOnly: "shippingbox"
+        case .bottariOnly: "bt.bundle"
         case .proxy: "network"
-        case .wholeMac: "laptopcomputer"
+        case .wholeMac: "bt.mac"
         }
     }
 }
@@ -196,31 +199,33 @@ private struct TunnelDetail: View {
                             .keyboardShortcut(.defaultAction)
                     }
                     statusBadge
-                    LabeledField("거쳐 갈 서버") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(AppServices.sites.sites.filter(\.isSFTP)) { site in
-                                    let selected = profile.siteID == site.id
-                                    Button {
-                                        profile.siteID = site.id
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(site.name).font(.ui(.callout, weight: .semibold))
-                                                .foregroundStyle(selected ? Color.themeAccent : Palette.text)
-                                            Text(site.summary).font(.themeMono(.caption2)).foregroundStyle(.secondary).lineLimit(1)
-                                        }
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(selected ? Palette.selection : Palette.panel, in: .rect(cornerRadius: 8))
-                                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Color.themeAccent : Palette.line, lineWidth: selected ? 1.5 : 1))
-                                        .contentShape(.rect)
-                                    }
-                                    .buttonStyle(.plain)
+                    LabeledField("경유 서버") {
+                        // A menu, not a row of cards: people keep a dozen servers or more.
+                        let servers = AppServices.sites.sites.filter(\.isSFTP)
+                        let chosen = profile.siteID.flatMap(AppServices.sites.site)
+                        HStack(spacing: 10) {
+                            Picker("경유 서버", selection: $profile.siteID) {
+                                // Also stands in for a server that has since been deleted.
+                                if chosen == nil {
+                                    Text("서버 선택").tag(profile.siteID)
                                 }
+                                ForEach(servers) { site in
+                                    Text(site.name).tag(Optional(site.id))
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                            if let site = chosen {
+                                Text(site.summary)
+                                    .font(.themeMono(.caption))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                             }
                         }
                     }
-                    LabeledField("어디까지 터널로 보낼까요") {
+                    LabeledField("터널 범위") {
                         HStack(alignment: .top, spacing: 10) {
                             ForEach(TunnelProfile.Mode.allCases, id: \.self) { mode in
                                 modeCard(mode)
@@ -234,7 +239,7 @@ private struct TunnelDetail: View {
                     if profile.mode == .wholeMac {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Mac 전체").font(.ui(.body, weight: .semibold))
-                            SwitchRow(title: "DNS도 터널로", detail: "--dns 로 원격에서 이름을 풀어요. 사내 도메인을 쓰려면 켜 두세요.", isOn: $profile.remoteDNS)
+                            SwitchRow(title: "DNS도 터널로", detail: "서버에서 DNS 조회 (--dns). 사내 도메인에 필요", isOn: $profile.remoteDNS)
                             if let site = profile.siteID.flatMap(AppServices.sites.site) {
                                 Text(TunnelStore.sshuttleCommand(profile, site: site))
                                     .font(.themeMono(.caption))
@@ -244,7 +249,7 @@ private struct TunnelDetail: View {
                                     .background(Palette.panel, in: .rect(cornerRadius: 8))
                                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
                             }
-                            Text("sudo가 필요해서 터미널 창에서 실행해요. 비밀번호는 macOS가 직접 묻고, Bottari는 받지 않아요. sshuttle은 이름 규칙(*.도메인)을 모르니 대역으로 적어 주세요.")
+                            Text("sudo가 필요해 터미널에서 실행합니다. 비밀번호는 macOS가 직접 요청하며 Bottari로 전달되지 않습니다. sshuttle은 *.도메인 규칙을 지원하지 않으므로 IP 대역으로 입력하십시오.")
                                 .font(.ui(.caption))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -253,10 +258,10 @@ private struct TunnelDetail: View {
                         .well()
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel("알아서 켜고 끄기")
+                        SectionLabel("자동 재연결")
                         HStack(spacing: 10) {
-                            SwitchRow(title: "끊기면 다시 연결", detail: "서버가 잠깐 끊겨도 알아서 이어요", isOn: $profile.reconnects)
-                            SwitchRow(title: "잠자기에서 깨면 다시 연결", detail: "Mac을 열면 바로 다시 켜요", isOn: $profile.reconnectsOnWake)
+                            SwitchRow(title: "연결이 끊겼을 때", isOn: $profile.reconnects)
+                            SwitchRow(title: "잠자기에서 깨어날 때", isOn: $profile.reconnectsOnWake)
                         }
                     }
                 }
@@ -283,7 +288,7 @@ private struct TunnelDetail: View {
     /// Route rules as chips, each removable, with a field to add more.
     private var routesField: some View {
         let tokens = profile.routes.split(whereSeparator: { $0 == "\n" || $0 == "," }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return LabeledField("터널로 보낼 주소", hint: "IP 대역(CIDR), 호스트 이름, *.도메인 을 쓸 수 있어요. 0/0 은 전체 트래픽이에요. 거쳐 갈 서버 자신의 주소는 자동으로 빼요.") {
+        return LabeledField("터널로 보낼 주소", hint: "IP 대역(CIDR), 호스트 이름, *.도메인. 0/0은 전체 트래픽. 경유 서버 자체의 주소는 자동 제외") {
             FlowLayout(spacing: 6) {
                 ForEach(tokens, id: \.self) { token in
                     HStack(spacing: 5) {
@@ -301,7 +306,7 @@ private struct TunnelDetail: View {
                     .padding(.vertical, 5)
                     .background(profile.invalidRoutes.contains(token) ? Color.orange.opacity(0.1) : Palette.selection, in: .rect(cornerRadius: 6))
                 }
-                TextField("10.1.0.0/16 · *.corp · host", text: $newRoute)
+                TextField("예: 10.1.0.0/16, *.corp", text: $newRoute)
                     .designField(mono: true)
                     .frame(width: 220)
                     .onSubmit {
@@ -318,7 +323,7 @@ private struct TunnelDetail: View {
                 .disabled(tokens.contains("0.0.0.0/0") || tokens.contains("0/0"))
             }
             if !profile.invalidRoutes.isEmpty {
-                Label("“\(profile.invalidRoutes.joined(separator: "”, “"))” 은 대역 · IP · 호스트 · *.도메인 형식이 아니에요", systemImage: "exclamationmark.triangle.fill")
+                Label("올바른 형식이 아닙니다: “\(profile.invalidRoutes.joined(separator: "”, “"))”", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                     .font(.ui(.caption))
             }
@@ -368,9 +373,9 @@ private struct TunnelDetail: View {
                 }
             }
             HStack(alignment: .top, spacing: 10) {
-                SwitchRow(title: "HTTP 프록시도 열기", detail: "SOCKS를 모르는 앱용 (HTTP CONNECT)", isOn: $profile.httpEnabled)
+                SwitchRow(title: "HTTP 프록시도 열기", detail: "SOCKS 미지원 앱용 (HTTP CONNECT)", isOn: $profile.httpEnabled)
                 if profile.httpEnabled {
-                    SwitchRow(title: "켜면 시스템 프록시에 자동 적용", detail: "끄면 원래 설정으로 되돌려요 · 처음 한 번 관리자 확인", isOn: $profile.appliesSystemProxy)
+                    SwitchRow(title: "시스템 프록시에 자동 적용", detail: "터널을 끄면 원래 설정으로 복원, 관리자 인증 필요", isOn: $profile.appliesSystemProxy)
                 }
             }
         }
@@ -380,7 +385,7 @@ private struct TunnelDetail: View {
 
     private var probeCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("이 주소는 어디로 나가요?").font(.ui(.body, weight: .semibold))
+            Text("주소별 경로 확인").font(.ui(.body, weight: .semibold))
             TextField("예: gitlab.internal, 10.1.2.3", text: $probe).designField(mono: true)
             if !probe.isEmpty {
                 Text(probeAnswer)
@@ -398,12 +403,12 @@ private struct TunnelDetail: View {
         let connections = store.connections[profile.id] ?? []
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("지금 이 프록시를 쓰는 연결").font(.ui(.body, weight: .semibold))
+                Text("프록시를 사용 중인 연결").font(.ui(.body, weight: .semibold))
                 Spacer()
                 Text("\(connections.count)개").font(.ui(.caption)).foregroundStyle(.secondary)
             }
             if connections.isEmpty {
-                Text(state.isActive ? "아직 이 프록시로 들어온 연결이 없어요" : "터널을 켜면 보여요")
+                Text(state.isActive ? "연결 없음" : "터널 꺼짐")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -432,7 +437,7 @@ private struct TunnelDetail: View {
 
     private var instructionsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("앱마다 연결하는 법").font(.ui(.body, weight: .semibold))
+            Text("앱별 설정 방법").font(.ui(.body, weight: .semibold))
             instructions
         }
         .padding(14)
@@ -445,7 +450,7 @@ private struct TunnelDetail: View {
             Text("기록").font(.ui(.body, weight: .semibold))
             let lines = (store.logs[profile.id] ?? []).prefix(20)
             if lines.isEmpty {
-                Text("켜고 끈 기록이 여기에 남아요").font(.ui(.caption)).foregroundStyle(.secondary)
+                Text("기록 없음").font(.ui(.caption)).foregroundStyle(.secondary)
             }
             ForEach(lines) { line in
                 HStack(alignment: .top) {
@@ -466,7 +471,7 @@ private struct TunnelDetail: View {
     private var statusBadge: some View {
         let (text, color): (String, Color) = switch state {
         case .on(let detail): (detail, .green)
-        case .connecting: ("연결하는 중…", .yellow)
+        case .connecting: ("연결 중…", .yellow)
         case .failed(let reason): (reason, .red)
         case .off: ("꺼짐", .secondary)
         }
@@ -489,7 +494,7 @@ private struct TunnelDetail: View {
                             .frame(height: 4)
                     }
                 }
-                Label(mode.title, systemImage: mode.symbol)
+                Label(mode.title, glyph: mode.symbol)
                     .font(.ui(.callout, weight: .semibold))
                 Text(mode.detail)
                     .font(.ui(.caption))
@@ -515,17 +520,17 @@ private struct TunnelDetail: View {
         let host = probe.trimmingCharacters(in: .whitespaces)
         guard profile.rules.matches(host) else {
             if let other = store.route(for: host), other.profile.id != profile.id {
-                return "“\(other.profile.name)” 터널로 가요 · \(other.via.name) 경유"
+                return "“\(other.profile.name)” 터널 · \(other.via.name) 경유"
             }
-            return "어느 규칙에도 해당하지 않아서 바로 나가요."
+            return "일치하는 규칙이 없어 직접 연결"
         }
         let via = profile.siteID.flatMap(AppServices.sites.site)?.name ?? "서버"
         let path = switch profile.mode {
-        case .bottariOnly: "Bottari의 연결만 이 길로 가요. 브라우저 같은 다른 앱은 바로 나가요."
-        case .proxy: profile.appliesSystemProxy ? "시스템 프록시에 걸려 있어서 Safari · Chrome은 따로 설정할 필요 없어요." : "프록시를 쓰는 앱만 이 길로 가요. 앱마다 프록시를 지정해야 해요."
-        case .wholeMac: "Mac의 모든 TCP 연결이 이 길로 가요" + (profile.remoteDNS ? ", 이름도 원격 DNS로 풀어요." : ".")
+        case .bottariOnly: "Bottari의 연결만 해당, 다른 앱은 직접 연결"
+        case .proxy: profile.appliesSystemProxy ? "시스템 프록시 적용됨, Safari와 Chrome은 별도 설정 불필요" : "프록시를 설정한 앱만 해당"
+        case .wholeMac: "Mac의 모든 TCP 연결 해당" + (profile.remoteDNS ? ", DNS도 서버에서 조회" : "")
         }
-        return "\(via) 을(를) 거쳐 나가요 · \(path)" + (state.isActive ? "" : " (지금은 꺼져 있어서 바로 나가요)")
+        return "\(via) 경유 · \(path)" + (state.isActive ? "" : " (터널이 꺼져 있어 현재는 직접 연결)")
     }
 
     private var instructions: some View {
@@ -536,8 +541,8 @@ private struct TunnelDetail: View {
             ("셸 전체 (~/.zshrc)", "export ALL_PROXY=socks5h://127.0.0.1:\(socks)"),
             ("git (특정 저장소만)", "git config --global http.https://gitlab.internal.proxy socks5h://127.0.0.1:\(socks)"),
             ("ssh (macOS 기본 nc)", "ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:\(socks) %h %p' user@10.0.4.21"),
-            ("HTTP 프록시만 받는 앱", profile.httpEnabled ? "http_proxy=http://127.0.0.1:\(http) https_proxy=http://127.0.0.1:\(http)" : "위에서 HTTP 프록시를 켜 주세요"),
-            ("DB 툴 (JDBC)", "SOCKS 프록시 127.0.0.1:\(socks) · JDBC 기반 툴은 대부분 SOCKS를 지원해요"),
+            ("HTTP 프록시 전용 앱", profile.httpEnabled ? "http_proxy=http://127.0.0.1:\(http) https_proxy=http://127.0.0.1:\(http)" : "먼저 ‘HTTP 프록시도 열기’를 켜십시오."),
+            ("DB 도구 (JDBC)", "SOCKS 프록시 127.0.0.1:\(socks) (대부분의 JDBC 도구에서 지원)"),
             ("Firefox", "설정 › 네트워크 › SOCKS v5 127.0.0.1:\(socks) · ‘SOCKS v5 사용 시 DNS도 프록시’ 켜기"),
         ]
         let chosen = lines[min(instructionTab, lines.count - 1)]
@@ -582,7 +587,7 @@ struct TunnelMenu: View {
 
     var body: some View {
         if store.profiles.isEmpty {
-            Text("터널이 없어요")
+            Text("터널 없음")
         }
         ForEach(store.profiles) { profile in
             Toggle(isOn: Binding(get: { store.state(profile.id).isActive }, set: { _ in store.toggle(profile.id) })) {
@@ -609,8 +614,14 @@ struct TunnelStatusButton: View {
         Button {
             openWindow(id: "tunnels")
         } label: {
-            Label(store.activeCount > 0 ? "터널 \(store.activeCount)" : "터널", systemImage: store.activeCount > 0 ? "point.3.filled.connected.trianglepath.dotted" : "point.3.connected.trianglepath.dotted")
+            // Tinted only while a tunnel runs, so the toolbar dims it like the rest otherwise.
+            if store.activeCount > 0 {
+                Label("터널 \(store.activeCount)", glyph: "bt.tunnel", size: 17)
+                    .foregroundStyle(Color.themeAccent)
+            } else {
+                Label("터널", glyph: "bt.tunnel", size: 17)
+            }
         }
-        .help("터널 · SSH VPN")
+        .help("터널 (SSH VPN)")
     }
 }

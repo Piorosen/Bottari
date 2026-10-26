@@ -4,10 +4,10 @@ import Foundation
 public enum FileNames {
     /// Why `name` cannot be used for a file or folder, or nil if it can.
     public static func problem(with name: String) -> String? {
-        if name.trimmingCharacters(in: .whitespaces).isEmpty { return "이름을 입력해 주세요." }
-        if name.contains("/") { return "이름에 / 를 넣을 수 없어요." }
-        if name == "." || name == ".." { return "쓸 수 없는 이름이에요." }
-        if name.utf8.count > 255 { return "이름이 너무 길어요." }
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { return "이름을 입력하십시오." }
+        if name.contains("/") { return "이름에 /를 사용할 수 없습니다." }
+        if name == "." || name == ".." { return "사용할 수 없는 이름입니다." }
+        if name.utf8.count > 255 { return "이름이 너무 깁니다." }
         return nil
     }
 

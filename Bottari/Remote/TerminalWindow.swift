@@ -141,7 +141,7 @@ struct TerminalWindow: View {
             if let model {
                 TerminalScreen(model: model)
             } else {
-                ContentUnavailableView("터미널을 열 수 없어요", systemImage: "terminal", description: Text("SSH 서버를 연 패인에서 열어 주세요."))
+                ContentUnavailableView("터미널을 열 수 없습니다", systemImage: "terminal", description: Text("SSH 서버에 연결된 패인에서 여십시오."))
             }
         }
         .frame(minWidth: 640, minHeight: 400)
@@ -225,7 +225,7 @@ private struct TerminalScreen: View {
             }
             .buttonStyle(ChoiceButtonStyle(isOn: model.joinsBroadcast))
             .fixedSize()
-            .help("켜 둔 터미널 모두에 같은 입력을 보내요. 서버 여러 대를 점검할 때 써요.")
+            .help("동시 입력을 켠 모든 터미널에 같은 입력 전송")
             Button { showsSnippets.toggle() } label: { Image(systemName: "sidebar.right") }
                 .buttonStyle(IconButtonStyle(isOn: showsSnippets))
                 .help("명령 조각")
@@ -236,7 +236,7 @@ private struct TerminalScreen: View {
     private func disconnectedBanner(_ reason: String?) -> some View {
         HStack {
             Image(systemName: "bolt.horizontal.circle")
-            Text(reason.map { "연결이 끊겼어요 · \($0)" } ?? "셸이 끝났어요")
+            Text(reason.map { "연결 끊김: \($0)" } ?? "셸 종료됨")
             Spacer()
             Button("다시 연결") { model.connect() }
                 .buttonStyle(PanelButtonStyle())
@@ -284,7 +284,7 @@ private struct TerminalScreen: View {
             HStack {
                 Text("명령 조각").font(.ui(.body, weight: .semibold))
                 Spacer()
-                Text("누르면 실행").font(.ui(.caption)).foregroundStyle(.secondary)
+                Text("클릭하여 실행").font(.ui(.caption)).foregroundStyle(.secondary)
             }
             ScrollView {
                 VStack(spacing: 8) {
@@ -303,7 +303,7 @@ private struct TerminalScreen: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            Button("지우기", role: .destructive) {
+                            Button("삭제", role: .destructive) {
                                 snippets.removeAll { $0 == snippet }
                                 TerminalSnippets.all = snippets
                             }
@@ -335,7 +335,7 @@ private struct TerminalScreen: View {
 }
 
 /// The folder the terminal started in, listed: clicking a folder goes there
-/// (and runs cd when 경로 맞추기 is on), clicking a file types its path.
+/// (and runs cd when 경로 동기화 is on), clicking a file types its path.
 private struct FolderCard: View {
     let model: TerminalModel
     @State private var path: RemotePath?
@@ -349,11 +349,11 @@ private struct FolderCard: View {
             HStack {
                 Text("현재 폴더").font(.ui(.body, weight: .semibold))
                 Spacer()
-                Toggle("경로 맞추기", isOn: $follows)
+                Toggle("경로 동기화", isOn: $follows)
                     .toggleStyle(.switch)
                     .controlSize(.mini)
                     .font(.ui(.caption))
-                    .help("폴더를 누르면 터미널에서도 cd 해요. 셸이 알려 주면 터미널의 위치를 따라가요.")
+                    .help("폴더 클릭 시 cd 실행, 셸의 현재 위치 따라가기")
             }
             Text("\(model.site?.name ?? model.provider.displayName):\(shown.string)")
                 .font(.themeMono(.caption))
@@ -378,7 +378,7 @@ private struct FolderCard: View {
             }
             .scrollIndicators(.never)
             Rectangle().fill(Palette.line).frame(height: 1)
-            Text("폴더를 누르면 cd, 파일을 누르면 경로가 입력돼요.")
+            Text("폴더를 클릭하면 cd, 파일을 클릭하면 경로 입력")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
         }

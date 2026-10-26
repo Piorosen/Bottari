@@ -45,6 +45,8 @@ final class Workspace {
     var paneRatio: CGFloat = 0.5
     /// The connection manager, opened from the toolbar or the sidebar.
     var siteManager: SiteManagerRequest?
+    /// A connection waiting for the user to type a password.
+    var passwordRequest: PasswordRequest?
     /// The pane that should take keyboard focus next, e.g. after ⇥.
     var focusRequest: PaneSide?
     /// Opens viewer windows; the main window sets it, since only views can open windows.
@@ -102,11 +104,11 @@ final class Workspace {
     func request(_ request: TransferRequest) {
         guard !request.items.isEmpty else { return }
         if let site = request.destinationSite, site.readOnly {
-            refusal = "‘\(site.name)’ 서버는 읽기 전용으로 열었어요. 쓰려면 연결 관리에서 읽기 전용을 끄세요."
+            refusal = "‘\(site.name)’ 서버는 읽기 전용입니다. 파일을 쓰려면 연결 관리에서 읽기 전용을 끄십시오."
             return
         }
         if request.kind == .move, let site = request.sourceSite, site.readOnly {
-            refusal = "‘\(site.name)’ 서버는 읽기 전용이라 원본을 지울 수 없어요. 이동 대신 복사해 주세요."
+            refusal = "‘\(site.name)’ 서버는 읽기 전용이므로 원본을 삭제할 수 없습니다. 이동 대신 복사하십시오."
             return
         }
         if request.destinationSite?.confirmsWrites == true || (request.kind == .move && request.sourceSite?.confirmsWrites == true) {
@@ -151,28 +153,54 @@ final class Workspace {
 
     /// Connects the active pane to a saved site.
     func open(_ site: SavedSite) {
-        let pane = pane(activeSide)
-        Task {
-            do {
-                try await pane.connect(to: site)
-            } catch {
-                refusal = "\(site.name)에 연결하지 못했어요: \(error.localizedDescription)"
-            }
-        }
+        connect(site, in: activeSide)
     }
 
     func open(_ favorite: Favorites.Favorite) {
         guard let siteID = favorite.siteID else { return openOnMac(favorite.path) }
         guard let site = AppServices.sites.site(siteID) else { return }
         let pane = pane(activeSide)
+        if pane.site?.id == siteID {
+            Task { await pane.open(favorite.path) }
+        } else {
+            connect(site, in: activeSide, then: { pane in await pane.open(favorite.path) })
+        }
+    }
+
+    /// Connects a pane to `site`, then runs `then`. When a password is missing
+    /// or refused, asks for it and tries again; other failures go to `failed`,
+    /// or to the refusal alert without one.
+    func connect(
+        _ site: SavedSite,
+        in side: PaneSide,
+        typedSecrets: [String: String] = [:],
+        keepingTypedSecrets: Bool = true,
+        failed: ((any Error) -> Void)? = nil,
+        then: ((PaneModel) async -> Void)? = nil
+    ) {
+        let pane = pane(side)
         Task {
             do {
-                if pane.site?.id != siteID { try await pane.connect(to: site) }
-                await pane.open(favorite.path)
+                try await pane.connect(to: site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
+                await then?(pane)
             } catch {
-                refusal = "\(site.name)에 연결하지 못했어요: \(error.localizedDescription)"
+                if let request = PasswordRequest(site: site, side: side, error: error, typed: typedSecrets, sites: pane.library.sites, failed: failed, then: then) {
+                    passwordRequest = request
+                } else if let failed {
+                    failed(error)
+                } else {
+                    refusal = "\(site.name)에 연결할 수 없습니다: \(error.localizedDescription)"
+                }
             }
         }
+    }
+
+    /// Tries the connection again with what the user typed into the password sheet.
+    func answer(_ request: PasswordRequest, with secret: String, keeping: Bool) {
+        passwordRequest = nil
+        var typed = request.typed
+        typed[request.key] = secret
+        connect(request.site, in: request.side, typedSecrets: typed, keepingTypedSecrets: keeping, failed: request.failed, then: request.then)
     }
 
     func isOpen(_ site: SavedSite) -> Bool {
@@ -271,7 +299,7 @@ final class Workspace {
     /// Refuses with an explanation when the pane shows a read-only site.
     private func allowsChanges(in pane: PaneModel) -> Bool {
         guard let site = pane.site, site.readOnly else { return true }
-        refusal = "‘\(site.name)’ 서버는 읽기 전용으로 열었어요. 바꾸려면 연결 관리에서 읽기 전용을 끄세요."
+        refusal = "‘\(site.name)’ 서버는 읽기 전용입니다. 변경하려면 연결 관리에서 읽기 전용을 끄십시오."
         return false
     }
 

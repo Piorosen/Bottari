@@ -9,6 +9,8 @@ public struct SFTPFileProvider: FileProvider {
     public let displayName: String
     public let home: RemotePath
     public let endpoint: SFTPEndpoint
+    /// The jump hosts the connection goes through, outermost first.
+    public let jumps: [SFTPEndpoint]
     /// Whether this account may run commands. Most may; SFTP-only accounts
     /// (chroot jails, many NAS boxes) may not.
     public let canRunCommands: Bool
@@ -30,7 +32,14 @@ public struct SFTPFileProvider: FileProvider {
         }
         return capabilities
     }
-    public var locationID: String { "sftp://\(endpoint.username)@\(endpoint.hostKeyID)" }
+    /// The account and the jump hosts on the way: behind different jump hosts,
+    /// the same `user@127.0.0.1:port` can be different machines, and treating
+    /// them as one would rename files on one server instead of sending them.
+    public var locationID: String {
+        let target = "sftp://\(endpoint.username)@\(endpoint.hostKeyID)"
+        guard !jumps.isEmpty else { return target }
+        return target + " via " + jumps.map { "\($0.username)@\($0.hostKeyID)" }.joined(separator: ",")
+    }
 
     private var sftp: SFTPClient { connection.sftp }
 
@@ -48,6 +57,7 @@ public struct SFTPFileProvider: FileProvider {
                 displayName: displayName ?? endpoint.host,
                 home: home,
                 endpoint: endpoint,
+                jumps: hops.map(\.endpoint),
                 canRunCommands: await probeCommands(on: connection),
                 connection: connection
             )
@@ -165,7 +175,7 @@ public struct SFTPFileProvider: FileProvider {
 
     /// `cp -a`, so nothing passes through the Mac.
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
-        guard canRunCommands else { throw ProviderError.unsupported("서버 안에서 복사") }
+        guard canRunCommands else { throw ProviderError.unsupported("서버 내 복사") }
         _ = try await run("cp -a -- \(Self.quote(from.string)) \(Self.quote(to.string))")
     }
 
@@ -174,7 +184,7 @@ public struct SFTPFileProvider: FileProvider {
         let file = Self.quote(path.string)
         let output = try await run("sha256sum -- \(file) 2>/dev/null || shasum -a 256 -- \(file)")
         guard let hash = output.split(whereSeparator: \.isWhitespace).first, hash.count == 64 else {
-            throw ProviderError.io("체크섬을 읽지 못했어요: \(output)")
+            throw ProviderError.io("체크섬을 읽을 수 없습니다: \(output)")
         }
         return hash.lowercased()
     }
@@ -212,7 +222,7 @@ public struct SFTPFileProvider: FileProvider {
             }
         } catch let failed as SSHClient.CommandFailed {
             let message = String(buffer: errors).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw ProviderError.io("서버 명령이 실패했어요 (종료 코드 \(failed.exitCode))" + (message.isEmpty ? "" : ": \(message)"))
+            throw ProviderError.io("서버 명령 실패 (종료 코드 \(failed.exitCode))" + (message.isEmpty ? "" : ": \(message)"))
         }
         return String(buffer: output)
     }
@@ -496,7 +506,7 @@ public struct SFTPFileProvider: FileProvider {
         case SFTPError.errorStatus(let status):
             return translate(status.errorCode, message: status.message, path)
         case SFTPError.connectionClosed:
-            return ProviderError.io("서버와 연결이 끊겼어요")
+            return ProviderError.io("서버와의 연결이 끊어졌습니다")
         default:
             return ProviderError.io(String(describing: error))
         }
@@ -507,7 +517,7 @@ public struct SFTPFileProvider: FileProvider {
         case .noSuchFile: .notFound(path)
         case .permissionDenied: .permissionDenied(path)
         case .unsupportedOperation: .unsupported(message.isEmpty ? "SFTP" : message)
-        case .noConnection, .connectionLost: .io("서버와 연결이 끊겼어요")
+        case .noConnection, .connectionLost: .io("서버와의 연결이 끊어졌습니다")
         default: .io(message.isEmpty ? "SFTP 오류: \(code)" : message)
         }
     }

@@ -146,7 +146,7 @@ struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 18) {
                 SettingsGroup("전송") {
                     HStack {
-                        Text("동시에 보낼 파일").font(.ui(.body, weight: .medium))
+                        Text("최대 동시 전송").font(.ui(.body, weight: .medium))
                         Spacer()
                         Button { maxConcurrent = max(1, maxConcurrent - 1) } label: { Image(systemName: "minus") }
                             .buttonStyle(IconButtonStyle())
@@ -166,7 +166,7 @@ struct GeneralSettings: View {
                         }
                     }
                     Rectangle().fill(Palette.line).frame(height: 1)
-                    SettingSwitch(title: "보낸 뒤 체크섬 비교", detail: "양쪽에서 SHA-256을 계산해 비교해요. 서버는 명령을 실행할 수 있을 때만 돼요.", isOn: $verifiesChecksums)
+                    SettingSwitch(title: "보낸 뒤 체크섬 비교", detail: "SHA-256 사용, 서버는 명령을 실행할 수 있는 경우에만 지원", isOn: $verifiesChecksums)
                 }
                 SettingsGroup("업데이트") {
                     if Updates.shared.isAvailable {
@@ -180,7 +180,7 @@ struct GeneralSettings: View {
                             Spacer()
                             Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").font(.themeMono(.body))
                         }
-                        Text("이 빌드는 업데이트를 확인하지 않아요. 서명한 릴리스(scripts/release.sh)에서 켜져요.")
+                        Text("이 빌드는 업데이트를 확인하지 않습니다. 서명된 릴리스(scripts/release.sh)에서만 지원됩니다.")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                     }
@@ -202,9 +202,9 @@ struct ConnectionSettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsGroup("믿은 호스트 키", footer: "처음 연결할 때 서버의 키를 기억해 두고, 다음부터 다르면 연결하지 않아요. 서버를 다시 설치했다면 여기서 지우고 다시 연결하세요.") {
+                SettingsGroup("알려진 호스트 키", footer: "처음 연결할 때 서버 키를 저장하고, 이후 키가 다르면 연결하지 않습니다. 서버를 다시 설치한 경우 여기서 키를 삭제한 후 다시 연결하십시오.") {
                     if keys.isEmpty {
-                        Text("아직 기억한 키가 없어요").font(.ui(.callout)).foregroundStyle(.secondary)
+                        Text("저장된 키 없음").font(.ui(.callout)).foregroundStyle(.secondary)
                     }
                     ForEach(keys, id: \.host) { entry in
                         HStack(spacing: 10) {
@@ -216,7 +216,7 @@ struct ConnectionSettings: View {
                                     .lineLimit(1)
                             }
                             Spacer()
-                            Button("잊기") {
+                            Button("삭제") {
                                 AppServices.knownHosts.forget(hostKeyID: entry.host)
                                 keys = AppServices.knownHosts.remembered
                             }
@@ -229,7 +229,7 @@ struct ConnectionSettings: View {
                     }
                 }
                 SettingsGroup("비밀번호와 키 암호") {
-                    Label("macOS 키체인에만 저장해요. 연결 목록 파일과 iCloud 동기화 파일에는 들어가지 않아요.", systemImage: "lock.fill")
+                    Label("macOS 키체인에만 저장됩니다. 연결 목록 파일과 iCloud 동기화 파일에는 포함되지 않습니다.", systemImage: "lock.fill")
                         .font(.ui(.callout))
                 }
             }
@@ -268,7 +268,7 @@ struct AppearanceSettings: View {
                                 swatch(accent.hex, label: accent.name)
                             }
                             Rectangle().fill(Palette.line).frame(width: 1, height: 20)
-                            ColorPicker("직접 고르기", selection: accentBinding, supportsOpacity: false)
+                            ColorPicker("사용자 지정 색", selection: accentBinding, supportsOpacity: false)
                                 .labelsHidden()
                             TextField("색 코드", text: $accentText, prompt: Text(verbatim: "#3651C9"))
                                 .designField(mono: true)
@@ -289,10 +289,10 @@ struct AppearanceSettings: View {
                         Rectangle().fill(Palette.line).frame(height: 1)
                         fontChoices("본문 글꼴", system: "시스템 (SF)", choices: ThemeStore.uiFontChoices, selection: binding(\.font.ui), mono: false)
                         Rectangle().fill(Palette.line).frame(height: 1)
-                        fontChoices("고정폭 글꼴 (경로 · 크기 · 코드)", system: "시스템 (SF Mono)", choices: ThemeStore.monoFontChoices, selection: binding(\.font.mono), mono: true)
+                        fontChoices("고정폭 글꼴 (경로, 크기, 코드)", system: "시스템 (SF Mono)", choices: ThemeStore.monoFontChoices, selection: binding(\.font.mono), mono: true)
                         Rectangle().fill(Palette.line).frame(height: 1)
                         SettingSwitch(title: "새 패인에서 숨김 파일 보기", isOn: binding(\.list.showHidden))
-                        SettingSwitch(title: "Finder 아이콘 쓰기", detail: "선 아이콘 대신 Finder의 색 아이콘", isOn: binding(\.list.finderIcons))
+                        SettingSwitch(title: "Finder 아이콘 사용", detail: "선 아이콘 대신 Finder의 색 아이콘", isOn: binding(\.list.finderIcons))
                     }
                     SettingsGroup("서버 태그 색") {
                         ForEach(Theme.tagChoices, id: \.tag) { choice in
@@ -335,7 +335,7 @@ struct AppearanceSettings: View {
     }
 
     private var themeFiles: some View {
-        SettingsGroup("테마 파일", footer: "~/Library/Application Support/Bottari/themes/ 에 저장돼요. 다른 사람과 파일로 주고받을 수 있어요.") {
+        SettingsGroup("테마 파일", footer: "~/Library/Application Support/Bottari/themes/에 저장됨") {
             HStack {
                 Button("가져오기…", action: importTheme).buttonStyle(PanelButtonStyle()).fixedSize()
                 Button("내보내기…", action: exportTheme).buttonStyle(PanelButtonStyle()).fixedSize()
@@ -363,7 +363,7 @@ struct AppearanceSettings: View {
                         Text("사용 중").font(.ui(.caption)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("쓰기") { store.current = theme }
+                    Button("적용") { store.current = theme }
                         .buttonStyle(PanelButtonStyle())
                         .fixedSize()
                         .disabled(theme == store.current)
@@ -373,7 +373,7 @@ struct AppearanceSettings: View {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(IconButtonStyle())
-                    .help("이 테마 파일 지우기")
+                    .help("테마 파일 삭제")
                 }
             }
             DisclosureGroup("JSON 보기") {
@@ -470,7 +470,7 @@ struct AppearanceSettings: View {
             try store.importTheme(from: url)
             fileError = nil
         } catch {
-            fileError = "테마 파일을 읽지 못했어요: \(error.localizedDescription)"
+            fileError = "테마 파일을 읽을 수 없습니다: \(error.localizedDescription)"
         }
     }
 
@@ -485,7 +485,7 @@ struct AppearanceSettings: View {
             try store.export(to: url)
             fileError = nil
         } catch {
-            fileError = "테마 파일을 쓰지 못했어요: \(error.localizedDescription)"
+            fileError = "테마 파일을 저장할 수 없습니다: \(error.localizedDescription)"
         }
     }
 }
@@ -557,10 +557,10 @@ struct ThemePreview: View {
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("서버").font(.ui(.caption2)).foregroundStyle(.secondary)
-                    Label("prod-web", systemImage: "server.rack").foregroundStyle(SavedSite.Tag.prod.color)
-                    Label("dev-api", systemImage: "server.rack")
+                    Label("prod-web", glyph: "bt.server").foregroundStyle(SavedSite.Tag.prod.color)
+                    Label("dev-api", glyph: "bt.server")
                     Text("클라우드").font(.ui(.caption2)).foregroundStyle(.secondary).padding(.top, 4)
-                    Label("Google Drive", systemImage: "cloud")
+                    Label("Google Drive", glyph: "bt.cloud")
                     Spacer()
                 }
                 .font(.ui(.caption))
@@ -599,7 +599,7 @@ struct ThemePreview: View {
                     }
                     Spacer(minLength: 6)
                     HStack {
-                        Button("편집하기") {}
+                        Button("편집") {}
                             .buttonStyle(PanelButtonStyle(prominent: true))
                         Button("dev-api에 복사") {}
                             .buttonStyle(PanelButtonStyle())
@@ -612,7 +612,7 @@ struct ThemePreview: View {
             .background(Palette.background)
             .clipShape(.rect(cornerRadius: 9))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Palette.line))
-            Text("⌘K 이동 · 연결 · 명령").font(.ui(.caption)).foregroundStyle(.secondary)
+            Text("⌘K 명령 팔레트").font(.ui(.caption)).foregroundStyle(.secondary)
         }
         .allowsHitTesting(false)
     }
@@ -649,13 +649,13 @@ struct KeySettings: View {
                         }
                     }
                 }
-                SettingsGroup("단축키 (눌러서 바꾸기)", footer: "단축키 칸을 누른 뒤 원하는 키를 누르면 바뀌어요. Esc로 취소. ⌘·⌃ 조합과 F 키는 메뉴에도 보이고, Space · ↵ · Tab 같은 키는 파일 목록에서만 들어요.") {
+                SettingsGroup("단축키", footer: "단축키를 클릭한 후 새 키를 누르십시오. Esc를 누르면 취소됩니다. ⌘ 또는 ⌃ 조합과 F 키는 메뉴에도 표시되며, Space, ↵, Tab 같은 키는 파일 목록에서만 동작합니다.") {
                     ForEach(PaneAction.allCases) { action in
                         HStack(spacing: 8) {
                             Text(action.title).font(.ui(.body))
                             Spacer()
                             if recording != action, let clash = keymap.clash(for: action) {
-                                Badge("겹침 · \(clash)", color: .orange)
+                                Badge("겹침: \(clash)", color: .orange)
                             }
                             if keymap.isCustom(action) {
                                 Badge("사용자 지정", color: .themeAccent)
@@ -665,12 +665,12 @@ struct KeySettings: View {
                                     Image(systemName: "arrow.uturn.backward")
                                 }
                                 .buttonStyle(.borderless)
-                                .help("\(keymap.layout.title) 기본값으로")
+                                .help("\(keymap.layout.title) 기본값 복원")
                             }
                             Button {
                                 recording == action ? stopRecording() : startRecording(action)
                             } label: {
-                                Text(recording == action ? "키를 누르세요…" : keymap.combo(for: action).description)
+                                Text(recording == action ? "키 입력 대기 중…" : keymap.combo(for: action).description)
                                     .font(.themeMono(.body))
                                     .foregroundStyle(recording == action ? Color.themeAccent : Palette.text)
                                     .frame(minWidth: 120)
@@ -732,13 +732,13 @@ struct SyncSettings: View {
                             .foregroundStyle(Color(light: 0x0F7C5A, dark: 0x3CC48E))
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel("무엇을 동기화할까요")
+                        SectionLabel("동기화할 항목")
                         ForEach(SettingsSync.Item.allCases) { item in
                             SettingSwitch(title: item.title, detail: item.subtitle, isOn: Binding(get: { sync.items.contains(item) }, set: { sync.set(item, on: $0) }))
                                 .padding(12)
                                 .card()
                         }
-                        SettingSwitch(title: "비밀번호와 키 암호", detail: "iCloud 키체인으로 나눠요. Developer ID로 서명하고 키체인 공유 권한을 받은 앱에서만 돼요.", badge: "서명된 앱 필요", isOn: .constant(false))
+                        SettingSwitch(title: "비밀번호와 키 암호", detail: "iCloud 키체인 사용, Developer ID 서명과 키체인 공유 권한 필요", badge: "서명된 앱 필요", isOn: .constant(false))
                             .disabled(true)
                             .padding(12)
                             .card()
@@ -747,12 +747,12 @@ struct SyncSettings: View {
                     VStack(alignment: .leading, spacing: 8) {
                         SectionLabel("저장 방식")
                         HStack(alignment: .top, spacing: 10) {
-                            method("iCloud Drive 폴더", recommended: true, detail: "설정을 JSON 파일로 iCloud Drive에 둬요. 개발자 계정 없이 되고, 파일이라 직접 열어 볼 수 있어요.", place: "~/iCloud Drive/Bottari/", available: true)
-                            method("CloudKit", recommended: false, detail: "Apple 서버의 앱 전용 저장소예요. 바뀐 내용이 더 빨리 퍼지지만, Apple Developer 계정과 앱 서명이 필요해서 아직 쓰지 않아요.", place: "iCloud 비공개 데이터베이스", available: false)
+                            method("iCloud Drive 폴더", recommended: true, detail: "iCloud Drive에 JSON 파일로 저장, 개발자 계정 불필요", place: "~/iCloud Drive/Bottari/", available: true)
+                            method("CloudKit", recommended: false, detail: "Apple 서버의 앱 전용 저장소. Apple Developer 계정과 앱 서명이 필요해 아직 지원하지 않음", place: "iCloud 비공개 데이터베이스", available: false)
                         }
                     }
                     SettingsGroup("파일 창의 iCloud Drive") {
-                        SettingSwitch(title: "사이드바에 iCloud Drive 보이기", isOn: $showsICloudDrive)
+                        SettingSwitch(title: "사이드바에 iCloud Drive 표시", isOn: $showsICloudDrive)
                         SettingSwitch(title: "파일 옆에 iCloud 상태 표시", isOn: $showsCloudBadges)
                     }
                 }
@@ -764,8 +764,8 @@ struct SyncSettings: View {
                     devicesCard
                     filesCard
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("비밀번호는 파일에 쓰지 않아요").font(.ui(.callout, weight: .semibold))
-                        Text("JSON에는 서버 주소와 설정만 들어가요. 비밀번호와 키 암호는 이 Mac의 키체인에만 있어요.")
+                        Text("비밀번호는 파일에 저장되지 않음").font(.ui(.callout, weight: .semibold))
+                        Text("JSON 파일에는 서버 주소와 설정만 저장됩니다. 비밀번호와 키 암호는 이 Mac의 키체인에만 보관됩니다.")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -819,19 +819,19 @@ struct SyncSettings: View {
             let found = sync.conflicts.filter { $0.item == item }
             if !found.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("\(item.subject) 두 Mac에서 서로 다르게 바뀌었어요").font(.ui(.body, weight: .semibold))
+                    Text("\(item.subject) 두 Mac에서 다르게 변경됨").font(.ui(.body, weight: .semibold))
                     ForEach(found) { conflict in
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(conflict.title) \(conflict.detail)")
                                 .font(.themeMono(.caption))
                                 .foregroundStyle(.secondary)
                             HStack(spacing: 8) {
-                                Button("이 Mac 것 유지") { sync.resolve(conflict, .keepMine) }
+                                Button("이 Mac의 버전 유지") { sync.resolve(conflict, .keepMine) }
                                     .buttonStyle(PanelButtonStyle(prominent: true))
-                                Button("\(sync.otherMacName) 것 쓰기") { sync.resolve(conflict, .useTheirs) }
+                                Button("\(sync.otherMacName)의 버전 사용") { sync.resolve(conflict, .useTheirs) }
                                     .buttonStyle(PanelButtonStyle())
                                 if conflict.canKeepBoth {
-                                    Button("둘 다 남기기") { sync.resolve(conflict, .keepBoth) }
+                                    Button("둘 다 유지") { sync.resolve(conflict, .keepBoth) }
                                         .buttonStyle(PanelButtonStyle())
                                 }
                             }
@@ -849,9 +849,9 @@ struct SyncSettings: View {
 
     private var devicesCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("같은 설정을 쓰는 Mac").font(.ui(.body, weight: .semibold))
+            Text("동기화하는 Mac").font(.ui(.body, weight: .semibold))
             if sync.devices.isEmpty {
-                Text("동기화를 켜면 이 Mac과 다른 Mac이 여기에 보여요")
+                Text("동기화를 켜면 이 Mac과 다른 Mac이 여기에 표시됨")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -887,7 +887,7 @@ struct SyncSettings: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
                 .well()
-            Text("Finder에서 직접 열어 볼 수 있어요. 지워도 다음 동기화 때 다시 만들어요.")
+            Text("삭제해도 다음 동기화 때 다시 생성됨")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -907,15 +907,15 @@ struct SyncSettings: View {
     }
 
     private var status: String {
-        guard sync.isEnabled else { return "꺼짐 · 이 Mac에만 저장해요" }
-        if sync.folder == nil { return "iCloud Drive를 찾지 못했어요" }
-        return "iCloud Drive 사용 중 · 마지막 동기화 " + (sync.lastSync.map(Self.time) ?? "아직 없음")
+        guard sync.isEnabled else { return "꺼짐 · 이 Mac에만 저장" }
+        if sync.folder == nil { return "iCloud Drive를 찾을 수 없음" }
+        return "iCloud Drive 사용 중 · 마지막 동기화: " + (sync.lastSync.map(Self.time) ?? "없음")
     }
 
     private var tree: String {
         let items = SettingsSync.Item.allCases.filter { sync.items.contains($0) }
         var lines = ["Bottari/"]
-        let entries = items.flatMap { item in item.files.map { ($0, item.title) } } + [("devices/", "같은 설정을 쓰는 Mac")]
+        let entries = items.flatMap { item in item.files.map { ($0, item.title) } } + [("devices/", "동기화하는 Mac")]
         for (index, entry) in entries.enumerated() {
             let branch = index == entries.count - 1 ? "└─ " : "├─ "
             lines.append(branch + entry.0.padding(toLength: 22, withPad: " ", startingAt: 0) + entry.1)
@@ -928,7 +928,7 @@ struct SyncSettings: View {
             HStack {
                 Text(title).font(.ui(.callout, weight: .semibold))
                 if recommended {
-                    Badge("추천", color: .themeAccent)
+                    Badge("기본", color: .themeAccent)
                 }
             }
             Text(detail).font(.ui(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

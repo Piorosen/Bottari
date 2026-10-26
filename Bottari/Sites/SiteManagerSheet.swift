@@ -84,19 +84,19 @@ struct SiteManagerSheet: View {
             outcome = nil
         }
         .confirmationDialog(
-            "‘\(pendingDelete?.name ?? "")’ 연결을 지울까요?",
+            "‘\(pendingDelete?.name ?? "")’ 연결을 삭제하겠습니까?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
             presenting: pendingDelete
         ) { site in
-            Button("지우기", role: .destructive) { delete(site) }
+            Button("삭제", role: .destructive) { delete(site) }
         } message: { _ in
-            Text("저장된 비밀번호와 키 암호도 키체인에서 지워요.")
+            Text("키체인에 저장된 비밀번호와 키 암호도 함께 삭제됩니다.")
         }
     }
 
     private var header: some View {
         HStack {
-            WindowHeading(title: "연결 관리", subtitle: "비밀번호와 키 암호는 macOS 키체인에만 저장해요.")
+            WindowHeading(title: "연결 관리", subtitle: "비밀번호와 키 암호는 macOS 키체인에만 저장됨")
             Spacer()
             Button("닫기") { dismiss() }
                 .buttonStyle(PanelButtonStyle())
@@ -137,7 +137,7 @@ struct SiteManagerSheet: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
-                                    Button("지우기…", role: .destructive) { pendingDelete = site }
+                                    Button("삭제…", role: .destructive) { pendingDelete = site }
                                 }
                             }
                         }
@@ -145,9 +145,8 @@ struct SiteManagerSheet: View {
                 }
                 if library.sites.isEmpty {
                     VStack(spacing: 6) {
-                        Image(systemName: "server.rack")
-                            .font(.ui(.title2))
-                        Text("저장된 연결이 없어요")
+                        Glyph("bt.server", size: 22)
+                        Text("저장된 연결 없음")
                             .font(.ui(.callout, weight: .medium))
                     }
                     .foregroundStyle(.secondary)
@@ -169,13 +168,13 @@ struct SiteManagerSheet: View {
 
     private var importBanner: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Label("~/.ssh/config 에서 새 호스트 \(library.importableHosts.count)개", systemImage: "square.and.arrow.down")
+            Label("~/.ssh/config의 새 호스트 \(library.importableHosts.count)개", systemImage: "square.and.arrow.down")
                 .font(.ui(.callout, weight: .semibold))
             Text(library.importableHosts.map(\.alias).joined(separator: " · "))
                 .font(.themeMono(.caption))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-            Text("ProxyJump, IdentityFile 설정도 그대로 가져와요.")
+            Text("ProxyJump, IdentityFile 설정 포함")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
             Button("가져오기") {
@@ -212,7 +211,7 @@ struct SiteManagerSheet: View {
                 if case .success = outcome { outcome = nil }
             }
         } else {
-            ContentUnavailableView("연결을 골라 주세요", systemImage: "sidebar.left")
+            ContentUnavailableView("연결 선택", systemImage: "sidebar.left")
         }
     }
 
@@ -225,7 +224,7 @@ struct SiteManagerSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             if let changedHostKey {
-                Button("서버를 다시 설치했어요. 새 키를 믿고 다시 시도", role: .destructive) {
+                Button("새 호스트 키를 신뢰하고 다시 시도", role: .destructive) {
                     AppServices.knownHosts.forget(hostKeyID: changedHostKey)
                     Task { await run(lastActivity) }
                 }
@@ -320,7 +319,7 @@ struct SiteManagerSheet: View {
                     await server.disconnect()
                 } else {
                     let count = (try? await provider.list(.root).count) ?? 0
-                    parts.append("맨 위에 항목 \(count)개")
+                    parts.append("최상위 항목 \(count)개")
                     parts.append("\(milliseconds) ms")
                 }
                 outcome = .success(parts.joined(separator: " · "))
@@ -341,7 +340,7 @@ struct SiteManagerSheet: View {
         do {
             try await library.signInToGoogle(site, clientSecret: passphrase)
             passphrase = ""
-            outcome = .success("Google 계정으로 로그인했어요")
+            outcome = .success("Google 계정으로 로그인됨")
         } catch {
             outcome = Self.failure(error)
         }
@@ -424,9 +423,9 @@ private enum AuthKind: CaseIterable, Identifiable {
 
     var hint: String {
         switch self {
-        case .agent: "ssh-agent 또는 1Password 에이전트의 키를 그대로 써요. 키 파일을 앱에 넣지 않아요."
-        case .keyFile: "OpenSSH 형식의 Ed25519 키를 추천해요. 키 암호는 키체인에 저장해요."
-        case .password: "키체인에 저장해요. 가능하면 키 인증을 쓰세요."
+        case .agent: "ssh-agent 또는 1Password 에이전트의 키 사용, 맞는 키가 없으면 ~/.ssh의 id_ed25519, id_rsa 시도"
+        case .keyFile: "OpenSSH 형식 개인 키(Ed25519, RSA). 키 암호는 키체인에 저장됨"
+        case .password: "키체인에 저장됨"
         }
     }
 }
@@ -459,9 +458,9 @@ private struct SiteForm: View {
                 VStack(alignment: .leading, spacing: 8) {
                     SectionLabel("종류")
                     HStack(spacing: 8) {
-                        kindCard(0, "SFTP", "SSH 서버", "server.rack")
-                        kindCard(1, "S3", "AWS · R2 · MinIO", "cylinder")
-                        kindCard(2, "Google Drive", "OAuth 로그인", "cloud")
+                        kindCard(0, "SFTP", "SSH 서버", "bt.server")
+                        kindCard(1, "S3", "AWS, R2, MinIO", "bt.bucket")
+                        kindCard(2, "Google Drive", "OAuth 로그인", "bt.cloud")
                         Spacer()
                     }
                     Text(kindHint).font(.ui(.caption)).foregroundStyle(.secondary)
@@ -488,7 +487,7 @@ private struct SiteForm: View {
             kindChoice.wrappedValue = choice
         } label: {
             VStack(alignment: .leading, spacing: 5) {
-                Image(systemName: symbol)
+                Glyph(symbol, size: 18)
                     .foregroundStyle(selected ? Color.themeAccent : .secondary)
                 Text(title).font(.ui(.callout, weight: .semibold))
                 Text(subtitle).font(.ui(.caption)).foregroundStyle(.secondary)
@@ -504,9 +503,9 @@ private struct SiteForm: View {
 
     private var kindHint: String {
         switch site.kind {
-        case .sftp: "SSH 서버 · 터미널과 원격 화면도 이 연결로 열어요."
-        case .s3: "AWS · Cloudflare R2 · MinIO 같은 S3 호환 저장소"
-        case .googleDrive: "OAuth 로그인 · 공유 드라이브 포함"
+        case .sftp: "이 연결로 터미널과 원격 화면도 열 수 있음"
+        case .s3: "AWS, Cloudflare R2, MinIO 등 S3 호환 저장소"
+        case .googleDrive: "공유 드라이브 포함"
         }
     }
 
@@ -552,14 +551,14 @@ private struct SiteForm: View {
             LabeledField("리전") { TextField("리전", text: s3.region, prompt: Text("us-east-1")).designField(mono: true) }
                 .frame(width: 180)
         }
-        LabeledField("엔드포인트", hint: "MinIO, R2 같은 S3 호환 저장소도 주소만 바꾸면 돼요.") {
+        LabeledField("엔드포인트", hint: "비워 두면 AWS 사용") {
             TextField("엔드포인트", text: s3.endpoint, prompt: Text(verbatim: "s3.amazonaws.com")).designField(mono: true)
         }
-        SwitchRow(title: "경로 방식 주소", detail: "MinIO처럼 버킷을 주소 경로에 넣는 곳", isOn: s3.usesPathStyle)
+        SwitchRow(title: "경로 방식 주소", detail: "버킷 이름을 주소 경로에 넣음 (MinIO 등)", isOn: s3.usesPathStyle)
         HStack(alignment: .top, spacing: 12) {
             LabeledField("액세스 키") { TextField("액세스 키", text: s3.accessKey).designField(mono: true) }
-            LabeledField("비밀 키", hint: "연결에 성공하면 키체인에 저장해요.") {
-                SecureField("비밀 키", text: $password, prompt: Text("비워 두면 저장된 키를 써요"))
+            LabeledField("비밀 키", hint: "연결에 성공하면 키체인에 저장") {
+                SecureField("비밀 키", text: $password, prompt: Text("비워 두면 저장된 키 사용"))
                     .focused(secretFocused)
                     .designField()
             }
@@ -574,9 +573,9 @@ private struct SiteForm: View {
                 .font(.ui(.title2))
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(drive.wrappedValue.account.isEmpty ? "연결된 Google 계정이 없어요" : "로그인됨 · \(drive.wrappedValue.account)")
+                Text(drive.wrappedValue.account.isEmpty ? "연결된 Google 계정 없음" : "로그인됨 · \(drive.wrappedValue.account)")
                     .font(.ui(.body, weight: .medium))
-                Text(drive.wrappedValue.account.isEmpty ? "브라우저에서 Google 로그인 창이 열려요" : "토큰은 키체인에 있어요 · 공유 드라이브 포함")
+                Text(drive.wrappedValue.account.isEmpty ? "브라우저에서 Google 로그인 창이 열림" : "토큰은 키체인에 저장됨")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -596,13 +595,13 @@ private struct SiteForm: View {
         }
         .padding(14)
         .well()
-        LabeledField("OAuth 클라이언트 ID", hint: "직접 만든 Google Cloud 클라이언트(데스크톱 앱)를 써요. 테스트 상태면 7일마다 다시 로그인해야 해요.") {
+        LabeledField("OAuth 클라이언트 ID", hint: "Google Cloud에서 만든 데스크톱 앱 클라이언트. 테스트 상태에서는 7일마다 다시 로그인해야 합니다.") {
             TextField("OAuth 클라이언트 ID", text: drive.clientID, prompt: Text("…apps.googleusercontent.com")).designField(mono: true)
         }
         LabeledField("클라이언트 보안 비밀") {
-            SecureField("클라이언트 보안 비밀", text: $passphrase, prompt: Text("데스크톱 앱 클라이언트의 secret · 키체인에 저장")).designField()
+            SecureField("클라이언트 보안 비밀", text: $passphrase, prompt: Text("비워 두면 저장된 값 사용")).designField()
         }
-        LabeledField("Google 문서를 받을 때 형식", hint: "문서 · 스프레드시트 · 프레젠테이션은 실제 파일이 아니라서 변환해서 받아요. Drive는 한 폴더에 같은 이름을 허용해서, 목록에서는 “이름 (2)”처럼 구분해 보여줘요.") {
+        LabeledField("Google 문서 내보내기 형식", hint: "Google 문서, 스프레드시트, 프레젠테이션을 받을 때 이 형식으로 변환") {
             HStack(spacing: 6) {
                 ForEach([("office", "DOCX / XLSX / PPTX"), ("pdf", "PDF"), ("openDocument", "ODT / ODS / ODP")], id: \.0) { value, title in
                     Button(title) { drive.wrappedValue.exportFormat = value }
@@ -649,16 +648,16 @@ private struct SiteForm: View {
                         .buttonStyle(PanelButtonStyle())
                         .fixedSize()
                 }
-                SecureField("키 암호", text: $passphrase, prompt: Text("키 암호 · 비워 두면 저장된 암호를 써요"))
+                SecureField("키 암호", text: $passphrase, prompt: Text("키 암호 (비워 두면 저장된 암호 사용)"))
                     .focused(secretFocused)
                     .designField()
             case .password:
-                SecureField("비밀번호", text: $password, prompt: Text("비밀번호 · 비워 두면 저장된 비밀번호를 써요"))
+                SecureField("비밀번호", text: $password, prompt: Text("비밀번호 (비워 두면 저장된 비밀번호 사용)"))
                     .focused(secretFocused)
                     .designField()
             }
         }
-        LabeledField("점프 호스트 (ProxyJump)", hint: "저장된 연결 이름, ~/.ssh/config 별칭, user@host:port 를 쉼표로 이어 쓰면 차례로 거쳐요.") {
+        LabeledField("점프 호스트 (ProxyJump)", hint: "저장된 연결 이름, ~/.ssh/config 별칭 또는 user@host:port. 쉼표로 구분하면 순서대로 경유") {
             JumpHostField(site: $site, candidates: jumpHostNames)
                 .id(site.id)
         }
@@ -678,10 +677,10 @@ private struct SiteForm: View {
                     }
                     .frame(width: 140)
                     SwitchRow(
-                        title: "SSH 터널로 연결 (추천)",
+                        title: "SSH 터널로 연결",
                         detail: site.remoteScreen?.throughTunnel == true
-                            ? "SSH 연결 안으로 화면을 보내요 · 서버 방화벽에 포트를 열 필요 없어요"
-                            : "직접 연결 · VNC는 암호화가 약해서 추천하지 않아요",
+                            ? "서버 방화벽에 화면 포트를 열 필요 없음"
+                            : "직접 연결 (VNC는 암호화가 약해 권장하지 않음)",
                         isOn: screenTunnel
                     )
                 }
@@ -697,9 +696,9 @@ private struct SiteForm: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("구분과 안전")
             TagPicker(tag: tag)
-            SwitchRow(title: "읽기 전용으로 열기", detail: "쓰기 · 삭제 버튼을 숨겨요", isOn: $site.readOnly)
-            SwitchRow(title: "쓰기 전에 항상 확인", detail: site.tag == .prod ? "PROD 태그라 자동으로 켜져요" : "복사 · 삭제 · 덮어쓰기 전에 물어봐요", isOn: $site.confirmsWrites)
-            Text("PROD 로 지정하면 패인 위에 띠가 생기고, 파일을 쓰기 전에 항상 확인해요.")
+            SwitchRow(title: "읽기 전용으로 열기", detail: "쓰기와 삭제 버튼 숨김", isOn: $site.readOnly)
+            SwitchRow(title: "쓰기 전에 항상 확인", detail: site.tag == .prod ? "PROD 태그에서는 자동으로 켜짐" : "복사, 삭제, 덮어쓰기 전에 확인", isOn: $site.confirmsWrites)
+            Text("PROD로 지정하면 패인 위에 색 띠가 표시되고, 파일을 쓰기 전에 항상 확인합니다.")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
         }
@@ -730,9 +729,9 @@ private struct SiteForm: View {
 
     private var screenHint: String {
         switch site.remoteScreen?.kind {
-        case nil: "SSH 터미널은 언제든 쓸 수 있어요. 화면이 필요한 컴퓨터만 켜세요."
-        case .vnc: "Linux · 라즈베리파이처럼 VNC 서버(TigerVNC, x11vnc)가 돌고 있으면 돼요. 비밀번호는 처음 연결할 때 묻고 키체인에 저장해요."
-        case .appleScreenSharing: "Mac의 시스템 설정 › 일반 › 공유 › 화면 공유를 켜 두면 macOS 계정으로 접속해요."
+        case nil: "SSH 터미널은 이 설정과 관계없이 사용 가능"
+        case .vnc: "서버에서 VNC 서버(TigerVNC, x11vnc 등)가 실행 중이어야 합니다. 비밀번호는 처음 연결할 때 입력하며 키체인에 저장됩니다."
+        case .appleScreenSharing: "원격 Mac에서 시스템 설정 › 일반 › 공유 › 화면 공유를 켜야 합니다. macOS 계정으로 로그인합니다."
         }
     }
 
@@ -814,7 +813,7 @@ private struct JumpHostField: View {
 
     var body: some View {
         HStack {
-            TextField("거쳐 갈 호스트", text: $text, prompt: Text(verbatim: "bastion"))
+            TextField("경유 호스트", text: $text, prompt: Text(verbatim: "bastion"))
                 .designField(mono: true)
                 .onChange(of: text) {
                     site.proxyJump = text.split(separator: ",")

@@ -28,7 +28,7 @@ public struct SyncFolder: Sendable {
         public let name: String
         public let reason: String
 
-        public var errorDescription: String? { "\(name)을(를) 읽지 못했어요: \(reason)" }
+        public var errorDescription: String? { "\(name)을(를) 읽을 수 없습니다: \(reason)" }
     }
 
     // MARK: - Lists
@@ -135,7 +135,7 @@ public struct SyncFolder: Sendable {
         do {
             return try JSONDecoder.sync.decode(type, from: data)
         } catch {
-            throw Unreadable(name: name, reason: "JSON 형식이 맞지 않아요")
+            throw Unreadable(name: name, reason: "JSON 형식 오류")
         }
     }
 

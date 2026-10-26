@@ -41,7 +41,7 @@ extension TransferJob {
         case .preparing:
             return "준비 중"
         case .running:
-            if pendingConflict != nil { return "확인이 필요해요" }
+            if pendingConflict != nil { return "확인 필요" }
             var parts: [String] = []
             if bytesPerSecond > 0 { parts.append("\(ByteFormat.rate(bytesPerSecond))") }
             if let seconds = secondsRemaining { parts.append(Self.remaining(seconds)) }
@@ -90,7 +90,7 @@ extension TransferJob {
     var stateDetail: String {
         switch state {
         case .running:
-            if pendingConflict != nil { return "같은 이름이 있어요" }
+            if pendingConflict != nil { return "같은 이름 있음" }
             return secondsRemaining.map(Self.remaining) ?? (bytesPerSecond > 0 ? ByteFormat.rate(bytesPerSecond) : "")
         case .paused: return "대기"
         case .failed: return "\(failures.count)개 파일 실패"

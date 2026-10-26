@@ -150,8 +150,8 @@ enum KeyLayout: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var subtitle: String {
         switch self {
-        case .finder: "⌘ 조합 중심 · macOS에 익숙하면"
-        case .commander: "F5 복사 · F6 이동 · F7 새 폴더 · F8 삭제"
+        case .finder: "⌘ 조합 중심"
+        case .commander: "F5 복사, F6 이동, F7 새 폴더, F8 삭제"
         }
     }
 
@@ -218,7 +218,7 @@ final class Keymap {
     static let reserved: [KeyCombo: String] = [
         KeyCombo("c", command: true): "복사 (클립보드)", KeyCombo("v", command: true): "붙여넣기",
         KeyCombo("x", command: true): "잘라내기", KeyCombo("a", command: true): "모두 선택",
-        KeyCombo("v", option: true, command: true): "이동해서 붙여넣기", KeyCombo("c", option: true, command: true): "경로 복사",
+        KeyCombo("v", option: true, command: true): "여기로 항목 이동", KeyCombo("c", option: true, command: true): "경로 복사",
         KeyCombo("r", command: true): "새로고침", KeyCombo("[", command: true): "뒤로", KeyCombo("]", command: true): "앞으로",
         KeyCombo("up", command: true): "상위 폴더", KeyCombo("down", command: true): "열기", KeyCombo("`", control: true): "SSH 터미널",
         KeyCombo(",", command: true): "설정", KeyCombo("q", command: true): "종료", KeyCombo("w", command: true): "창 닫기",

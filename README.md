@@ -1,93 +1,151 @@
-# Bottari
+<p align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="">
+</p>
 
-보따리 — 여러 서버와 클라우드를 한 창에서 다루는 macOS 파일 관리자.
+<h1 align="center">Bottari</h1>
 
-FileZilla처럼 쓰지만 왼쪽은 로컬, 오른쪽은 서버로 고정하지 않고 **어느 패인에서든 어떤 위치든** 열어요.
-서버 ↔ 서버, Google Drive ↔ 서버 전송, 원격 파일 편집, 이미지·영상 바로 보기, SSH 터미널과 원격 화면을 한곳에 모았어요.
+<p align="center">여러 서버와 클라우드를 한 창에서 다루는 macOS 파일 관리자</p>
 
-## 할 수 있는 것
+보따리는 FileZilla 같은 두 패인 파일 관리자다. 왼쪽은 Mac, 오른쪽은 서버로 고정하지 않고, 두 패인 모두 Mac, SFTP 서버, S3, Google Drive, iCloud Drive 중 어디든 열 수 있다. 서버 사이 전송, 원격 파일 편집, 이미지와 영상 보기, SSH 터미널, 원격 화면을 한 앱에서 처리한다.
 
-- **듀얼 패인** — 이 Mac, SFTP 서버, S3 (AWS · R2 · MinIO), Google Drive, iCloud Drive를 어느 쪽에서든 열기. 드래그, ⌘C/⌘V, 우클릭으로 서로 보내기.
-- **전송 큐** — 서버 간 직접 전송, 동시 전송 수, 같은 이름 정책, 일시정지 · 재시도 · 이어받기, SHA-256 비교, 수정 시각 보존. 서버에서 명령을 실행할 수 있으면 `cp -a` · 압축 · 풀기는 서버에서.
-- **연결 관리** — 키체인 비밀번호, ssh-agent, 키 파일, `~/.ssh/config` 가져오기, 점프 호스트, 호스트 키 확인, PROD 태그(띠 · 쓰기 전 확인 · 읽기 전용).
-- **보기와 편집** — 이미지 갤러리, 영상 스트리밍 (libmpv, 받지 않고 바로 재생), 원격 편집기 (문법 색, 서버에서 바뀌면 3-way 병합), 외부 에디터로 열기.
-- **원격** — SSH 터미널 (SwiftTerm, 스니펫 · 여러 서버에 동시 입력), VNC · 화면 공유 (RoyalVNCKit, SSH 터널로), SOCKS/HTTP 프록시 터널과 sshuttle.
-- **사이드바와 보따리** — 즐겨찾기, 여러 서버의 파일을 모아 한 번에 보내는 보따리와 프리셋, ⌘K 명령 팔레트.
-- **설정 (⌘,)**
-  - 일반: 전송 기본값, 업데이트
-  - 모양: 테마 프리셋 (시스템 · 종이 · 먹 · 쪽빛 밤 · 모시 · 고대비), 강조 색, 밀도, 글꼴, 서버 태그 색. 테마는 JSON 파일로 가져오고 내보내요 (`~/Library/Application Support/Bottari/themes/`).
-  - 단축키: Finder식 / Commander식 (F5 복사 · F6 이동 · F7 새 폴더 · F8 삭제), 키를 눌러서 바꾸기, 겹침 표시.
-  - iCloud 동기화: 연결 목록 · 즐겨찾기 · 테마 · 단축키 · 보따리 프리셋을 `iCloud Drive/Bottari/`에 JSON으로 두고 Mac끼리 합쳐요. 양쪽에서 다르게 바뀌면 "이 Mac 것 유지 / 다른 Mac 것 쓰기 / 둘 다 남기기"로 고르고, 비밀번호는 파일에 쓰지 않아요. 기본은 꺼짐.
+## 기능
+
+### 파일
+
+- 두 패인 모두 Mac, SFTP, S3(AWS, R2, MinIO), Google Drive, iCloud Drive 열기
+- 드래그, ⌘C/⌘V, 우클릭으로 패인 사이 복사와 이동
+- 보따리: 여러 서버의 파일을 모아 두었다가 한 위치로 한 번에 보내기, 프리셋으로 저장
+- ⌘K 명령 팔레트로 폴더 이동, 연결, 명령 실행
+
+### 전송
+
+- 서버 사이 전송. Mac을 거쳐 스트리밍하며 임시 파일을 만들지 않음
+- 동시 전송 수, 같은 이름 처리 방식, 일시정지, 재시도, 이어받기
+- 전송 후 SHA-256 비교, 수정 시각 보존
+- 셸 명령을 쓸 수 있는 서버에서는 복사(`cp -a`), 압축, 압축 풀기를 서버에서 직접 실행
+
+### 연결
+
+- 비밀번호(키체인 저장), ssh-agent, 키 파일, `~/.ssh/config` 가져오기
+- 에이전트에 맞는 키가 없으면 `ssh`처럼 `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`로 이어서 시도
+- 점프 호스트(ProxyJump)를 거친 연결과 파일 전송
+- 호스트 키 확인
+- PROD 태그: 패인 위 경고 띠, 쓰기 전 확인, 읽기 전용 열기
+
+### 보기와 편집
+
+- 이미지 갤러리
+- 영상 재생(libmpv). 내려받지 않고 서버에서 바로 스트리밍
+- 원격 텍스트 편집. 문법 색, 서버 쪽 파일이 바뀌면 3-way 병합
+- 외부 에디터로 열고, 저장하면 서버에 자동 업로드
+
+### 원격
+
+- SSH 터미널(SwiftTerm). 스니펫, 여러 서버에 동시 입력
+- VNC와 macOS 화면 공유(RoyalVNCKit). SSH 터널을 거쳐 연결
+- SSH를 거치는 SOCKS/HTTP 프록시 터널
+
+### 설정 (⌘,)
+
+| 탭 | 내용 |
+| --- | --- |
+| 일반 | 전송 기본값, 업데이트 |
+| 모양 | 테마(시스템, 종이, 먹, 쪽빛 밤, 모시, 고대비), 강조색, 밀도, 글꼴, 서버 태그 색. 테마는 JSON으로 가져오고 내보낸다(`~/Library/Application Support/Bottari/themes/`) |
+| 단축키 | Finder식, Commander식(F5 복사, F6 이동, F7 새 폴더, F8 삭제). 키를 직접 눌러 지정하고 겹치는 키를 표시 |
+| iCloud 동기화 | 연결 목록, 즐겨찾기, 테마, 단축키, 보따리 프리셋을 `iCloud Drive/Bottari/`에 JSON으로 두고 Mac끼리 병합. 양쪽에서 다르게 바뀐 항목은 어느 쪽을 쓸지 직접 고른다. 비밀번호는 파일에 쓰지 않는다. 기본은 꺼짐 |
 
 ## 요구 사항
 
 - 실행: macOS 15 이상
-- 빌드: Xcode 26 이상 (Swift 6.2+)
+- 빌드: Xcode 26 이상(Swift 6.2 이상)
 
 ## 빌드
 
 ```sh
 make build    # Debug 빌드
-make run      # 빌드하고 실행
-make test     # 핵심 패키지 테스트 (swift test)
+make run      # 빌드 후 실행
+make test     # BottariKit 패키지 테스트(swift test)
 make open     # Xcode로 열기
 ```
 
-Xcode에서 테스트를 돌리려면 `Packages/BottariKit/Package.swift`를 열고 ⌘U.
+`xcode-select`가 Command Line Tools를 가리키고 있으면 Swift가 오래된 버전이라 빌드되지 않는다. 시스템 설정을 바꾸지 않으려면 명령마다 Xcode를 지정한다.
 
-화면을 확인할 때는 창을 띄우지 않고 샘플 데이터로 PNG를 그릴 수 있어요 (Debug 빌드만). 편집기 · 플레이어 · VNC · 설정 · 동기화는 스스로 점검해서 `*-check.txt`에 PASS/FAIL을 남겨요. 사용자의 테마 · 단축키 · 연결 목록은 건드리지 않아요.
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make build
+```
+
+Xcode에서 테스트하려면 `Packages/BottariKit/Package.swift`를 열고 ⌘U를 누른다.
+
+### 화면 스냅샷
+
+Debug 빌드는 창을 띄우지 않고 샘플 데이터로 각 화면을 PNG로 그릴 수 있다. 편집기, 플레이어, VNC, 설정, 동기화는 스스로 점검한 결과를 `*-check.txt`에 PASS/FAIL로 남긴다. 사용자의 테마, 단축키, 연결 목록은 건드리지 않는다.
 
 ```sh
 open -n -g -j -W .build/xcode/Build/Products/Debug/Bottari.app --args -renderSnapshots /tmp/bottari-shots
 ```
 
+### 아이콘
+
+앱 아이콘과 사이드바, 툴바의 선 아이콘은 코드로 그린다. 스크립트를 고친 뒤 다시 생성한다.
+
+```sh
+swift scripts/app-icon.swift Bottari/Assets.xcassets/AppIcon.appiconset docs/icon.png
+swift scripts/glyphs.swift Bottari/Assets.xcassets/Glyphs
+```
+
 ## 배포
 
-App Store에는 내지 않아요. 샌드박스 없이 Developer ID로 서명하고 공증해서 DMG로 나눠 주고, 업데이트는 Sparkle로 받아요.
+App Store에는 올리지 않는다. 앱 샌드박스 없이 Developer ID로 서명하고 공증한 DMG로 배포하며, 업데이트는 Sparkle로 받는다.
 
 처음 한 번:
 
-1. Developer ID Application 인증서를 키체인에 둡니다.
-2. 공증용 프로필을 만듭니다: `xcrun notarytool store-credentials bottari-notary --apple-id … --team-id …`
-3. Sparkle 키를 만듭니다: `scripts/sparkle-keys.sh` (개인 키는 로그인 키체인에, 출력된 공개 키를 아래에).
-4. `cp Config/release.env.example Config/release.env` 하고 `TEAM_ID`, `SPARKLE_PUBLIC_KEY`를 채웁니다 (이 파일은 커밋하지 않아요).
+1. Developer ID Application 인증서를 키체인에 설치한다.
+2. 공증 프로필을 만든다: `xcrun notarytool store-credentials bottari-notary --apple-id … --team-id …`
+3. Sparkle 키를 만든다: `scripts/sparkle-keys.sh`. 개인 키는 로그인 키체인에 저장되고, 출력된 공개 키는 다음 단계에서 쓴다.
+4. `cp Config/release.env.example Config/release.env` 후 `TEAM_ID`, `SPARKLE_PUBLIC_KEY`를 채운다. 이 파일은 커밋하지 않는다.
 
 릴리스마다:
 
 ```sh
-make release   # .build/release/ 에 Bottari-<버전>.dmg, .zip, appcast.xml
+make release   # .build/release/에 Bottari-<버전>.dmg, .zip, appcast.xml 생성
 gh release create v0.1.0 .build/release/Bottari-0.1.0.dmg .build/release/Bottari-0.1.0.zip .build/release/appcast.xml
 ```
 
-앱은 `https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml`에서 업데이트를 찾아요. 공개 키가 없는 빌드(Debug, `make package`)는 업데이트를 확인하지 않아요. `make package`는 서명 없이 같은 단계를 거쳐 파이프라인만 확인해요.
+앱은 `https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml`에서 업데이트를 확인한다. 공개 키가 없는 빌드(Debug, `make package`)는 업데이트를 확인하지 않는다. `make package`는 서명 없이 같은 과정을 실행해 파이프라인만 점검한다.
 
 ## 구조
 
 ```
-Bottari/                macOS 앱 (SwiftUI)
+Bottari/                macOS 앱(SwiftUI)
   Panes/ Sidebar/       패인, 사이드바, 보따리
-  Transfers/            전송 막대와 목록, 연결 유지
+  Transfers/            전송 막대, 전송 센터, 연결 유지
   Sites/                연결 관리
   Viewers/              갤러리, 플레이어, 편집기
   Remote/ Tunnels/      터미널, 원격 화면, 터널
   Settings/             테마, 단축키, iCloud 동기화, 설정 창
+  Design/               색, 글꼴, 공용 컨트롤, 아이콘 뷰
   Debug/                스냅샷 렌더러와 샘플 데이터
-Packages/BottariKit/    앱과 분리된 핵심 로직
+  Assets.xcassets/      앱 아이콘, 강조색, 선 아이콘(Glyphs)
+Packages/BottariKit/    앱과 분리한 핵심 로직
   BottariCore           RemotePath, FileItem, FileProvider, LocalFileProvider, 3-way 동기화 폴더
-  BottariSFTP           SFTP (Citadel), 저장된 사이트, ~/.ssh/config, 점프 호스트, PTY, 포트 포워딩, 프록시
+  BottariSFTP           SFTP(Citadel), 저장된 연결, ~/.ssh/config, 점프 호스트, PTY, 포트 포워딩, 프록시
   BottariTransfer       전송 큐, 파일 캐시
   BottariEditor         문법 색, 문자 인코딩, 3-way 병합
-  BottariPlayer         libmpv (MPVKit) 스트리밍
+  BottariPlayer         libmpv(MPVKit) 스트리밍
   BottariRemote         SwiftTerm, RoyalVNCKit
-  BottariCloud          S3 (SigV4), Google Drive (AppAuth)
+  BottariCloud          S3(SigV4), Google Drive(AppAuth)
 Config/                 Info.plist 추가 키, 릴리스 설정 예시
-scripts/                release.sh, sparkle-keys.sh
+scripts/                release.sh, sparkle-keys.sh, app-icon.swift, glyphs.swift
+docs/                   README 이미지
 ```
 
-- 모든 패인은 `FileProvider` 프로토콜로만 파일을 다뤄요. 서버 간 전송은 한쪽의 `read` 스트림을 다른 쪽 `write`에 이어 붙이는 것으로 끝나요. 읽기는 받는 쪽이 가져가는 만큼만 해서 큰 파일도 메모리에 쌓이지 않아요.
-- 쓰기는 대상 옆 임시 파일에 먼저 쓰고 이름을 바꿔서, 전송이 끊겨도 원래 파일이 깨지지 않아요.
-- Xcode 프로젝트는 폴더 동기화 방식이라 `Bottari/` 아래에 파일을 추가해도 프로젝트 파일을 고칠 필요가 없어요.
+설계 메모:
+
+- 모든 패인은 `FileProvider` 프로토콜로만 파일을 다룬다. 서버 사이 전송은 한쪽의 `read` 스트림을 다른 쪽 `write`에 연결하면 끝난다. 읽기는 받는 쪽이 가져가는 만큼만 진행하므로 큰 파일도 메모리에 쌓이지 않는다.
+- 쓰기는 대상 옆 임시 파일(`.이름.bottari-part`)에 먼저 쓰고 마지막에 이름을 바꾼다. 전송이 끊겨도 원본은 그대로 남고, 임시 파일에서 이어 쓸 수 있다.
+- 위치는 계정뿐 아니라 거쳐 가는 점프 호스트까지 포함해 구분한다. 서로 다른 점프 호스트 뒤의 `127.0.0.1:포트`를 같은 서버로 취급하지 않는다.
+- Xcode 프로젝트는 폴더 동기화 방식이라 `Bottari/` 아래에 파일을 추가해도 프로젝트 파일을 고치지 않아도 된다.
 
 ## 라이선스
 
-MIT. libmpv(MPVKit)는 LGPL 빌드를 써요.
+MIT. libmpv(MPVKit)는 LGPL 빌드를 사용한다. 함께 배포하는 IBM Plex 글꼴은 SIL Open Font License를 따른다.

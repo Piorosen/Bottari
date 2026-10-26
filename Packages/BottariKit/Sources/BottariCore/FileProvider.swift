@@ -74,7 +74,7 @@ extension FileProvider {
     public var isLocal: Bool { locationID == LocalFileProvider.locationID }
 
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
-        throw ProviderError.unsupported("서버 안에서 복사")
+        throw ProviderError.unsupported("서버 내 복사")
     }
 
     public func trash(_ path: RemotePath) async throws {
@@ -95,7 +95,7 @@ extension FileProvider {
     }
 
     public func setModified(_ date: Date, at path: RemotePath) async throws {
-        throw ProviderError.unsupported("수정 시각 바꾸기")
+        throw ProviderError.unsupported("수정 시각 변경")
     }
 
     /// Reads a whole file, or a range of it, into memory. Meant for small files

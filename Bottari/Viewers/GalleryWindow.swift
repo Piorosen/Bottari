@@ -14,7 +14,7 @@ final class GalleryModel {
     private(set) var index: Int
     private(set) var image: NSImage?
     private(set) var pixelSize: CGSize?
-    /// "원본 받는 중 · 2 MB / 5 MB", or why the image could not be shown.
+    /// "원본 다운로드 중 · 2 MB / 5 MB", or why the image could not be shown.
     private(set) var status: String?
     private(set) var thumbnails: [RemotePath: NSImage] = [:]
     var actualSize = false
@@ -47,12 +47,12 @@ final class GalleryModel {
         loading?.cancel()
         image = thumbnails[item.path]
         pixelSize = nil
-        status = provider.isLocal ? nil : "원본 받는 중…"
+        status = provider.isLocal ? nil : "원본 다운로드 중…"
         let total = item.size.map { ByteFormat.string($0) }
         loading = Task {
             do {
                 let url = try await AppServices.fileCache.localURL(for: item, from: provider) { received in
-                    let text = "원본 받는 중 · \(ByteFormat.string(received))" + (total.map { " / \($0)" } ?? "")
+                    let text = "원본 다운로드 중 · \(ByteFormat.string(received))" + (total.map { " / \($0)" } ?? "")
                     Task { @MainActor in
                         if self.current == item, self.status != nil { self.status = text }
                     }
@@ -60,7 +60,7 @@ final class GalleryModel {
                 let decoded = await Task.detached { Self.decode(url) }.value
                 guard !Task.isCancelled, current == item else { return }
                 guard let decoded else {
-                    status = "이미지를 열지 못했어요"
+                    status = "이미지를 열 수 없음"
                     return
                 }
                 image = NSImage(cgImage: decoded, size: .zero)
@@ -159,7 +159,7 @@ struct GalleryWindow: View {
             if let model {
                 GalleryView(model: model) { dismiss() }
             } else {
-                ContentUnavailableView("이미지를 열 수 없어요", systemImage: "photo")
+                ContentUnavailableView("이미지를 열 수 없음", systemImage: "photo")
             }
         }
         .frame(minWidth: 720, minHeight: 520)
@@ -320,18 +320,18 @@ private struct GalleryView: View {
                     if let pixels = model.pixelSize {
                         row("해상도", "\(Int(pixels.width)) × \(Int(pixels.height))")
                     }
-                    row("수정", item.formattedModified)
+                    row("수정일", item.formattedModified)
                     if let permissions = item.permissionString {
                         row("권한", [permissions, item.owner].compactMap { $0 }.joined(separator: " "))
                     }
                     row("경로", item.path.string)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    SectionLabel("불러오는 방식")
+                    SectionLabel("불러오기 상태")
                     loadRow("썸네일", "\(model.thumbnails.count) / \(model.items.count)장", done: model.thumbnails[item.path] != nil)
-                    loadRow("원본", model.provider.isLocal ? "이 Mac의 파일" : model.status == nil && model.image != nil ? "받음 · \(item.formattedSize)" : "받는 중", done: model.status == nil && model.image != nil)
+                    loadRow("원본", model.provider.isLocal ? "이 Mac의 파일" : model.status == nil && model.image != nil ? "다운로드됨 · \(item.formattedSize)" : "다운로드 중", done: model.status == nil && model.image != nil)
                     if !model.provider.isLocal {
-                        Text("캐시 키는 경로 + 수정 시각 + 크기라서, 서버에서 파일이 바뀌면 자동으로 새로 받아요.")
+                        Text("서버에서 파일이 변경되면 자동으로 다시 다운로드합니다.")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

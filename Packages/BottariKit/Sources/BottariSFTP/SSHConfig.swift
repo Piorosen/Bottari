@@ -35,6 +35,10 @@ public struct SSHConfig: Sendable {
     /// Every alias named on a Host line without wildcards, in file order.
     public let aliases: [String]
 
+    /// The folder the configuration lives in, normally `~/.ssh`; also where
+    /// the default key files are.
+    public let directory: String
+
     /// Parses `text`. Relative Include paths resolve against `directory`
     /// (normally `~/.ssh`); `readFile` loads included files.
     public init(
@@ -44,6 +48,7 @@ public struct SSHConfig: Sendable {
         localUser: String = NSUserName(),
         readFile: (String) -> String? = { try? String(contentsOfFile: $0, encoding: .utf8) }
     ) {
+        self.directory = directory
         self.home = home
         self.localUser = localUser
         var blocks = [Block(patterns: ["*"], options: [])]

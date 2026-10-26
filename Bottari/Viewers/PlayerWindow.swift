@@ -116,7 +116,7 @@ struct PlayerWindow: View {
             if let model {
                 PlayerView(model: model)
             } else {
-                ContentUnavailableView("영상을 열 수 없어요", systemImage: "film")
+                ContentUnavailableView("영상을 열 수 없음", systemImage: "film")
             }
         }
         .frame(minWidth: 720, minHeight: 460)
@@ -220,14 +220,14 @@ private struct PlayerView: View {
             (placeName, model.provider.isLocal ? "이 Mac의 파일" : "\(model.provider.kindLabel) 서버", "read"),
             ("bottari:// 스트림", "mpv 스트림 콜백", "demux"),
             ("FFmpeg", "\(model.current?.path.pathExtension.uppercased() ?? "") → \(codec)", "decode"),
-            (hardware ? "VideoToolbox" : "CPU 디코더", hardware ? "Mac 하드웨어" : "소프트웨어로 풀기", "render"),
-            ("Metal 화면", "자막도 여기서 그림", nil),
+            (hardware ? "VideoToolbox" : "CPU 디코더", hardware ? "하드웨어 디코딩" : "소프트웨어 디코딩", "render"),
+            ("Metal 화면", "자막 포함 렌더링", nil),
         ]
         let lastRead = model.reads.first?.offset ?? 0
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("FFmpeg 으로 바로 읽어서 재생").font(.ui(.body, weight: .semibold))
-                Text("파일을 받지 않고, FFmpeg가 필요한 위치만 \(model.provider.isLocal ? "디스크에서" : "SFTP로") 읽어요. 임시 파일도 없어요.")
+                Text("FFmpeg로 직접 재생").font(.ui(.body, weight: .semibold))
+                Text("필요한 부분만 \(model.provider.isLocal ? "디스크에서" : "SFTP로") 직접 읽습니다.")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -253,7 +253,7 @@ private struct PlayerView: View {
             HStack(spacing: 8) {
                 stat("읽은 위치 / 전체", "\(ByteFormat.string(lastRead)) / \(model.current?.formattedSize ?? "—")")
                 stat("디코더", "\(codec) · \(model.state.hardwareDecoder == nil ? "…" : hardware ? "VideoToolbox" : "CPU")")
-                stat("읽기 요청", "\(model.reads.count)번")
+                stat("읽기 요청", "\(model.reads.count)회")
                 stat("임시 파일", "없음")
             }
         }
@@ -274,13 +274,13 @@ private struct PlayerView: View {
     @ViewBuilder
     private var overlay: some View {
         if let failure = model.failure ?? model.state.error {
-            ContentUnavailableView("재생할 수 없어요", systemImage: "exclamationmark.triangle", description: Text(failure))
+            ContentUnavailableView("재생할 수 없음", systemImage: "exclamationmark.triangle", description: Text(failure))
                 .foregroundStyle(.white)
         } else if model.state.isBuffering || model.state.duration == 0 {
             VStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.large)
-                Text(model.state.duration == 0 ? "여는 중…" : "버퍼링 · 새 위치부터 읽는 중")
+                Text(model.state.duration == 0 ? "여는 중…" : "버퍼링 중…")
                     .font(.ui(.callout))
             }
             .padding(16)
@@ -397,11 +397,11 @@ private struct PlayerView: View {
                 .card()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("FFmpeg 이 여는 것").font(.ui(.callout, weight: .semibold))
+                    Text("지원 형식").font(.ui(.callout, weight: .semibold))
                     Text("컨테이너: MP4 · MOV · MKV · WebM · AVI · TS · FLV").font(.ui(.caption))
                     Text("코덱: H.264 · HEVC 10bit · AV1 · VP9 · ProRes · MPEG-4").font(.ui(.caption))
-                    Text("자막: SRT · ASS (스타일 그대로) · PGS · 내장 자막").font(.ui(.caption))
-                    Text("H.264 · HEVC 는 Mac 하드웨어(VideoToolbox)로 풀어서 배터리를 덜 써요.")
+                    Text("자막: SRT · ASS (스타일 유지) · PGS · 내장 자막").font(.ui(.caption))
+                    Text("H.264와 HEVC는 하드웨어(VideoToolbox)로 디코딩합니다.")
                         .font(.ui(.caption))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -413,7 +413,7 @@ private struct PlayerView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("최근 읽기 요청").font(.ui(.callout, weight: .semibold))
                     if model.reads.isEmpty {
-                        Text("재생하면 FFmpeg가 요청하는 위치가 여기에 나타나요")
+                        Text("읽기 요청 없음")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                     }

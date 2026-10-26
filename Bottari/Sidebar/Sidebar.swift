@@ -14,8 +14,8 @@ struct Sidebar: View {
     private var activePane: PaneModel { workspace.pane(workspace.activeSide) }
 
     private static let macFolders: [(String, String, String)] = [
-        ("데스크탑", "menubar.dock.rectangle", "Desktop"), ("문서", "doc", "Documents"),
-        ("다운로드", "arrow.down.circle", "Downloads"),
+        ("데스크탑", "bt.desktop", "Desktop"), ("문서", "bt.document", "Documents"),
+        ("다운로드", "bt.download", "Downloads"),
     ]
 
     private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "이 Mac"
@@ -27,7 +27,7 @@ struct Sidebar: View {
                     if !Favorites.shared.items.isEmpty {
                         group("즐겨찾기") {
                             ForEach(Favorites.shared.items) { favorite in
-                                SidebarRow(symbol: "star", title: favorite.name, isCurrent: isCurrent(favorite)) {
+                                SidebarRow(symbol: "bt.star", title: favorite.name, isCurrent: isCurrent(favorite)) {
                                     Text(favorite.siteID.flatMap { library.site($0)?.name } ?? "이 Mac")
                                         .font(.themeMono(.caption2))
                                         .foregroundStyle(.secondary)
@@ -36,7 +36,7 @@ struct Sidebar: View {
                                     workspace.open(favorite)
                                 }
                                 .contextMenu {
-                                    Button("사이드바에서 빼기", role: .destructive) { Favorites.shared.remove(favorite.id) }
+                                    Button("사이드바에서 제거", role: .destructive) { Favorites.shared.remove(favorite.id) }
                                 }
                             }
                         }
@@ -52,7 +52,7 @@ struct Sidebar: View {
                     if !clouds.isEmpty || iCloud != nil {
                         group("클라우드") {
                             if let iCloud {
-                                SidebarRow(symbol: "icloud", title: "iCloud Drive", isCurrent: activePane.isLocal && activePane.path.string.hasPrefix(iCloud.string)) {
+                                SidebarRow(symbol: "bt.cloud", title: "iCloud Drive", isCurrent: activePane.isLocal && activePane.path.string.hasPrefix(iCloud.string)) {
                                     EmptyView()
                                 } action: {
                                     workspace.openOnMac(iCloud)
@@ -63,8 +63,8 @@ struct Sidebar: View {
                     }
                     group("이 Mac") {
                         let home = RemotePath(NSHomeDirectory())
-                        SidebarRow(symbol: "laptopcomputer", title: Self.computerName, isCurrent: activePane.isLocal && activePane.path == home) {
-                            StatusDot(on: true)
+                        SidebarRow(symbol: "bt.mac", title: Self.computerName, isCurrent: activePane.isLocal && activePane.path == home) {
+                            EmptyView()
                         } action: {
                             workspace.openOnMac(home)
                         }
@@ -76,7 +76,7 @@ struct Sidebar: View {
                                 workspace.openOnMac(path)
                             }
                         }
-                        SidebarRow(symbol: "square.grid.2x2", title: "응용 프로그램", isCurrent: activePane.isLocal && activePane.path == "/Applications") {
+                        SidebarRow(symbol: "bt.apps", title: "응용 프로그램", isCurrent: activePane.isLocal && activePane.path == "/Applications") {
                             EmptyView()
                         } action: {
                             workspace.openOnMac("/Applications")
@@ -85,7 +85,7 @@ struct Sidebar: View {
                     Button {
                         workspace.siteManager = SiteManagerRequest()
                     } label: {
-                        Label("새 연결 추가", systemImage: "plus")
+                        Label("연결 추가", glyph: "bt.plus", size: 14)
                             .font(.ui(.callout))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
@@ -119,8 +119,11 @@ struct Sidebar: View {
                 if let tag = site.tag {
                     TagChip.outlined(tag)
                 }
-                StatusDot(on: open)
-                    .help(open ? "패인에서 열려 있어요" : "연결 안 됨")
+                // Only open connections get a dot, so they stand out in a long list.
+                if open {
+                    StatusDot(on: true)
+                        .help("연결됨")
+                }
             }
         } action: {
             workspace.open(site)
@@ -149,8 +152,7 @@ private struct SidebarRow<Accessory: View>: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13))
+                Glyph(symbol, size: 16)
                     .foregroundStyle(tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                     .frame(width: 18)
                 Text(title)
@@ -182,7 +184,7 @@ private struct BundleCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "shippingbox")
+                Glyph("bt.bundle", size: 17)
                     .foregroundStyle(Color.themeAccent)
                 Text("보따리").font(.ui(.body, weight: .semibold))
                 Spacer()
@@ -195,7 +197,7 @@ private struct BundleCard: View {
                         .background(Palette.selection, in: .capsule)
                 }
                 Menu {
-                    Button("지금 보따리를 프리셋으로 저장…") { namingPreset = true }
+                    Button("프리셋으로 저장…") { namingPreset = true }
                         .disabled(bundle.entries.isEmpty)
                     if !bundle.presets.isEmpty {
                         Section("프리셋 담기") {
@@ -208,7 +210,7 @@ private struct BundleCard: View {
                                 }
                             }
                         }
-                        Menu("프리셋 지우기") {
+                        Menu("프리셋 삭제") {
                             ForEach(bundle.presets) { preset in
                                 Button(preset.name, role: .destructive) { bundle.deletePreset(preset.id) }
                             }
@@ -227,7 +229,7 @@ private struct BundleCard: View {
                 .foregroundStyle(.secondary)
             }
             if bundle.entries.isEmpty {
-                Text("⌘B로 담거나 여기로 끌어다 놓으세요. 여러 서버의 파일을 모아 한 번에 보내요.")
+                Text("⌘B 또는 끌어다 놓아 담기")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -255,14 +257,14 @@ private struct BundleCard: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("보따리에서 빼기")
+                    .help("보따리에서 제거")
                 }
             }
             if bundle.entries.count > 6 {
                 Text("외 \(bundle.entries.count - 6)개").font(.ui(.caption)).foregroundStyle(.secondary)
             }
             if !bundle.entries.isEmpty {
-                Button("\(targetName)에 한 번에 풀기") {
+                Button("\(targetName)에 풀기") {
                     bundle.send(to: workspace.activeSide, in: workspace)
                 }
                 .buttonStyle(PanelButtonStyle(prominent: true))

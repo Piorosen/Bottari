@@ -16,22 +16,22 @@ struct WriteConfirmationSheet: View {
     private var site: SavedSite? { writesToGuardedSite ? request.destinationSite : request.sourceSite }
     private var isProd: Bool { site?.tag == .prod }
     private var band: Color { isProd ? SavedSite.Tag.prod.color : .accentColor }
-    private var verb: String { request.kind == .move ? "옮겨요" : "복사해요" }
+    private var verb: String { request.kind == .move ? "이동합니다" : "복사합니다" }
 
     private var title: String {
         let name = site?.name ?? ""
         return switch (writesToGuardedSite, isProd) {
         case (true, true): "운영 서버에 파일을 씁니다"
         case (true, false): "‘\(name)’에 파일을 씁니다"
-        case (false, true): "운영 서버에서 파일을 옮깁니다"
-        case (false, false): "‘\(name)’에서 파일을 옮깁니다"
+        case (false, true): "운영 서버에서 파일을 이동합니다"
+        case (false, false): "‘\(name)’에서 파일을 이동합니다"
         }
     }
 
     private var summary: String {
         let consequence = writesToGuardedSite
             ? "같은 이름의 파일은 \(TransferSettings.conflictPolicy.consequence)."
-            : "다 보내면 원본은 지워요."
+            : "전송이 끝나면 원본을 삭제합니다."
         return "다음 \(request.items.count)개 항목을 \(verb). \(consequence)"
     }
 
@@ -53,7 +53,7 @@ struct WriteConfirmationSheet: View {
                         .foregroundStyle(band)
                 }
                 HStack(spacing: 8) {
-                    Image(systemName: "server.rack")
+                    Glyph("bt.server", size: 16)
                         .foregroundStyle(band)
                     Text(site?.name ?? "")
                         .font(.ui(.headline))

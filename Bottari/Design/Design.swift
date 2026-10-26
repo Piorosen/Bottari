@@ -49,17 +49,18 @@ enum TableRowLook {
 }
 
 /// The design's colours: the theme's own, or 종이 in light mode and 먹 in dark.
+/// Both lean warm, like hanji and ink, rather than the usual cool slate.
 enum Palette {
     private static var colors: Theme.Colors { ThemeStore.shared.current.colors }
 
     /// Behind the cards.
-    static var background: Color { custom(colors.background) ?? Color(light: 0xECEEF2, dark: 0x0E1014) }
+    static var background: Color { custom(colors.background) ?? Color(light: 0xEFECE6, dark: 0x131211) }
     /// Cards: panes, panels, the sidebar's bundle.
-    static var panel: Color { custom(colors.panel) ?? Color(light: 0xFFFFFF, dark: 0x15181E) }
+    static var panel: Color { custom(colors.panel) ?? Color(light: 0xFDFCFA, dark: 0x1B1A18) }
     /// Headers and wells inside cards.
-    static var panel2: Color { custom(colors.panel2) ?? Color(light: 0xF6F7F9, dark: 0x1A1E25) }
-    static var line: Color { custom(colors.line) ?? Color(light: 0xDCE0E6, dark: 0x272C35) }
-    static var text: Color { custom(colors.text) ?? Color(light: 0x14171D, dark: 0xE6E8EC) }
+    static var panel2: Color { custom(colors.panel2) ?? Color(light: 0xF5F2EC, dark: 0x211F1C) }
+    static var line: Color { custom(colors.line) ?? Color(light: 0xE0DBD2, dark: 0x2F2C28) }
+    static var text: Color { custom(colors.text) ?? Color(light: 0x1C1A17, dark: 0xECE8E1) }
     /// The accent, faint: selected rows and chosen options.
     static var selection: Color { Color.themeAccent.opacity(0.13) }
 
@@ -86,12 +87,12 @@ extension Font {
 extension View {
     /// A white (or the theme's) card with a hairline border; `highlighted`
     /// draws the accent border of the active pane.
-    func card(highlighted: Bool = false, radius: CGFloat = 10) -> some View {
+    func card(highlighted: Bool = false, radius: CGFloat = 8) -> some View {
         background(Palette.panel, in: .rect(cornerRadius: radius))
             .clipShape(.rect(cornerRadius: radius))
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
-                    .strokeBorder(highlighted ? Color.themeAccent : Palette.line, lineWidth: highlighted ? 2 : 1)
+                    .strokeBorder(highlighted ? Color.themeAccent.opacity(0.75) : Palette.line, lineWidth: highlighted ? 1.5 : 1)
             )
     }
 
@@ -144,7 +145,7 @@ struct MonoChip: View {
     }
 }
 
-/// A word in a small rounded box: "비밀값", "추천", "Google 문서".
+/// A word set beside a name in small type: "비밀값", "추천", "Google 문서".
 struct Badge: View {
     let text: String
     var color: Color?
@@ -157,11 +158,39 @@ struct Badge: View {
     var body: some View {
         Text(text)
             .font(.ui(.caption2, weight: .medium))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
             .foregroundStyle(color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
-            .background((color ?? .secondary).opacity(0.1), in: .rect(cornerRadius: 4))
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder((color ?? .secondary).opacity(0.35)))
+    }
+}
+
+/// One of Bottari's own line icons (asset names starting with `bt.`, drawn by
+/// scripts/glyphs.swift) or, for anything else, an SF Symbol.
+struct Glyph: View {
+    let name: String
+    var size: CGFloat = 16
+
+    init(_ name: String, size: CGFloat = 16) {
+        self.name = name
+        self.size = size
+    }
+
+    var body: some View {
+        if name.hasPrefix("bt.") {
+            Image(name)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: name)
+                .font(.system(size: size * 0.8))
+                .frame(width: size, height: size)
+        }
+    }
+}
+
+extension Label where Title == Text, Icon == Glyph {
+    /// A label whose icon is a `Glyph`, for toolbars and menus.
+    init(_ title: String, glyph: String, size: CGFloat = 16) {
+        self.init { Text(title) } icon: { Glyph(glyph, size: size) }
     }
 }
 
@@ -353,14 +382,12 @@ struct WindowHeading: View {
     }
 }
 
-/// Tag chips as the design draws them: PROD filled, the others outlined.
+/// Tags other than PROD: just the word in the tag's colour. Only PROD, which
+/// asks for care, gets a filled chip.
 extension TagChip {
     static func outlined(_ tag: SavedSite.Tag) -> some View {
         Text(tag.label)
-            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
+            .font(.ui(.caption2, weight: .semibold))
             .foregroundStyle(tag.color)
-            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(tag.color, lineWidth: 1))
     }
 }

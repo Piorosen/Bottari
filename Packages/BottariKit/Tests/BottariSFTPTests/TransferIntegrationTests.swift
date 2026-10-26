@@ -1,5 +1,6 @@
 import BottariCore
 import BottariTransfer
+import Citadel
 import Foundation
 import Testing
 @testable import BottariSFTP
@@ -21,16 +22,32 @@ import Testing
         try await SFTPFileProvider.connect(to: server.endpoint, credential: .password(TestSFTPServer.password), hostKeys: .acceptAnything)
     }
 
-    @Test func uploadsCopiesBetweenServersAndMovesBack() async throws {
-        let first = try await TestSFTPServer.start()
-        let second = try await TestSFTPServer.start()
+    /// Connects to `server` through `jump`, as ProxyJump does.
+    func connect(_ server: TestSFTPServer, via jump: TestSFTPServer, credential: SFTPCredential = .password(TestSFTPServer.password)) async throws -> SFTPFileProvider {
+        try await SFTPFileProvider.connect(
+            to: server.endpoint,
+            credential: credential,
+            hostKeys: .acceptAnything,
+            via: [SSHHop(endpoint: jump.endpoint, credential: .password(TestSFTPServer.password))]
+        )
+    }
+
+    /// A folder on the Mac with `site/index.html`, `site/img/photo.jpg` and an empty `down`.
+    func makeSiteFolder() throws -> (folder: URL, photo: Data) {
         let folder = FileManager.default.temporaryDirectory.appending(path: "bottari-transfer-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: folder) }
         try FileManager.default.createDirectory(at: folder.appending(path: "site/img"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: folder.appending(path: "down"), withIntermediateDirectories: true)
         try Data("<h1>hi</h1>".utf8).write(to: folder.appending(path: "site/index.html"))
         let photo = Data((0..<1_500_000).map { UInt8(truncatingIfNeeded: $0 &* 13) })
         try photo.write(to: folder.appending(path: "site/img/photo.jpg"))
+        return (folder, photo)
+    }
+
+    @Test func uploadsCopiesBetweenServersAndMovesBack() async throws {
+        let first = try await TestSFTPServer.start()
+        let second = try await TestSFTPServer.start()
+        let (folder, photo) = try makeSiteFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
 
         let a = try await connect(first)
         let b = try await connect(second)
@@ -47,6 +64,64 @@ import Testing
         await b.disconnect()
         await first.stop()
         await second.stop()
+    }
+
+    /// The same round trip with both servers behind a jump host. The first logs
+    /// in like a site whose agent is empty and falls back to `~/.ssh/id_ed25519`.
+    @Test func uploadsCopiesAndMovesThroughAJumpHost() async throws {
+        let jump = try await TestSFTPServer.start(forwarding: true)
+        let first = try await TestSFTPServer.start()
+        let second = try await TestSFTPServer.start()
+        let (folder, photo) = try makeSiteFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var providers: [SFTPFileProvider] = []
+        func stopAll() async {
+            for provider in providers { await provider.disconnect() }
+            for server in [first, second, jump] { await server.stop() }
+        }
+
+        do {
+            let emptyAgent = SFTPCredential.agent(socket: "/tmp/bt-no-such-agent.sock", fallbackKeys: [first.clientKey.makeSSHRepresentation()])
+            let a = try await connect(first, via: jump, credential: emptyAgent)
+            providers.append(a)
+            let b = try await connect(second, via: jump)
+            providers.append(b)
+            try await transfer(between: a, b, firstRoot: first.url(.root), secondRoot: second.url(.root), folder: folder, photo: photo)
+        } catch {
+            await stopAll()
+            throw error
+        }
+        await stopAll()
+    }
+
+    @Test func aServerBehindAJumpHostIsItsOwnLocation() async throws {
+        let jump = try await TestSFTPServer.start(forwarding: true)
+        let server = try await TestSFTPServer.start()
+        var providers: [SFTPFileProvider] = []
+        func stopAll() async {
+            for provider in providers { await provider.disconnect() }
+            for server in [server, jump] { await server.stop() }
+        }
+
+        do {
+            let direct = try await connect(server)
+            providers.append(direct)
+            let viaJump = try await connect(server, via: jump)
+            providers.append(viaJump)
+            let again = try await connect(server, via: jump)
+            providers.append(again)
+
+            // Same `user@host:port` either way: only the route tells them apart, so a
+            // move between them is sent through the Mac rather than renamed in place.
+            #expect(direct.endpoint == viaJump.endpoint)
+            #expect(direct.locationID != viaJump.locationID)
+            #expect(viaJump.locationID == again.locationID)
+            #expect(await TransferQueue.route(.move, from: viaJump, to: direct) == .viaMac)
+        } catch {
+            await stopAll()
+            throw error
+        }
+        await stopAll()
     }
 
     /// Mac → first server, first → second server, then a move from the second back to the Mac.

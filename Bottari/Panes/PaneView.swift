@@ -42,7 +42,7 @@ struct PaneView: View {
             }
             .overlay {
                 if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
-                    ContentUnavailableView("비어 있어요", systemImage: "folder")
+                    ContentUnavailableView("빈 폴더", systemImage: "folder")
                 }
             }
             Rectangle().fill(Palette.line).frame(height: 1)
@@ -91,13 +91,11 @@ struct PaneView: View {
 
     private var isProd: Bool { model.site?.tag == .prod }
 
-    private func open(_ site: SavedSite) async {
-        do {
-            try await model.connect(to: site)
-        } catch {
+    private func open(_ site: SavedSite) {
+        workspace.connect(site, in: side, failed: { error in
             // Show the site's settings with the reason, where it can be fixed.
             siteManager = SiteManagerRequest(selection: site.id, error: error)
-        }
+        })
     }
 
     // MARK: - Header
@@ -130,7 +128,7 @@ struct PaneView: View {
                         Image(systemName: "lock.fill")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
-                            .help("읽기 전용으로 열었어요")
+                            .help("읽기 전용")
                     }
                 }
                 Text(model.provider.kindLabel)
@@ -163,17 +161,19 @@ struct PaneView: View {
     /// The place's name, which is also where another place is chosen.
     private var placeMenu: some View {
         Menu {
-            Button("이 Mac", systemImage: "laptopcomputer") {
+            Button {
                 Task { await model.switchProvider(to: LocalFileProvider()) }
+            } label: {
+                Label("이 Mac", glyph: "bt.mac")
             }
             let sites = model.library.sites
             if !sites.isEmpty {
                 Section("저장된 연결") {
                     ForEach(sites) { site in
                         Button {
-                            Task { await open(site) }
+                            open(site)
                         } label: {
-                            Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, systemImage: site.symbol)
+                            Label(site.tag.map { "\(site.name)  ·  \($0.label)" } ?? site.name, glyph: site.symbol)
                         }
                     }
                 }
@@ -184,7 +184,7 @@ struct PaneView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: model.provider.symbol)
+                Glyph(model.provider.symbol, size: 16)
                     .foregroundStyle(isProd ? SavedSite.Tag.prod.color : .secondary)
                 Text(model.provider.displayName)
                     .font(.ui(.body, weight: .semibold))
@@ -196,18 +196,18 @@ struct PaneView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("이 패인에서 열 위치")
+        .help("위치 선택")
         .disabled(model.connectingSite != nil)
     }
 
     private var tools: some View {
         HStack(spacing: 6) {
             if model.provider is SFTPFileProvider {
-                Button { workspace.openTerminal(in: side) } label: { Image(systemName: "terminal") }
-                    .help("여기서 SSH 터미널 열기 (⌃`)")
+                Button { workspace.openTerminal(in: side) } label: { Glyph("bt.terminal", size: 15) }
+                    .help("SSH 터미널 (⌃`)")
                 if model.site?.remoteScreen != nil {
-                    Button { workspace.openScreen(in: side) } label: { Image(systemName: "display") }
-                        .help("원격 화면 열기")
+                    Button { workspace.openScreen(in: side) } label: { Glyph("bt.screen", size: 15) }
+                        .help("원격 화면")
                 }
             }
             Button { model.showsHiddenFiles.toggle() } label: {
@@ -253,7 +253,7 @@ struct PaneView: View {
                         if showsCloudBadges, let cloud = item.cloud, cloud != .downloaded {
                             Image(systemName: cloud == .downloading ? "icloud.and.arrow.down" : "icloud")
                                 .foregroundStyle(.secondary)
-                                .help(cloud == .downloading ? "받는 중" : "iCloud에만 있어요 · 열면 받아요")
+                                .help(cloud == .downloading ? "받는 중" : "iCloud에만 있음")
                         }
                     }
                 }
@@ -262,14 +262,16 @@ struct PaneView: View {
             .width(min: 120, ideal: 170)
             TableColumn("크기") { item in
                 Text(item.formattedSize)
-                    .font(.themeMono(.callout))
+                    .font(.ui(.callout))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 50, ideal: 64, max: 110)
             TableColumn("수정") { item in
                 Text(item.shortModified)
-                    .font(.themeMono(.callout))
+                    .font(.ui(.callout))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             .width(min: 76, ideal: 88, max: 140)
@@ -380,7 +382,7 @@ struct PaneView: View {
                 Divider()
                 Button(count.map { "붙여넣기 (\($0)개)" } ?? "붙여넣기") { workspace.paste(into: side, kind: .copy) }
                     .disabled(count == nil)
-                Button("이동해서 붙여넣기") { workspace.paste(into: side, kind: .move) }
+                Button("여기로 항목 이동") { workspace.paste(into: side, kind: .move) }
                     .disabled(count == nil)
                 Divider()
             }
@@ -473,10 +475,13 @@ struct PaneView: View {
         HStack {
             Text(model.downloadStatus ?? summary)
             Spacer()
-            Text(model.remoteAddress ?? model.path.string)
-                .font(.themeMono(.caption))
-                .lineLimit(1)
-                .truncationMode(.head)
+            // The path is already in the header; a server's address is not.
+            if let address = model.remoteAddress {
+                Text(address)
+                    .font(.themeMono(.caption))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
         .font(.ui(.caption))
         .foregroundStyle(.secondary)
@@ -542,20 +547,30 @@ private struct PathBar: View {
     let open: (RemotePath) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(path.lineage, id: \.self) { crumb in
-                    if !crumb.isRoot, crumb.parent?.isRoot == false {
-                        Text("/").foregroundStyle(.tertiary)
-                    }
-                    Button(crumb.isRoot ? "/" : crumb.name) { open(crumb) }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(crumb == path ? AnyShapeStyle(Palette.text) : AnyShapeStyle(.secondary))
-                }
+        // Reads from the left like a path; a long one scrolls to keep its end in view.
+        ViewThatFits(in: .horizontal) {
+            crumbs
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView(.horizontal, showsIndicators: false) {
+                crumbs
             }
-            .font(.themeMono(.callout))
+            .defaultScrollAnchor(.trailing)
         }
-        .defaultScrollAnchor(.trailing)
+    }
+
+    private var crumbs: some View {
+        HStack(spacing: 0) {
+            ForEach(path.lineage, id: \.self) { crumb in
+                if !crumb.isRoot, crumb.parent?.isRoot == false {
+                    Text("/").foregroundStyle(.tertiary)
+                }
+                Button(crumb.isRoot ? "/" : crumb.name) { open(crumb) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(crumb == path ? AnyShapeStyle(Palette.text) : AnyShapeStyle(.secondary))
+            }
+        }
+        .font(.themeMono(.callout))
+        .fixedSize()
     }
 }
 

@@ -45,10 +45,10 @@ final class SettingsSync {
 
         var subtitle: String {
             switch self {
-            case .sites: "서버 주소 · 사용자 · 태그 · 점프 호스트 (비밀번호는 빼고)"
+            case .sites: "서버 주소, 사용자, 태그, 점프 호스트 (비밀번호 제외)"
             case .favorites: "사이드바에 추가한 폴더"
-            case .themes: "지금 쓰는 테마와 직접 만든 테마"
-            case .keymap: "고른 배열과 직접 바꾼 키"
+            case .themes: "사용 중인 테마와 저장된 테마"
+            case .keymap: "선택한 배열과 사용자 지정 키"
             case .presets: "자주 쓰는 파일 묶음"
             }
         }
@@ -235,7 +235,7 @@ final class SettingsSync {
     func syncNow() {
         guard isEnabled else { return }
         guard let folder = folderURL() else {
-            errors = ["iCloud Drive가 꺼져 있어요. 시스템 설정 › Apple 계정 › iCloud에서 iCloud Drive를 켜 주세요."]
+            errors = ["iCloud Drive가 꺼져 있습니다. 시스템 설정 › Apple 계정 › iCloud에서 iCloud Drive를 켜십시오."]
             return
         }
         guard !isSyncing else {
@@ -309,11 +309,11 @@ final class SettingsSync {
         }
         if let favorites = outcome.favorites {
             if favorites.items != sources.favorites.get() { sources.favorites.set(favorites.items) }
-            found += favorites.conflicts.map { listConflict($0, item: .favorites, file: "favorites.json", source: sources.favorites, title: \.name, detail: { _, _, _ in "위치가 달라요" }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
+            found += favorites.conflicts.map { listConflict($0, item: .favorites, file: "favorites.json", source: sources.favorites, title: \.name, detail: { _, _, _ in "위치가 다름" }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
         }
         if let presets = outcome.presets {
             if presets.items != sources.presets.get() { sources.presets.set(presets.items) }
-            found += presets.conflicts.map { listConflict($0, item: .presets, file: "bottari-presets.json", source: sources.presets, title: \.name, detail: { _, _, _ in "담긴 항목이 달라요" }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
+            found += presets.conflicts.map { listConflict($0, item: .presets, file: "bottari-presets.json", source: sources.presets, title: \.name, detail: { _, _, _ in "담긴 항목이 다름" }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
         }
         if let keymap = outcome.keymap {
             if keymap.value != sources.keymap.get() { sources.keymap.set(keymap.value) }
@@ -324,12 +324,12 @@ final class SettingsSync {
         if let theme = outcome.theme {
             if theme.value != sources.theme.get() { sources.theme.set(theme.value) }
             if let conflict = theme.conflict {
-                found.append(valueConflict(conflict, item: .themes, file: "theme.json", source: sources.theme, title: "지금 쓰는 테마", detail: "이 Mac: \(conflict.local.name) · \(otherMacName): \(conflict.remote.name)"))
+                found.append(valueConflict(conflict, item: .themes, file: "theme.json", source: sources.theme, title: "사용 중인 테마", detail: "이 Mac: \(conflict.local.name) · \(otherMacName): \(conflict.remote.name)"))
             }
         }
         if let themes = outcome.themes {
             if themes.items != sources.themes.get() { sources.themes.set(themes.items) }
-            found += themes.conflicts.map { listConflict($0, item: .themes, file: "themes.json", source: sources.themes, title: \.name, detail: { _, _, _ in "색이나 글꼴이 달라요" }, copy: { var c = $0; c.name += " (\($1))"; return c }) }
+            found += themes.conflicts.map { listConflict($0, item: .themes, file: "themes.json", source: sources.themes, title: \.name, detail: { _, _, _ in "색 또는 글꼴이 다름" }, copy: { var c = $0; c.name += " (\($1))"; return c }) }
         }
         conflicts = found
         if outcome.errors.isEmpty {
@@ -366,8 +366,8 @@ final class SettingsSync {
         let name = (mine ?? theirs)![keyPath: title]
         let description = switch (mine, theirs) {
         case (let mine?, let theirs?): detail(mine, theirs, other)
-        case (nil, _): "이 Mac에서 지웠고 \(other)에서 고쳤어요"
-        case (_, nil): "이 Mac에서 고쳤고 \(other)에서 지웠어요"
+        case (nil, _): "이 Mac에서 삭제됨, \(other)에서 수정됨"
+        case (_, nil): "이 Mac에서 수정됨, \(other)에서 삭제됨"
         }
         return Conflict(id: "\(item.rawValue)-\(conflict.id)", item: item, title: name, detail: description, canKeepBoth: mine != nil && theirs != nil) { choice in
             // Only the agreed state is touched here.
@@ -378,17 +378,17 @@ final class SettingsSync {
             var list = source.get()
             switch choice {
             case .keepMine:
-                return "이 Mac의 “\(name)”을(를) 유지하고 \(other)에도 반영해요."
+                return "이 Mac의 “\(name)” 유지, \(other)에도 반영"
             case .useTheirs:
                 list.put(theirs, for: conflict.id)
                 source.set(list)
-                return theirs == nil ? "“\(name)”을(를) \(other)처럼 지웠어요." : "\(other)의 “\(name)”(으)로 바꿨어요."
+                return theirs == nil ? "\(other)에 맞춰 “\(name)” 삭제됨" : "\(other)의 “\(name)” 적용됨"
             case .keepBoth:
                 if let theirs {
                     let duplicate = copy(theirs, other)
                     list.append(duplicate)
                     source.set(list)
-                    return "“\(duplicate[keyPath: title])”을(를) 하나 더 만들었어요."
+                    return "사본 “\(duplicate[keyPath: title])” 생성됨"
                 }
                 return ""
             }
@@ -409,9 +409,9 @@ final class SettingsSync {
             try? SyncFolder(folder: baseFolder, baseFolder: baseFolder).setBase(file, value: conflict.remote)
             if choice == .useTheirs {
                 source.set(conflict.remote)
-                return "\(other)의 \(title)(으)로 바꿨어요."
+                return "\(other)의 \(title) 적용됨"
             }
-            return "이 Mac의 \(title)을(를) 유지하고 \(other)에도 반영해요."
+            return "이 Mac의 \(title) 유지, \(other)에도 반영"
         }
     }
 
@@ -426,7 +426,7 @@ final class SettingsSync {
             ("점프 호스트", mine.proxyJump.joined(separator: ", "), theirs.proxyJump.joined(separator: ", ")),
             ("시작 폴더", mine.startPath ?? "", theirs.startPath ?? ""),
         ]
-        guard let (label, here, there) = fields.first(where: { $0.1 != $0.2 }) else { return "그 밖의 설정이 달라요" }
+        guard let (label, here, there) = fields.first(where: { $0.1 != $0.2 }) else { return "기타 설정이 다름" }
         return "\(label) · 이 Mac: \(here.isEmpty ? "없음" : here) · \(other): \(there.isEmpty ? "없음" : there)"
     }
 

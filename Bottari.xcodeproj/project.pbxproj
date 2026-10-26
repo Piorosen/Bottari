@@ -210,6 +210,7 @@
 		B0771A000000000000000061 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BOTTARI_SPARKLE_PUBLIC_KEY = "";
 				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
@@ -242,6 +243,7 @@
 		B0771A000000000000000062 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BOTTARI_SPARKLE_PUBLIC_KEY = "";
 				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";

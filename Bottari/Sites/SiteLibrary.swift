@@ -29,7 +29,7 @@ final class SiteLibrary {
         do {
             sites = try store.load()
         } catch {
-            storageError = "저장된 연결을 읽지 못했어요: \(error.localizedDescription)"
+            storageError = "저장된 연결을 읽을 수 없습니다: \(error.localizedDescription)"
         }
         reloadSSHConfig()
     }
@@ -99,14 +99,14 @@ final class SiteLibrary {
         reloadSSHConfig()
     }
 
-    /// Opens an SFTP connection to `site`. `typedSecrets` (Keychain key → value)
-    /// were just typed by the user: they win over stored ones, and are stored
-    /// once the connection works.
     /// Opens whatever the site is: an SFTP server, an S3 bucket or a Google Drive.
-    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:]) async throws -> any FileProvider {
+    /// `typedSecrets` (Keychain key → value) were just typed by the user: they
+    /// win over stored ones, and are stored once the connection works unless
+    /// `keepingTypedSecrets` is false.
+    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true) async throws -> any FileProvider {
         switch site.kind {
         case .sftp:
-            return try await connectSFTP(site, typedSecrets: typedSecrets)
+            return try await connectSFTP(site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
         case .s3(let settings):
             return try await connectS3(site, settings, typedSecrets: typedSecrets)
         case .googleDrive(let settings):
@@ -118,7 +118,7 @@ final class SiteLibrary {
         let stored = secrets
         let key = site.s3SecretKey
         let secret = try await Task.detached { try typedSecrets[key] ?? stored.secret(for: key) }.value
-        guard let secret, !secret.isEmpty else { throw CloudConnectError("S3 비밀 키가 저장되어 있지 않아요.") }
+        guard let secret, !secret.isEmpty else { throw CloudConnectError("저장된 S3 비밀 키가 없습니다.") }
         let provider = S3Provider(
             configuration: S3Configuration(bucket: settings.bucket, region: settings.region, endpoint: settings.endpoint, accessKey: settings.accessKey, usesPathStyle: settings.usesPathStyle),
             secretKey: secret,
@@ -136,7 +136,7 @@ final class SiteLibrary {
         let stored = secrets
         let key = site.googleSignInKey
         guard let saved = try await Task.detached(operation: { try stored.secret(for: key) }).value, let archived = Data(base64Encoded: saved) else {
-            throw CloudConnectError("Google 계정으로 로그인해 주세요. 연결 관리에서 로그인할 수 있어요.")
+            throw CloudConnectError("Google 계정에 로그인되어 있지 않습니다. 연결 관리에서 로그인하십시오.")
         }
         let authorization = try GoogleAuthorization(archived: archived)
         let provider = GoogleDriveProvider(
@@ -180,7 +180,7 @@ final class SiteLibrary {
 
     /// A running Bottari-only tunnel that covers the site's host adds its
     /// server as the first jump, unless `takingDetours` is false (the tunnel's own connection).
-    func connectSFTP(_ site: SavedSite, typedSecrets: [String: String] = [:], takingDetours: Bool = true) async throws -> SFTPFileProvider {
+    func connectSFTP(_ site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true, takingDetours: Bool = true) async throws -> SFTPFileProvider {
         let sites = sites
         let sshConfig = sshConfig
         let stored = secrets
@@ -203,7 +203,7 @@ final class SiteLibrary {
             via: plan.hops,
             displayName: site.name
         )
-        if !typedSecrets.isEmpty {
+        if keepingTypedSecrets, !typedSecrets.isEmpty {
             await Task.detached {
                 for (key, value) in typedSecrets {
                     try? stored.setSecret(value, for: key)
@@ -219,7 +219,7 @@ final class SiteLibrary {
             storageError = nil
             settingsChanged()
         } catch {
-            storageError = "연결 목록을 저장하지 못했어요: \(error.localizedDescription)"
+            storageError = "연결 목록을 저장할 수 없습니다: \(error.localizedDescription)"
         }
     }
 }

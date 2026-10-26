@@ -81,12 +81,12 @@ final class EditorModel {
         do {
             let current = try await provider.stat(item.path)
             if let size = current.size, size > Self.sizeLimit {
-                phase = .failed("\(ByteFormat.string(size))라서 편집기로 열지 않아요. 빠른 미리보기를 쓰세요.")
+                phase = .failed("파일이 너무 큽니다 (\(ByteFormat.string(size))). 빠른 미리보기를 사용하십시오.")
                 return
             }
             let data = try await provider.readData(item.path)
             guard let (decoded, format) = TextCodec.decode(data) else {
-                phase = .failed("텍스트 파일이 아니에요.")
+                phase = .failed("텍스트 파일이 아닙니다.")
                 return
             }
             replaceText(decoded, data: data)
@@ -113,11 +113,11 @@ final class EditorModel {
     /// (then `conflict` is set) or `force` says to overwrite it anyway.
     func save(force: Bool = false) async {
         guard !isReadOnly else {
-            notice = "읽기 전용으로 연 서버라 저장할 수 없어요."
+            notice = "읽기 전용 서버에는 저장할 수 없습니다."
             return
         }
         guard let data = TextCodec.encode(text, as: format) else {
-            notice = "\(format.label)로는 저장할 수 없는 글자가 있어요."
+            notice = "\(format.label)로 저장할 수 없는 문자가 있습니다."
             return
         }
         isSaving = true
@@ -149,7 +149,7 @@ final class EditorModel {
             savedAt = Date()
             await refreshRemoteState()
         } catch {
-            notice = "저장하지 못했어요: \(error.localizedDescription)"
+            notice = "저장할 수 없습니다: \(error.localizedDescription)"
         }
     }
 
@@ -163,9 +163,9 @@ final class EditorModel {
         } catch {
             do {
                 try await provider.write(item.path, data: previous)
-                return "검사가 실패해서 이전 버전으로 되돌렸어요. 편집한 내용은 그대로 있어요.\n\(error.localizedDescription)"
+                return "검사에 실패하여 서버 파일을 이전 버전으로 되돌렸습니다. 편집한 내용은 유지됩니다.\n\(error.localizedDescription)"
             } catch {
-                return "검사가 실패했고, 이전 버전으로 되돌리지도 못했어요: \(error.localizedDescription)"
+                return "검사에 실패했으며 이전 버전으로 되돌릴 수 없습니다: \(error.localizedDescription)"
             }
         }
     }

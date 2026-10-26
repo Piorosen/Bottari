@@ -25,7 +25,7 @@ extension ConflictPolicy {
     var label: String {
         switch self {
         case .ask: "물어보기"
-        case .overwriteIfNewer: "더 새로우면 덮어쓰기"
+        case .overwriteIfNewer: "더 최신이면 덮어쓰기"
         case .overwrite: "항상 덮어쓰기"
         case .skip: "건너뛰기"
         }
@@ -34,10 +34,10 @@ extension ConflictPolicy {
     /// The end of "같은 이름의 파일은 …", for confirmations.
     var consequence: String {
         switch self {
-        case .ask: "하나씩 물어볼게요"
-        case .overwriteIfNewer: "보내는 쪽이 더 새로울 때만 덮어써요"
-        case .overwrite: "덮어써요"
-        case .skip: "건너뛰어요"
+        case .ask: "파일마다 확인합니다"
+        case .overwriteIfNewer: "보내는 파일이 더 최신일 때만 덮어씁니다"
+        case .overwrite: "덮어씁니다"
+        case .skip: "건너뜁니다"
         }
     }
 }

@@ -49,7 +49,7 @@ import Testing
             } throws: { error in
                 // Real servers send stderr before the exit status; the test server may not.
                 guard case ProviderError.io(let message) = error else { return false }
-                return message.hasPrefix("서버 명령이 실패했어요 (종료 코드 3)")
+                return message.hasPrefix("서버 명령 실패 (종료 코드 3)")
             }
         }
     }

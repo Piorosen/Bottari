@@ -55,8 +55,8 @@ final class ExternalEdits {
         }
         if site?.confirmsWrites == true, site?.readOnly != true {
             let alert = NSAlert()
-            alert.messageText = "‘\(site?.name ?? "")’의 파일을 외부 에디터로 열까요?"
-            alert.informativeText = "외부 에디터에서 저장할 때마다 바로 서버에 올려요."
+            alert.messageText = "‘\(site?.name ?? "")’의 파일을 외부 에디터로 열겠습니까?"
+            alert.informativeText = "외부 에디터에서 저장할 때마다 서버에 바로 업로드됩니다."
             alert.addButton(withTitle: "열기")
             alert.addButton(withTitle: "취소")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -91,10 +91,10 @@ final class ExternalEdits {
             session.remoteModified = current.modified
             session.localModified = modificationDate(of: session.localURL)
             watch(session)
-            session.status = session.site?.readOnly == true ? "읽기 전용 · 저장해도 올리지 않아요" : "편집 중 · 저장하면 올려요"
+            session.status = session.site?.readOnly == true ? "읽기 전용 · 업로드 안 함" : "편집 중 · 저장 시 업로드"
             NSWorkspace.shared.open(session.localURL)
         } catch {
-            session.status = "열지 못했어요: \(error.localizedDescription)"
+            session.status = "열 수 없음: \(error.localizedDescription)"
         }
     }
 
@@ -129,7 +129,7 @@ final class ExternalEdits {
 
     private func upload(_ session: Session, force: Bool) async {
         guard session.site?.readOnly != true else {
-            session.status = "읽기 전용이라 올리지 않았어요"
+            session.status = "읽기 전용 · 업로드 안 함"
             return
         }
         do {
@@ -137,17 +137,17 @@ final class ExternalEdits {
                 let current = try await session.provider.stat(session.item.path)
                 if current.modified != session.remoteModified {
                     session.blockedByServerChange = true
-                    session.status = "서버 파일이 바뀌어서 올리지 않았어요"
+                    session.status = "서버 파일이 변경되어 업로드 보류"
                     return
                 }
             }
-            session.status = "올리는 중…"
+            session.status = "업로드 중…"
             let data = try Data(contentsOf: session.localURL)
             try await session.provider.write(session.item.path, data: data)
             session.remoteModified = try? await session.provider.stat(session.item.path).modified
-            session.status = "올림 \(Date().formatted(date: .omitted, time: .shortened))"
+            session.status = "업로드됨 \(Date().formatted(date: .omitted, time: .shortened))"
         } catch {
-            session.status = "올리지 못했어요: \(error.localizedDescription)"
+            session.status = "업로드 실패: \(error.localizedDescription)"
         }
     }
 

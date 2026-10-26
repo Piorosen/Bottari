@@ -42,11 +42,12 @@ extension SavedSite {
         return text
     }
 
+    /// A `Glyph` name.
     var symbol: String {
         switch kind {
-        case .sftp: "server.rack"
-        case .s3: "cylinder"
-        case .googleDrive: "cloud"
+        case .sftp: "bt.server"
+        case .s3: "bt.bucket"
+        case .googleDrive: "bt.cloud"
         }
     }
 }
@@ -57,11 +58,11 @@ struct TagChip: View {
 
     var body: some View {
         Text(tag.label)
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .font(.ui(.caption2, weight: .bold))
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .foregroundStyle(tag == .prod ? .white : tag.color)
-            .background(tag == .prod ? tag.color : tag.color.opacity(0.14), in: .rect(cornerRadius: 4))
+            .background(tag == .prod ? tag.color : tag.color.opacity(0.14), in: .rect(cornerRadius: 3))
     }
 }
 

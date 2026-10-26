@@ -194,7 +194,7 @@ public final class TransferQueue {
         let rescan = WorkItem(source: item, destination: destination, action: .scan)
         let sameLocation = job.source.provider.locationID == job.destination.provider.locationID
         if sameLocation, item.isDirectory, item.path.isAncestor(of: destination) {
-            fail(item, "폴더를 그 안으로 옮기거나 복사할 수 없어요: \(item.path)", retry: nil, in: job)
+            fail(item, "폴더를 자신의 하위 폴더로 이동하거나 복사할 수 없습니다: \(item.path)", retry: nil, in: job)
             return
         }
         if sameLocation, item.path == destination {
@@ -221,7 +221,7 @@ public final class TransferQueue {
 
         guard item.isDirectory else {
             if existing?.isDirectory == true {
-                fail(item, "같은 이름의 폴더가 있어요: \(destination)", retry: nil, in: job)
+                fail(item, "같은 이름의 폴더가 이미 있습니다: \(destination)", retry: nil, in: job)
             } else {
                 // A clash with an existing file is settled when its turn comes.
                 add(WorkItem(source: item, destination: destination, action: wholeItem), in: job)
@@ -230,7 +230,7 @@ public final class TransferQueue {
         }
         if let existing {
             guard existing.isDirectory else {
-                fail(item, "같은 이름의 파일이 있어서 폴더를 넣을 수 없어요: \(destination)", retry: nil, in: job)
+                fail(item, "같은 이름의 파일이 이미 있습니다: \(destination)", retry: nil, in: job)
                 return
             }
             // Folders merge, like FileZilla; clashes inside are settled file by file.
@@ -363,7 +363,7 @@ public final class TransferQueue {
                     return .planned
                 }
                 guard existing.isDirectory == work.source.isDirectory else {
-                    return .failed(existing.isDirectory ? "같은 이름의 폴더가 있어요: \(work.destination)" : "같은 이름의 파일이 있어요: \(work.destination)", work)
+                    return .failed(existing.isDirectory ? "같은 이름의 폴더가 이미 있습니다: \(work.destination)" : "같은 이름의 파일이 이미 있습니다: \(work.destination)", work)
                 }
                 let answer = await resolve(TransferConflict(incoming: work.source, existing: existing), in: job)
                 work.settled = answer
@@ -406,7 +406,7 @@ public final class TransferQueue {
                     guard expected == actual else {
                         // A retry must replace the bad copy, not trip over it as a clash.
                         work.settled = .overwrite
-                        return .failed("받은 파일의 체크섬이 달라요 (원본 \(expected.prefix(12))…, 받은 쪽 \(actual.prefix(12))…)", work)
+                        return .failed("체크섬이 일치하지 않습니다 (원본 \(expected.prefix(12))…, 대상 \(actual.prefix(12))…)", work)
                     }
                     verified = true
                 }
@@ -431,7 +431,7 @@ public final class TransferQueue {
                 do {
                     try await source.delete(work.source.path)
                 } catch {
-                    return .failed("옮겼지만 원본을 지우지 못했어요: \(error.localizedDescription)", work)
+                    return .failed("복사했으나 원본을 삭제할 수 없습니다: \(error.localizedDescription)", work)
                 }
             }
             let bytes = work.action == .stream ? resumedFrom + counter.total : (work.source.size ?? 0)

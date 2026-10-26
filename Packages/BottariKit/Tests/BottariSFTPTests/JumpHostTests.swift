@@ -30,8 +30,28 @@ import Testing
 
         #expect(try nas.credential(secrets: secrets) == .password("stored"))
         #expect(try nas.credential(secrets: secrets, password: "typed") == .password("typed"))
-        #expect(throws: SiteConnectError.passwordMissing(site: "nas")) {
+        #expect(throws: SiteConnectError.passwordMissing(site: "nas", key: nas.passwordKey)) {
             try nas.credential(secrets: InMemorySecretStore())
+        }
+    }
+
+    @Test func keySitesWithAPasswordTryTheKeysFirst() throws {
+        let nas = site("nas", .agent(socket: "/tmp/agent.sock"))
+        let prod = site("prod", .keyFile(path: "/keys/prod"))
+
+        #expect(try nas.credential(secrets: InMemorySecretStore()) == .agent(socket: "/tmp/agent.sock"))
+        #expect(try nas.credential(secrets: InMemorySecretStore([nas.passwordKey: "stored"]))
+            == .fallback(.agent(socket: "/tmp/agent.sock"), then: .password("stored")))
+        #expect(try prod.credential(secrets: InMemorySecretStore(), password: "typed", readFile: readFile)
+            == .fallback(.privateKey("PROD KEY", passphrase: nil), then: .password("typed")))
+    }
+
+    @Test func aMissingJumpHostPasswordNamesThatHost() throws {
+        let bastion = site("bastion", .password)
+        let target = site("prod", .keyFile(path: "/keys/prod"), via: ["bastion"])
+
+        #expect(throws: SiteConnectError.passwordMissing(site: "bastion", key: bastion.passwordKey)) {
+            try target.connectionPlan(sites: [bastion, target], sshConfig: config, secrets: InMemorySecretStore(), readFile: readFile)
         }
     }
 
@@ -59,11 +79,23 @@ import Testing
 
         #expect(plan.endpoint == target.endpoint)
         #expect(plan.credential == .privateKey("PROD KEY", passphrase: nil))
+        // Agent hops also carry the default key file, as `ssh` would try it.
         #expect(plan.hops == [
             SSHHop(endpoint: SFTPEndpoint(host: "bastion.example.com", username: "me"), credential: .privateKey("BASTION KEY", passphrase: nil)),
-            SSHHop(endpoint: relay.endpoint, credential: .agent(socket: nil)),
-            SSHHop(endpoint: SFTPEndpoint(host: "edge.example.com", port: 2200, username: "admin"), credential: .agent(socket: nil)),
+            SSHHop(endpoint: relay.endpoint, credential: .agent(socket: nil, fallbackKeys: ["BASTION KEY"])),
+            SSHHop(endpoint: SFTPEndpoint(host: "edge.example.com", port: 2200, username: "admin"), credential: .agent(socket: nil, fallbackKeys: ["BASTION KEY"])),
         ])
+    }
+
+    @Test func agentFallsBackToTheDefaultKeyFiles() throws {
+        let nas = site("nas", .agent(socket: "/tmp/agent.sock"))
+        let files = ["/Users/me/.ssh/id_rsa": "RSA KEY", "/Users/me/.ssh/id_ed25519": "ED25519 KEY"]
+
+        #expect(try nas.credential(secrets: InMemorySecretStore(), sshDirectory: "/Users/me/.ssh", readFile: { files[$0] })
+            == .agent(socket: "/tmp/agent.sock", fallbackKeys: ["ED25519 KEY", "RSA KEY"]))
+        #expect(try nas.credential(secrets: InMemorySecretStore(), sshDirectory: "/Users/me/.ssh", readFile: { _ in nil })
+            == .agent(socket: "/tmp/agent.sock"))
+        #expect(try nas.credential(secrets: InMemorySecretStore(), readFile: { files[$0] }) == .agent(socket: "/tmp/agent.sock"))
     }
 
     @Test func jumpLoopsAreRefused() {

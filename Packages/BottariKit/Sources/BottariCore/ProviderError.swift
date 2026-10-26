@@ -16,12 +16,12 @@ public enum ProviderError: Error, Equatable, Sendable {
 extension ProviderError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .notFound(let path): "찾을 수 없어요: \(path)"
-        case .alreadyExists(let path): "같은 이름이 이미 있어요: \(path)"
-        case .notADirectory(let path): "폴더가 아니에요: \(path)"
-        case .isADirectory(let path): "파일이 아니라 폴더예요: \(path)"
-        case .permissionDenied(let path): "권한이 없어요: \(path)"
-        case .unsupported(let operation): "이 위치에서는 지원하지 않아요: \(operation)"
+        case .notFound(let path): "찾을 수 없습니다: \(path)"
+        case .alreadyExists(let path): "같은 이름의 항목이 이미 있습니다: \(path)"
+        case .notADirectory(let path): "폴더가 아닙니다: \(path)"
+        case .isADirectory(let path): "파일이 아닌 폴더입니다: \(path)"
+        case .permissionDenied(let path): "접근 권한이 없습니다: \(path)"
+        case .unsupported(let operation): "이 위치에서 지원하지 않는 작업입니다: \(operation)"
         case .io(let message): message
         }
     }

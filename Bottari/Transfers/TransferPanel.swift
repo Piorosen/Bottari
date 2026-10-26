@@ -27,7 +27,7 @@ struct TransferBar: View {
                 openWindow(id: "transfers")
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "arrow.up.arrow.down")
+                    Glyph("bt.transfer", size: 15)
                     Text(activeCount > 0 ? "전송 \(activeCount)개 진행 중" : "전송")
                         .font(.ui(.callout, weight: .semibold))
                     Image(systemName: "chevron.up")
@@ -53,19 +53,20 @@ struct TransferBar: View {
                 ProgressStrip(value: job.fractionCompleted, tint: job.tint)
                     .frame(minWidth: 120)
                 Text(job.percentText)
-                    .font(.themeMono(.callout))
-                    .fontWeight(.semibold)
+                    .font(.ui(.callout, weight: .semibold))
+                    .monospacedDigit()
                 if job.pendingConflict != nil || job.state == .failed {
                     Text(job.statusText)
                         .font(.ui(.callout))
                         .foregroundStyle(job.pendingConflict != nil ? Color.orange : job.tint)
                 } else if job.bytesPerSecond > 0 {
                     Text(ByteFormat.rate(job.bytesPerSecond))
-                        .font(.themeMono(.callout))
+                        .font(.ui(.callout))
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text("대기 중인 전송이 없어요")
+                Text("대기 중인 전송 없음")
                     .font(.ui(.callout))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
@@ -101,7 +102,7 @@ struct ExternalEditsButton: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("외부 에디터에서 편집 중")
                         .font(.ui(.headline))
-                    Text("임시 폴더에 받아 두고, 저장을 감지하면 자동으로 올려요.")
+                    Text("저장하면 서버에 자동으로 업로드됩니다.")
                         .font(.ui(.caption))
                         .foregroundStyle(.secondary)
                     ForEach(edits.sessions) { session in
@@ -114,10 +115,10 @@ struct ExternalEditsButton: View {
                             }
                             Spacer()
                             if session.blockedByServerChange {
-                                Button("그래도 올리기") { edits.uploadAnyway(session) }
+                                Button("그래도 업로드") { edits.uploadAnyway(session) }
                             }
                             Button("열기") { NSWorkspace.shared.open(session.localURL) }
-                            Button("그만") { edits.stop(session) }
+                            Button("중단") { edits.stop(session) }
                         }
                         .controlSize(.small)
                     }

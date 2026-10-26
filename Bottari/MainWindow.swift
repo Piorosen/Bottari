@@ -43,13 +43,18 @@ struct MainWindow: View {
                 workspace.confirm(deletion)
             }
         }
+        .sheet(item: $workspace.passwordRequest) { request in
+            PasswordSheet(request: request) { secret, keep in
+                workspace.answer(request, with: secret, keeping: keep)
+            }
+        }
         .sheet(item: $workspace.siteManager) { request in
             SiteManagerSheet(library: AppServices.sites, initialSelection: request.selection, initialError: request.error) { provider, site in
                 Task { await workspace.pane(workspace.activeSide).switchProvider(to: provider, site: site) }
             }
         }
         .alert(
-            "할 수 없어요",
+            "작업을 완료할 수 없습니다",
             isPresented: Binding(get: { workspace.refusal != nil }, set: { if !$0 { workspace.refusal = nil } })
         ) {
             Button("확인") {}
@@ -76,10 +81,13 @@ struct MainWindow: View {
             Button {
                 workspace.showsPalette.toggle()
             } label: {
+                // No Spacer here: a toolbar drops an item whose content can grow.
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                    Text("폴더 이동, 서버 연결, 명령 실행…")
-                    Spacer()
+                    Glyph("bt.search", size: 14)
+                    Text("폴더, 연결, 명령 찾기")
+                }
+                .frame(width: 440, alignment: .leading)
+                .overlay(alignment: .trailing) {
                     Text(Keymap.shared.combo(for: .palette).description)
                         .font(.themeMono(.caption2))
                         .padding(.horizontal, 5)
@@ -90,7 +98,6 @@ struct MainWindow: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .frame(width: 460)
                 .background(Palette.panel, in: .rect(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
             }
@@ -103,33 +110,33 @@ struct MainWindow: View {
             Button {
                 workspace.openTerminal(in: workspace.activeSide)
             } label: {
-                Label("SSH 터미널", systemImage: "terminal")
+                Label("SSH 터미널", glyph: "bt.terminal", size: 17)
             }
             .disabled(!(workspace.pane(workspace.activeSide).provider is SFTPFileProvider))
-            .help("지금 패인의 서버에서 SSH 터미널 열기")
+            .help("SSH 터미널")
             Button {
                 openWindow(id: "transfers")
             } label: {
-                Label(activeTransfers > 0 ? "전송 \(activeTransfers)" : "전송", systemImage: "arrow.up.arrow.down")
+                Label(activeTransfers > 0 ? "전송 \(activeTransfers)" : "전송", glyph: "bt.transfer", size: 17)
                     .labelStyle(.titleAndIcon)
             }
             .help("전송 센터")
             Button {
                 workspace.siteManager = SiteManagerRequest()
             } label: {
-                Label("새 연결", systemImage: "plus")
+                Label("새 연결", glyph: "bt.plus", size: 17)
             }
-            .help("새 연결 추가")
+            .help("새 연결")
             Button {
                 workspace.showsInspector.toggle()
             } label: {
-                Label("미리보기", systemImage: "sidebar.right")
+                Label("미리보기", glyph: "bt.inspector", size: 17)
             }
             .help(workspace.showsInspector ? "미리보기 닫기" : "미리보기 열기")
             Button {
                 openSettings()
             } label: {
-                Label("설정", systemImage: "slider.horizontal.3")
+                Label("설정", glyph: "bt.settings", size: 17)
             }
             .help("설정 (⌘,)")
         }

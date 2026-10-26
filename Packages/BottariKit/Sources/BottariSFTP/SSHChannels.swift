@@ -160,7 +160,7 @@ public final class PortForward: Sendable {
             .get()
         guard let localPort = listener.localAddress?.port else {
             try? await listener.close()
-            throw ProviderError.io("터널 포트를 열지 못했어요")
+            throw ProviderError.io("터널 포트를 열 수 없습니다")
         }
         return PortForward(localPort: localPort, listener: listener)
     }

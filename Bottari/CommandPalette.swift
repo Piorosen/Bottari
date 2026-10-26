@@ -30,7 +30,7 @@ struct PaletteCommand: Identifiable {
     }
 }
 
-/// "폴더 이동, 서버 연결, 명령 실행…": a search box over places, sites and
+/// "폴더, 서버, 명령 검색": a search box over places, sites and
 /// commands, acting on the active pane.
 struct CommandPalette: View {
     let workspace: Workspace
@@ -46,7 +46,7 @@ struct CommandPalette: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("폴더 이동, 서버 연결, 명령 실행…", text: $query)
+                TextField("폴더, 서버, 명령 검색", text: $query)
                     .textFieldStyle(.plain)
                     .font(.ui(.title3))
                     .focused($focused)
@@ -69,7 +69,7 @@ struct CommandPalette: View {
                                 }
                         }
                         if results.isEmpty {
-                            Text("일치하는 항목이 없어요")
+                            Text("일치하는 항목 없음")
                                 .foregroundStyle(.secondary)
                                 .padding(20)
                         }
@@ -81,7 +81,7 @@ struct CommandPalette: View {
             .frame(maxHeight: 360)
             Divider()
             HStack {
-                Text("↵ 실행 · ↑↓ 고르기 · esc 닫기")
+                Text("↵ 실행 · ↑↓ 선택 · esc 닫기")
                 Spacer()
                 Text("대상: \(workspace.pane(workspace.activeSide).provider.displayName) 패인")
             }
@@ -100,7 +100,7 @@ struct CommandPalette: View {
 
     private func row(_ command: PaletteCommand, isSelected: Bool) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: command.symbol)
+            Glyph(command.symbol, size: 16)
                 .frame(width: 22)
                 .foregroundStyle(isSelected ? .white : .secondary)
             VStack(alignment: .leading, spacing: 1) {
@@ -171,12 +171,12 @@ struct CommandPalette: View {
             })
         }
         if let iCloud = LocalFileProvider.iCloudDrive {
-            list.append(PaletteCommand(id: "icloud", title: "iCloud Drive", subtitle: "이 Mac", symbol: "icloud", keywords: "icloud") {
+            list.append(PaletteCommand(id: "icloud", title: "iCloud Drive", subtitle: "이 Mac", symbol: "bt.cloud", keywords: "icloud") {
                 workspace.openOnMac(iCloud)
             })
         }
         for favorite in Favorites.shared.items {
-            list.append(PaletteCommand(id: "favorite-\(favorite.id)", title: favorite.name, subtitle: favorite.path.string, symbol: "star", keywords: "즐겨찾기 favorite") {
+            list.append(PaletteCommand(id: "favorite-\(favorite.id)", title: favorite.name, subtitle: favorite.path.string, symbol: "bt.star", keywords: "즐겨찾기 favorite") {
                 workspace.open(favorite)
             })
         }
@@ -193,10 +193,10 @@ struct CommandPalette: View {
             PaletteCommand(id: "move-other", title: "선택 항목을 \(other)(으)로 이동", subtitle: "\(selection.count)개 선택 · \(keys(.moveToOther))", symbol: "arrow.right", keywords: "move 이동 전송") {
                 workspace.send(selection, from: side, kind: .move)
             },
-            PaletteCommand(id: "bundle", title: "선택 항목을 보따리에 담기", subtitle: keys(.bundle), symbol: "shippingbox", keywords: "bundle 보따리") {
+            PaletteCommand(id: "bundle", title: "선택 항목을 보따리에 담기", subtitle: keys(.bundle), symbol: "bt.bundle", keywords: "bundle 보따리") {
                 workspace.addToBundle(from: side)
             },
-            PaletteCommand(id: "bundle-send", title: "보따리를 지금 패인으로 보내기", subtitle: "\(BottariBundle.shared.entries.count)개", symbol: "shippingbox.and.arrow.backward", keywords: "bundle 보따리 send") {
+            PaletteCommand(id: "bundle-send", title: "보따리를 현재 패인으로 보내기", subtitle: "\(BottariBundle.shared.entries.count)개", symbol: "bt.bundle", keywords: "bundle 보따리 send") {
                 BottariBundle.shared.send(to: side, in: workspace)
             },
             PaletteCommand(id: "reload", title: "새로고침", subtitle: "⌘R", symbol: "arrow.clockwise", keywords: "reload refresh") {
@@ -205,25 +205,25 @@ struct CommandPalette: View {
             PaletteCommand(id: "hidden", title: pane.showsHiddenFiles ? "숨김 파일 감추기" : "숨김 파일 보기", symbol: "eye", keywords: "hidden dotfiles") {
                 pane.showsHiddenFiles.toggle()
             },
-            PaletteCommand(id: "transfers", title: "전송 센터 열기", symbol: "arrow.up.arrow.down", keywords: "transfers queue 전송") {
+            PaletteCommand(id: "transfers", title: "전송 센터 열기", symbol: "bt.transfer", keywords: "transfers queue 전송") {
                 openWindow(id: "transfers")
             },
-            PaletteCommand(id: "inspector", title: workspace.showsInspector ? "미리보기 닫기" : "미리보기 열기", symbol: "sidebar.right", keywords: "inspector preview 미리보기") {
+            PaletteCommand(id: "inspector", title: workspace.showsInspector ? "미리보기 닫기" : "미리보기 열기", symbol: "bt.inspector", keywords: "inspector preview 미리보기") {
                 workspace.showsInspector.toggle()
             },
-            PaletteCommand(id: "tunnels", title: "터널 관리", symbol: "point.3.connected.trianglepath.dotted", keywords: "tunnel vpn proxy socks 터널") {
+            PaletteCommand(id: "tunnels", title: "터널 관리", symbol: "bt.tunnel", keywords: "tunnel vpn proxy socks 터널") {
                 openWindow(id: "tunnels")
             },
-            PaletteCommand(id: "settings", title: "설정", subtitle: "⌘,", symbol: "gearshape", keywords: "settings preferences theme 테마 단축키 icloud") {
+            PaletteCommand(id: "settings", title: "설정", subtitle: "⌘,", symbol: "bt.settings", keywords: "settings preferences theme 테마 단축키 icloud") {
                 openSettings()
             },
         ]
         if pane.provider is SFTPFileProvider {
-            list.append(PaletteCommand(id: "terminal", title: "여기서 SSH 터미널 열기", subtitle: "⌃`", symbol: "terminal", keywords: "ssh terminal shell 터미널") {
+            list.append(PaletteCommand(id: "terminal", title: "SSH 터미널 열기", subtitle: "⌃`", symbol: "bt.terminal", keywords: "ssh terminal shell 터미널") {
                 workspace.openTerminal(in: side)
             })
             if pane.site?.remoteScreen != nil {
-                list.append(PaletteCommand(id: "screen", title: "원격 화면 열기", symbol: "display", keywords: "vnc screen remote 원격") {
+                list.append(PaletteCommand(id: "screen", title: "원격 화면 열기", symbol: "bt.screen", keywords: "vnc screen remote 원격") {
                     workspace.openScreen(in: side)
                 })
             }

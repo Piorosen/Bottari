@@ -95,8 +95,8 @@ final class TunnelStore {
         self.states = states
         self.connections = connections
         for sample in samples {
-            log(sample.id, "프록시를 열었어요 · SOCKS5 :1080 · HTTP :8118")
-            log(sample.id, "home-nas에 연결하는 중")
+            log(sample.id, "프록시 시작: SOCKS5 :1080 · HTTP :8118")
+            log(sample.id, "home-nas에 연결 중")
         }
     }
     #endif
@@ -141,12 +141,12 @@ final class TunnelStore {
     func start(_ id: TunnelProfile.ID) async {
         guard let profile = profiles.first(where: { $0.id == id }) else { return }
         guard let siteID = profile.siteID, let site = AppServices.sites.site(siteID) else {
-            states[id] = .failed("거쳐 갈 서버를 골라 주세요")
+            states[id] = .failed("경유 서버 미지정")
             return
         }
         runtimes[id] = Runtime()
         states[id] = .connecting
-        log(id, "\(site.name)에 연결하는 중")
+        log(id, "\(site.name)에 연결 중")
         if profile.mode == .wholeMac {
             startSshuttle(profile, site: site)
             return
@@ -164,8 +164,8 @@ final class TunnelStore {
             }
             switch profile.mode {
             case .bottariOnly:
-                states[id] = .on("Bottari 연결이 \(site.name)을(를) 거쳐요")
-                log(id, "Bottari 연결 경로를 바꿨어요")
+                states[id] = .on("Bottari 연결만 \(site.name) 경유")
+                log(id, "Bottari 연결 경로 변경됨")
             case .proxy:
                 try await startProxy(profile, site: site, provider: provider)
             case .wholeMac:
@@ -173,7 +173,7 @@ final class TunnelStore {
             }
         } catch {
             states[id] = .failed(error.localizedDescription)
-            log(id, "연결하지 못했어요: \(error.localizedDescription)")
+            log(id, "연결 실패: \(error.localizedDescription)")
             await cleanUp(id)
         }
     }
@@ -202,15 +202,15 @@ final class TunnelStore {
         }
         var summary = "SOCKS5 :\(proxy.socksPort)"
         if let http = proxy.httpPort { summary += " · HTTP :\(http)" }
-        log(id, "프록시를 열었어요 · \(summary)")
+        log(id, "프록시 시작: \(summary)")
         if profile.appliesSystemProxy, profile.httpEnabled {
             do {
                 try await SystemProxy.setAutoProxy(url: profile.pacURL)
                 runtimes[id]?.appliedSystemProxy = true
                 summary += " · 시스템 프록시에 PAC 적용"
-                log(id, "시스템 프록시에 PAC를 적용했어요")
+                log(id, "시스템 프록시에 PAC 적용됨")
             } catch {
-                log(id, "시스템 프록시를 바꾸지 못했어요: \(error.localizedDescription)")
+                log(id, "시스템 프록시 변경 실패: \(error.localizedDescription)")
             }
         }
         states[id] = .on(summary)
@@ -221,12 +221,12 @@ final class TunnelStore {
     private func startSshuttle(_ profile: TunnelProfile, site: SavedSite) {
         let command = Self.sshuttleCommand(profile, site: site)
         let script = FileManager.default.temporaryDirectory.appending(path: "bottari-\(profile.name.replacingOccurrences(of: "/", with: "-")).command")
-        let text = "#!/bin/zsh\n# Bottari: \(profile.name)\necho '\(profile.name) · Ctrl-C로 끄면 방화벽 규칙도 되돌려요'\n\(command)\n"
+        let text = "#!/bin/zsh\n# Bottari: \(profile.name)\necho '\(profile.name) · Ctrl-C로 종료하면 방화벽 규칙도 복원됩니다'\n\(command)\n"
         do {
             try text.write(to: script, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
             NSWorkspace.shared.open(script)
-            states[profile.id] = .on("터미널에서 sshuttle 실행 중 · 끄려면 그 창에서 Ctrl-C")
+            states[profile.id] = .on("터미널에서 sshuttle 실행 중 (Ctrl-C로 종료)")
             log(profile.id, "터미널에서 실행: \(command)")
         } catch {
             states[profile.id] = .failed(error.localizedDescription)
@@ -251,12 +251,12 @@ final class TunnelStore {
     func stop(_ id: TunnelProfile.ID) async {
         runtimes[id]?.stopping = true
         if profiles.first(where: { $0.id == id })?.mode == .wholeMac {
-            log(id, "터미널 창에서 Ctrl-C를 눌러 끄세요")
+            log(id, "터미널 창에서 Ctrl-C를 눌러 종료하십시오")
         }
         await cleanUp(id)
         states[id] = .off
         connections[id] = []
-        log(id, "껐어요")
+        log(id, "꺼짐")
     }
 
     private func cleanUp(_ id: TunnelProfile.ID) async {
@@ -265,7 +265,7 @@ final class TunnelStore {
         await runtime.proxy?.close()
         if runtime.appliedSystemProxy {
             try? await SystemProxy.setAutoProxy(url: nil)
-            log(id, "시스템 프록시를 원래대로 되돌렸어요")
+            log(id, "시스템 프록시 복원됨")
         }
         await runtime.provider?.disconnect()
         runtimes[id]?.provider = nil
@@ -276,14 +276,14 @@ final class TunnelStore {
     private func connectionDropped(_ id: TunnelProfile.ID) {
         guard let runtime = runtimes[id], !runtime.stopping, case .on = state(id) else { return }
         guard profiles.first(where: { $0.id == id })?.reconnects == true else {
-            states[id] = .failed("연결이 끊겼어요")
+            states[id] = .failed("연결 끊김")
             Task { await cleanUp(id) }
             return
         }
         let delay = runtime.retryDelay
         runtimes[id]?.retryDelay = min(delay * 2, 60)
         states[id] = .connecting
-        log(id, "연결이 끊겨서 \(Int(delay))초 뒤에 다시 연결해요")
+        log(id, "연결 끊김, \(Int(delay))초 후 재연결")
         Task {
             await cleanUp(id)
             try? await Task.sleep(for: .seconds(delay))
@@ -294,7 +294,7 @@ final class TunnelStore {
 
     private func reconnectAfterWake() {
         for profile in profiles where profile.reconnectsOnWake && profile.mode != .wholeMac && state(profile.id).isActive {
-            log(profile.id, "잠자기에서 깨어나 다시 연결해요")
+            log(profile.id, "잠자기에서 깨어나 재연결")
             Task {
                 await cleanUp(profile.id)
                 await start(profile.id)
@@ -369,7 +369,7 @@ enum SystemProxy {
                 if process.terminationStatus == 0 {
                     continuation.resume(returning: text)
                 } else {
-                    continuation.resume(throwing: Failure(message: text.isEmpty ? "실패했어요 (\(process.terminationStatus))" : text))
+                    continuation.resume(throwing: Failure(message: text.isEmpty ? "실패했습니다 (종료 코드 \(process.terminationStatus))" : text))
                 }
             }
             do {

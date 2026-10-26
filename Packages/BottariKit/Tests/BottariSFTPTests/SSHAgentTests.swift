@@ -54,6 +54,26 @@ final class TestAgent {
         guard add.terminationStatus == 0 else { throw Failure(reason: "ssh-add exited with \(add.terminationStatus)") }
     }
 
+    /// Adds a fresh key of a kind `TestAgent.add` cannot make, e.g. `ecdsa`.
+    func addNewKey(ofType type: String) throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("bt-key-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: file)
+            try? FileManager.default.removeItem(atPath: file.path + ".pub")
+        }
+        for (tool, arguments) in [("ssh-keygen", ["-q", "-t", type, "-N", "", "-f", file.path]), ("ssh-add", ["-q", file.path])] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/\(tool)")
+            process.arguments = arguments
+            process.environment = ["SSH_AUTH_SOCK": socket]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { throw Failure(reason: "\(tool) exited with \(process.terminationStatus)") }
+        }
+    }
+
     func stop() {
         process.terminate()
         process.waitUntilExit()
@@ -140,8 +160,74 @@ final class TestAgent {
         }
     }
 
-    @Test func emptyAgentHasNoUsableKeys() async throws {
+    @Test func emptyAgentFallsBackToAKeyFile() async throws {
         try await withAgent { agent in
+            let server = try await TestSFTPServer.start()
+            do {
+                try server.makeFile("/hello.txt", "hi")
+
+                let provider = try await SFTPFileProvider.connect(
+                    to: server.endpoint,
+                    credential: .agent(socket: agent.socket, fallbackKeys: [server.clientKey.makeSSHRepresentation(comment: "id_ed25519")]),
+                    hostKeys: .acceptAnything
+                )
+                #expect(try await provider.list(.root).map(\.name) == ["hello.txt"])
+                await provider.disconnect()
+            } catch {
+                await server.stop()
+                throw error
+            }
+            await server.stop()
+        }
+    }
+
+    @Test func aRefusedKeyFallsBackToThePassword() async throws {
+        try await withAgent { agent in
+            let server = try await TestSFTPServer.start()
+            do {
+                try agent.add(Curve25519.Signing.PrivateKey(), comment: "not on the server")
+                try server.makeFile("/hello.txt", "hi")
+
+                for keys in [SFTPCredential.agent(socket: agent.socket), .agent(socket: "/tmp/bt-no-such-agent.sock")] {
+                    let provider = try await SFTPFileProvider.connect(
+                        to: server.endpoint,
+                        credential: .fallback(keys, then: .password(TestSFTPServer.password)),
+                        hostKeys: .acceptAnything
+                    )
+                    #expect(try await provider.list(.root).map(\.name) == ["hello.txt"])
+                    await provider.disconnect()
+                }
+            } catch {
+                await server.stop()
+                throw error
+            }
+            await server.stop()
+        }
+    }
+
+    @Test func fallbackKeysComeAfterTheAgentsAndUnreadableOnesAreSkipped() async throws {
+        try await withAgent { agent in
+            try agent.add(Curve25519.Signing.PrivateKey(), comment: "agent key")
+            let file = Curve25519.Signing.PrivateKey().makeSSHRepresentation(comment: "file key")
+
+            let attempts = try SFTPCredential.agent(socket: agent.socket, fallbackKeys: ["not a key", file])
+                .authenticationAttempts(username: "me")
+
+            #expect(attempts.count == 2)
+        }
+    }
+
+    @Test func emptyAgentWithoutKeyFilesSaysItIsEmpty() async throws {
+        try await withAgent { agent in
+            #expect(throws: SFTPConnectError.agentHasNoKeys) {
+                _ = try SFTPCredential.agent(socket: agent.socket, fallbackKeys: ["not a key"]).authenticationAttempts(username: "me")
+            }
+        }
+    }
+
+    @Test func agentWithOnlyUnsupportedKeysSaysSo() async throws {
+        try await withAgent { agent in
+            try agent.addNewKey(ofType: "ecdsa")
             #expect(throws: SFTPConnectError.agentHasNoUsableKeys) {
                 _ = try SFTPCredential.agent(socket: agent.socket).authenticationAttempts(username: "me")
             }
@@ -152,6 +238,13 @@ final class TestAgent {
         #expect(throws: SFTPConnectError.agentUnavailable) {
             _ = try SFTPCredential.agent(socket: "/tmp/bt-no-such-agent.sock").authenticationAttempts(username: "me")
         }
+    }
+
+    @Test func missingAgentStillUsesKeyFiles() throws {
+        let file = Curve25519.Signing.PrivateKey().makeSSHRepresentation(comment: "file key")
+        let attempts = try SFTPCredential.agent(socket: "/tmp/bt-no-such-agent.sock", fallbackKeys: [file])
+            .authenticationAttempts(username: "me")
+        #expect(attempts.count == 1)
     }
 
     @Test func socketFallsBackToSSHAuthSock() {

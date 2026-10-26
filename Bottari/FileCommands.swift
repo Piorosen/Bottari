@@ -40,7 +40,7 @@ struct FileCommands: Commands {
                 }
             }
             .keyboardShortcut("v")
-            Button("이동해서 붙여넣기") {
+            Button("여기로 항목 이동") {
                 if let focus {
                     focus.workspace.paste(into: focus.side, kind: .move)
                 }

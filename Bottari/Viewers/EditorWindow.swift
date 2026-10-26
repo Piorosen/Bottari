@@ -13,7 +13,7 @@ struct EditorWindow: View {
             if let model {
                 EditorView(model: model)
             } else {
-                ContentUnavailableView("파일을 열 수 없어요", systemImage: "doc.text")
+                ContentUnavailableView("파일을 열 수 없음", systemImage: "doc.text")
             }
         }
         .frame(minWidth: 640, minHeight: 420)
@@ -65,7 +65,7 @@ private struct EditorView: View {
         .background(Palette.background)
         .navigationTitle(model.item.name)
         .background(WindowCloseGuard(isDirty: model.isDirty, save: { await save() }))
-        .confirmationDialog("운영 서버의 파일을 저장할까요?", isPresented: $confirmingSave) {
+        .confirmationDialog("운영 서버의 파일을 저장하겠습니까?", isPresented: $confirmingSave) {
             Button("저장", role: .destructive) { Task { await model.save() } }
         } message: {
             Text("\(model.site?.name ?? "") · \(model.item.path.string)")
@@ -102,7 +102,7 @@ private struct EditorView: View {
                 Text(placeName).font(.themeMono(.caption)).foregroundStyle(.secondary)
                 if model.isDirty {
                     Circle().fill(Palette.text.opacity(0.7)).frame(width: 6, height: 6)
-                        .help("저장 안 된 변경")
+                        .help("저장되지 않은 변경 사항")
                 }
             }
             .padding(.horizontal, 12)
@@ -143,10 +143,10 @@ private struct EditorView: View {
         ScrollView {
             VStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("저장할 때 일어나는 일").font(.ui(.body, weight: .semibold))
-                    step("원격 수정 시각 · 크기 확인", model.remoteModified.map { "연 시각 \($0.formatted(date: .omitted, time: .shortened)) 와 비교" })
+                    Text("저장 과정").font(.ui(.body, weight: .semibold))
+                    step("서버 수정 시각과 크기 확인", model.remoteModified.map { "\($0.formatted(date: .omitted, time: .shortened))에 연 버전과 비교" })
                     step("임시 이름으로 업로드", model.item.path.partialWritePath.string)
-                    step("원래 이름으로 바꾸기", "rename 이라 중간에 끊겨도 원본은 그대로")
+                    step("원래 이름으로 바꾸기", "중간에 끊겨도 원본 유지")
                     if !model.postSaveCommand.isEmpty {
                         step("검사 명령 실행", model.postSaveCommand)
                     }
@@ -157,11 +157,11 @@ private struct EditorView: View {
 
                 if model.canRunCommands {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("저장한 뒤 명령 실행").font(.ui(.body, weight: .semibold))
+                        Text("저장 후 실행할 명령").font(.ui(.body, weight: .semibold))
                         TextField("예: sudo nginx -t && sudo systemctl reload nginx", text: $model.postSaveCommand, axis: .vertical)
                             .lineLimit(2...4)
                             .designField(mono: true)
-                        Text("검사가 실패하면 방금 올린 파일을 이전 버전으로 되돌려요. 이 파일에만 적용돼요.")
+                        Text("명령이 실패하면 이전 버전으로 되돌립니다. 이 파일에만 적용됩니다.")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -188,7 +188,7 @@ private struct EditorView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .well()
                         }
-                        Text("임시 폴더에 받아 두고, 저장을 감지하면 자동으로 올려요.")
+                        Text("저장하면 서버에 자동으로 업로드됩니다.")
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                     }
@@ -222,7 +222,7 @@ private struct EditorView: View {
             ProgressView("여는 중…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
-            ContentUnavailableView("열 수 없어요", systemImage: "doc.text", description: Text(message))
+            ContentUnavailableView("열 수 없음", systemImage: "doc.text", description: Text(message))
         case .ready:
             CodeTextView(
                 text: $model.text,
@@ -237,16 +237,16 @@ private struct EditorView: View {
 
     private func conflictBanner(_ conflict: EditorModel.Conflict) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("편집하는 사이 서버에서 이 파일이 바뀌었어요", systemImage: "exclamationmark.triangle.fill")
+            Label("편집하는 동안 서버의 파일이 변경되었습니다", systemImage: "exclamationmark.triangle.fill")
                 .font(.ui(.callout, weight: .semibold))
                 .foregroundStyle(.orange)
             if let modified = conflict.modified {
-                Text("서버 쪽 수정 시각 \(modified.formatted(date: .omitted, time: .shortened))")
+                Text("서버 수정 시각 \(modified.formatted(date: .omitted, time: .shortened))")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
             if conflict.merged != nil {
-                Text("서로 다른 줄을 고쳤어요. 둘 다 반영해서 저장할 수 있어요.")
+                Text("변경된 줄이 겹치지 않아 두 버전을 병합할 수 있습니다.")
                     .font(.ui(.caption))
             }
             HStack {
@@ -254,7 +254,7 @@ private struct EditorView: View {
                 Button("서버 버전 다시 열기") { Task { await model.reloadServerVersion() } }
                 Button("내 버전으로 덮어쓰기", role: .destructive) { Task { await model.overwriteServerVersion() } }
                 if conflict.merged != nil {
-                    Button("둘 다 반영하고 저장") { Task { await model.saveMerged() } }
+                    Button("병합하여 저장") { Task { await model.saveMerged() } }
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -291,7 +291,7 @@ private struct EditorView: View {
                 Text(language)
             }
             Spacer()
-            Text((model.isDirty ? "저장 안 된 변경 · " : model.savedAt.map { "저장됨 \($0.formatted(date: .omitted, time: .shortened)) · " } ?? "") + "줄 \(model.cursor.line), 칸 \(model.cursor.column)")
+            Text((model.isDirty ? "저장되지 않음 · " : model.savedAt.map { "저장됨 \($0.formatted(date: .omitted, time: .shortened)) · " } ?? "") + "줄 \(model.cursor.line), 칸 \(model.cursor.column)")
                 .foregroundStyle(model.isDirty ? Color.orange : .secondary)
         }
         .font(.themeMono(.caption))
@@ -370,8 +370,8 @@ private struct WindowCloseGuard: NSViewRepresentable {
         func windowShouldClose(_ window: NSWindow) -> Bool {
             guard isDirty else { return original?.windowShouldClose?(window) ?? true }
             let alert = NSAlert()
-            alert.messageText = "저장하지 않은 변경 사항이 있어요"
-            alert.informativeText = "닫기 전에 저장할까요?"
+            alert.messageText = "닫기 전에 변경 사항을 저장하겠습니까?"
+            alert.informativeText = "저장하지 않으면 변경 사항이 손실됩니다."
             alert.addButton(withTitle: "저장")
             alert.addButton(withTitle: "취소")
             alert.addButton(withTitle: "저장 안 함")

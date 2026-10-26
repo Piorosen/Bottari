@@ -1,6 +1,7 @@
 import BottariCore
 import Citadel
 import Foundation
+import NIOCore
 import Testing
 @testable import BottariSFTP
 
@@ -68,6 +69,30 @@ import Testing
                 )
             }
         }
+    }
+
+    @Test func aClosedPortIsReportedAsRefused() async throws {
+        let server = try await TestSFTPServer.start()
+        let endpoint = server.endpoint
+        await server.stop()
+        await #expect(throws: SFTPConnectError.refused(address: "127.0.0.1:\(endpoint.port)")) {
+            _ = try await SFTPFileProvider.connect(
+                to: endpoint,
+                credential: .password(TestSFTPServer.password),
+                hostKeys: .acceptAnything
+            )
+        }
+    }
+
+    @Test func networkFailuresNameTheAddress() {
+        let server = SFTPEndpoint(host: "203.0.113.10", port: 30084, username: "ubuntu")
+        #expect(SFTPConnectError.networkFailure(ChannelError.connectTimeout(.seconds(15)), dialling: server)
+            == .noResponse(address: "203.0.113.10:30084", seconds: 15))
+        #expect(SFTPConnectError.networkFailure(IOError(errnoCode: ENETUNREACH, reason: "connect"), dialling: SFTPEndpoint(host: "nas.local", username: "me"))
+            == .noRoute(address: "nas.local"))
+        #expect(SFTPConnectError.networkFailure(SFTPConnectError.authenticationFailed, dialling: server) == nil)
+        #expect(SFTPConnectError.noResponse(address: "203.0.113.10:30084", seconds: 15).localizedDescription
+            .hasPrefix("203.0.113.10:30084에서 15초 동안 응답이 없습니다."))
     }
 
     @Test func garbageKeyTextIsReportedAsUnreadable() {
@@ -301,7 +326,7 @@ import Testing
         #expect(SFTPFileProvider.translate(.permissionDenied, message: "", path) == .permissionDenied(path))
         #expect(SFTPFileProvider.translate(.unsupportedOperation, message: "", path) == .unsupported("SFTP"))
         #expect(SFTPFileProvider.translate(.failure, message: "Failure", path) == .io("Failure"))
-        #expect(SFTPFileProvider.translate(.connectionLost, message: "", path) == .io("서버와 연결이 끊겼어요"))
+        #expect(SFTPFileProvider.translate(.connectionLost, message: "", path) == .io("서버와의 연결이 끊어졌습니다"))
     }
 
     @Test func ownerComesFromTheLongname() {

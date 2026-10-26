@@ -111,12 +111,13 @@ extension FileProvider {
         return ""
     }
 
+    /// A `Glyph` name.
     var symbol: String {
-        if self is SFTPFileProvider { return "server.rack" }
-        if isLocal { return "laptopcomputer" }
+        if self is SFTPFileProvider { return "bt.server" }
+        if isLocal { return "bt.mac" }
         let type = String(describing: Swift.type(of: self))
-        if type.contains("S3") { return "cylinder" }
-        if type.contains("Drive") { return "cloud" }
+        if type.contains("S3") { return "bt.bucket" }
+        if type.contains("Drive") { return "bt.cloud" }
         return "externaldrive"
     }
 }
