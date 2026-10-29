@@ -199,7 +199,7 @@ private struct TerminalScreen: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            BackButton(title: "파일로 돌아가기") { NSApp.keyWindow?.performClose(nil) }
+            BackButton(title: String(localized: "파일로 돌아가기")) { NSApp.keyWindow?.performClose(nil) }
                 .buttonStyle(PanelButtonStyle())
                 .fixedSize()
             HStack(spacing: 8) {
@@ -228,7 +228,7 @@ private struct TerminalScreen: View {
             .help("동시 입력을 켠 모든 터미널에 같은 입력 전송")
             Button { showsSnippets.toggle() } label: { Image(systemName: "sidebar.right") }
                 .buttonStyle(IconButtonStyle(isOn: showsSnippets))
-                .help("명령 조각")
+                .iconHelp(String(localized: "명령 조각"))
         }
         .padding(12)
     }
@@ -236,7 +236,7 @@ private struct TerminalScreen: View {
     private func disconnectedBanner(_ reason: String?) -> some View {
         HStack {
             Image(systemName: "bolt.horizontal.circle")
-            Text(reason.map { "연결 끊김: \($0)" } ?? "셸 종료됨")
+            Text(reason.map { String(localized: "연결 끊김: \($0)") } ?? String(localized: "셸 종료됨"))
             Spacer()
             Button("다시 연결") { model.connect() }
                 .buttonStyle(PanelButtonStyle())
@@ -275,7 +275,7 @@ private struct TerminalScreen: View {
         switch site.authentication {
         case .agent: "ssh-agent"
         case .keyFile(let path): (path as NSString).lastPathComponent
-        case .password: "비밀번호"
+        case .password: String(localized: "비밀번호")
         }
     }
 

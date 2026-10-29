@@ -85,6 +85,25 @@ enum SnapshotRenderer {
                 size: CGSize(width: 460, height: 420), appearance: appearance,
                 to: directory.appending(path: "delete-\(name).png")
             )
+            await render(
+                PermissionsSheet(items: right.items.filter { $0.isDirectory } + right.items.filter { !$0.isDirectory }.prefix(1)) { _, _ in }
+                    .background(Palette.panel),
+                size: CGSize(width: 380, height: 330), appearance: appearance,
+                to: directory.appending(path: "permissions-\(name).png")
+            )
+            // Finding "co" under the sample folder: a file there and one a level down.
+            let searching = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path), library: library)
+            await searching.start()
+            searching.beginSearch()
+            searching.search("co")
+            for _ in 0..<40 where searching.isSearching {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            await render(
+                PaneView(workspace: Workspace(left: searching, right: right), side: .left),
+                size: CGSize(width: 560, height: 300), appearance: appearance,
+                to: directory.appending(path: "pane-search-\(name).png")
+            )
         }
         await renderTransfers(into: directory)
         await renderGallery(into: directory)
@@ -134,6 +153,15 @@ enum SnapshotRenderer {
         queue.enqueue(.copy, await item("src/clash/index.html"), from: TransferEndpoint(prod), to: TransferEndpoint(mac), into: folder("dst-mac"))
         try? await Task.sleep(for: .milliseconds(1500))
         _ = done
+        AppServices.transferRecords.showForPreview([
+            TransferRecord(
+                id: UUID(), kind: .copy, items: ["/Users/me/Movies/촬영본"],
+                source: .init(place: "local", name: "이 Mac"), destination: .init(place: "site:nas", name: "home-nas"),
+                folder: "/volume1/backup", policy: .ask, verifiesChecksums: true,
+                done: (0..<48).map { RemotePath("/Users/me/Movies/촬영본/clip-\($0).mov") }, unfinished: [],
+                totalFiles: 120, totalBytes: 84_000_000_000, transferredBytes: 31_500_000_000, savedAt: Date()
+            ),
+        ])
 
         let workspace = Workspace()
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
@@ -431,17 +459,17 @@ enum SnapshotRenderer {
         keymap.set(KeyCombo("c", command: true), for: .bundle)
         await render(KeySettings().padding(12).background(Palette.background).themed(), size: CGSize(width: 960, height: 760), appearance: .aqua,
                      to: directory.appending(path: "settings-keys.png"))
-        check("custom key is flagged as taken", keymap.clash(for: .bundle) == "복사 (클립보드)")
+        check("custom key is flagged as taken", keymap.clash(for: .bundle) == String(localized: "복사 (클립보드)"))
         check("F5 copies across, from the list or the menu", keymap.combo(for: .copyToOther).description == "F5" && keymap.shortcut(for: .copyToOther) != nil)
         check("Tab stays with the file list", keymap.listAction(for: KeyCombo("tab")) == .switchPane && keymap.shortcut(for: .switchPane) == nil)
         check("combos survive a round trip", KeyCombo(parsing: "⌃⌥⇧⌘F12") == KeyCombo("f12", control: true, option: true, shift: true, command: true))
         try? await Task.sleep(for: .milliseconds(300))
-        let item = menuItem(titled: "반대편 패인에 복사")
+        let item = menuItem(titled: String(localized: "반대편 패인에 복사"))
         check("menu shows F5 (\(item.map { "\($0.keyEquivalent.unicodeScalars.map { String($0.value, radix: 16) }) \($0.keyEquivalentModifierMask.rawValue)" } ?? "no item"))",
               item?.keyEquivalent == "\u{F708}" && item?.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control]) == [])
         keymap.layout = .finder
         try? await Task.sleep(for: .milliseconds(300))
-        let finder = menuItem(titled: "반대편 패인에 복사")
+        let finder = menuItem(titled: String(localized: "반대편 패인에 복사"))
         check("menu goes back to ⇧⌘C", finder?.keyEquivalent.lowercased() == "c" && finder?.keyEquivalentModifierMask.contains([.command, .shift]) == true)
         try? report.joined(separator: "\n").write(to: directory.appending(path: "settings-check.txt"), atomically: true, encoding: .utf8)
     }
@@ -513,7 +541,7 @@ enum SnapshotRenderer {
         await settle()
         check("a site added there arrives", sites.value.map(\.name) == ["dev-api", "prod-web", "staging-db"])
         check("keys changed there arrive", keys.value.layout == .commander)
-        check("dev-api is a conflict: \(sync.conflicts.first?.detail ?? "none")", sync.conflicts.count == 1 && sync.conflicts.first?.detail == "포트 · 이 Mac: 22 · Mac mini: 2222")
+        check("dev-api is a conflict: \(sync.conflicts.first?.detail ?? "none")", sync.conflicts.count == 1 && sync.conflicts.first?.detail == String(localized: "\(String(localized: "포트")) · 이 Mac: \("22") · \("Mac mini"): \("2222")"))
         check("this Mac keeps its version meanwhile", sites.value[0].endpoint.username == "ubuntu")
         check("devices list both Macs", sync.devices.map(\.name) == ["Mac mini", "MacBook Pro"])
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
@@ -566,7 +594,7 @@ enum SnapshotRenderer {
     private static func sampleFolder() -> URL {
         let folder = FileManager.default.temporaryDirectory.appending(path: "bottari-snapshot-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: folder.appending(path: "assets"), withIntermediateDirectories: true)
-        for (name, text) in [("index.html", "<h1>hi</h1>"), ("nginx.conf", "server {}"), ("docker-compose.yml", "services: {}")] {
+        for (name, text) in [("index.html", "<h1>hi</h1>"), ("nginx.conf", "server {}"), ("docker-compose.yml", "services: {}"), ("assets/logo-color.svg", "<svg/>")] {
             try? text.write(to: folder.appending(path: name), atomically: true, encoding: .utf8)
         }
         return folder

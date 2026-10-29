@@ -94,7 +94,7 @@ final class PlayerModel {
 
     func chooseSubtitleFile() {
         let panel = NSOpenPanel()
-        panel.title = "자막 파일 불러오기"
+        panel.title = String(localized: "자막 파일 불러오기")
         panel.allowedContentTypes = ["srt", "ass", "ssa", "vtt", "sub"].compactMap { UTType(filenameExtension: $0) }
         if panel.runModal() == .OK, let url = panel.url {
             player?.addSubtitle(url)
@@ -171,7 +171,7 @@ private struct PlayerView: View {
             NSApp.keyWindow?.toggleFullScreen(nil)
             return .handled
         }
-        .navigationTitle(model.current?.name ?? "영상")
+        .navigationTitle(model.current?.name ?? String(localized: "영상"))
     }
 
     private var placeName: String {
@@ -184,7 +184,7 @@ private struct PlayerView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            BackButton(title: "목록으로") { NSApp.keyWindow?.performClose(nil) }
+            BackButton(title: String(localized: "목록으로")) { NSApp.keyWindow?.performClose(nil) }
                 .buttonStyle(PanelButtonStyle())
                 .fixedSize()
             VStack(alignment: .leading, spacing: 1) {
@@ -207,7 +207,7 @@ private struct PlayerView: View {
             MonoChip(text: "libmpv · FFmpeg", highlighted: true)
             Button { model.showsSidebar.toggle() } label: { Image(systemName: "sidebar.right") }
                 .buttonStyle(IconButtonStyle(isOn: model.showsSidebar))
-                .help("재생 목록")
+                .iconHelp(String(localized: "재생 목록"))
         }
         .padding(12)
     }
@@ -217,17 +217,17 @@ private struct PlayerView: View {
         let hardware = model.state.hardwareDecoder.map { $0 != "no" && !$0.isEmpty } ?? false
         let codec = model.state.videoCodec?.components(separatedBy: " ").first ?? "…"
         let stages: [(String, String, String?)] = [
-            (placeName, model.provider.isLocal ? "이 Mac의 파일" : "\(model.provider.kindLabel) 서버", "read"),
-            ("bottari:// 스트림", "mpv 스트림 콜백", "demux"),
+            (placeName, model.provider.isLocal ? String(localized: "이 Mac의 파일") : String(localized: "\(model.provider.kindLabel) 서버"), "read"),
+            (String(localized: "bottari:// 스트림"), String(localized: "mpv 스트림 콜백"), "demux"),
             ("FFmpeg", "\(model.current?.path.pathExtension.uppercased() ?? "") → \(codec)", "decode"),
-            (hardware ? "VideoToolbox" : "CPU 디코더", hardware ? "하드웨어 디코딩" : "소프트웨어 디코딩", "render"),
-            ("Metal 화면", "자막 포함 렌더링", nil),
+            (hardware ? "VideoToolbox" : String(localized: "CPU 디코더"), hardware ? String(localized: "하드웨어 디코딩") : String(localized: "소프트웨어 디코딩"), "render"),
+            (String(localized: "Metal 화면"), String(localized: "자막 포함 렌더링"), nil),
         ]
         let lastRead = model.reads.first?.offset ?? 0
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("FFmpeg로 직접 재생").font(.ui(.body, weight: .semibold))
-                Text("필요한 부분만 \(model.provider.isLocal ? "디스크에서" : "SFTP로") 직접 읽습니다.")
+                Text("필요한 부분만 \(model.provider.isLocal ? String(localized: "디스크에서") : String(localized: "SFTP로")) 직접 읽습니다.")
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
@@ -251,10 +251,10 @@ private struct PlayerView: View {
                 }
             }
             HStack(spacing: 8) {
-                stat("읽은 위치 / 전체", "\(ByteFormat.string(lastRead)) / \(model.current?.formattedSize ?? "—")")
-                stat("디코더", "\(codec) · \(model.state.hardwareDecoder == nil ? "…" : hardware ? "VideoToolbox" : "CPU")")
-                stat("읽기 요청", "\(model.reads.count)회")
-                stat("임시 파일", "없음")
+                stat(String(localized: "읽은 위치 / 전체"), "\(ByteFormat.string(lastRead)) / \(model.current?.formattedSize ?? "—")")
+                stat(String(localized: "디코더"), "\(codec) · \(model.state.hardwareDecoder == nil ? "…" : hardware ? "VideoToolbox" : "CPU")")
+                stat(String(localized: "읽기 요청"), String(localized: "\(model.reads.count)회"))
+                stat(String(localized: "임시 파일"), String(localized: "없음"))
             }
         }
         .padding(14)
@@ -280,7 +280,7 @@ private struct PlayerView: View {
             VStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.large)
-                Text(model.state.duration == 0 ? "여는 중…" : "버퍼링 중…")
+                Text(model.state.duration == 0 ? String(localized: "여는 중…") : String(localized: "버퍼링 중…"))
                     .font(.ui(.callout))
             }
             .padding(16)
@@ -311,17 +311,19 @@ private struct PlayerView: View {
                 Text("\(timeText(scrubbing ?? model.state.position)) / \(timeText(model.state.duration))")
                     .font(.themeMono(.callout))
                 Button { model.show(model.index - 1) } label: { Image(systemName: "backward.end.fill") }
+                    .iconHelp(String(localized: "이전 영상"))
                     .disabled(model.index == 0)
                 Button { model.show(model.index + 1) } label: { Image(systemName: "forward.end.fill") }
+                    .iconHelp(String(localized: "다음 영상"))
                     .disabled(model.index >= model.items.count - 1)
                 Spacer()
-                trackMenu(.sub, title: "자막", symbol: "captions.bubble")
-                trackMenu(.audio, title: "오디오", symbol: "speaker.wave.2")
+                trackMenu(.sub, title: String(localized: "자막"), symbol: "captions.bubble")
+                trackMenu(.audio, title: String(localized: "오디오"), symbol: "speaker.wave.2")
                 Slider(value: Binding(get: { model.state.volume }, set: { model.setVolume($0) }), in: 0...130)
                     .controlSize(.small)
                     .frame(width: 80)
                 Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                    .help("전체 화면 (F)")
+                    .iconHelp(String(localized: "전체 화면 (F)"))
             }
             .font(.ui(.callout))
             .buttonStyle(.borderless)
@@ -341,7 +343,7 @@ private struct PlayerView: View {
                 Divider()
             }
             if tracks.isEmpty {
-                Text(kind == .sub ? "내장 자막 없음" : "오디오 트랙 없음")
+                Text(kind == .sub ? String(localized: "내장 자막 없음") : String(localized: "오디오 트랙 없음"))
             }
             ForEach(tracks) { track in
                 Button {
@@ -363,14 +365,14 @@ private struct PlayerView: View {
         }
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(title)
+        .iconHelp(title)
     }
 
     private var sidebar: some View {
         ScrollView {
             VStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
-                    SectionLabel("재생 목록").padding(.horizontal, 4)
+                    SectionLabel(String(localized: "재생 목록")).padding(.horizontal, 4)
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         Button {
                             model.show(index)

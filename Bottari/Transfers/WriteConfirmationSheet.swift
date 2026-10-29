@@ -16,23 +16,23 @@ struct WriteConfirmationSheet: View {
     private var site: SavedSite? { writesToGuardedSite ? request.destinationSite : request.sourceSite }
     private var isProd: Bool { site?.tag == .prod }
     private var band: Color { isProd ? SavedSite.Tag.prod.color : .accentColor }
-    private var verb: String { request.kind == .move ? "이동합니다" : "복사합니다" }
+    private var verb: String { request.kind == .move ? String(localized: "이동합니다") : String(localized: "복사합니다") }
 
     private var title: String {
         let name = site?.name ?? ""
         return switch (writesToGuardedSite, isProd) {
-        case (true, true): "운영 서버에 파일을 씁니다"
-        case (true, false): "‘\(name)’에 파일을 씁니다"
-        case (false, true): "운영 서버에서 파일을 이동합니다"
-        case (false, false): "‘\(name)’에서 파일을 이동합니다"
+        case (true, true): String(localized: "운영 서버에 파일을 씁니다")
+        case (true, false): String(localized: "‘\(name)’에 파일을 씁니다")
+        case (false, true): String(localized: "운영 서버에서 파일을 이동합니다")
+        case (false, false): String(localized: "‘\(name)’에서 파일을 이동합니다")
         }
     }
 
     private var summary: String {
         let consequence = writesToGuardedSite
-            ? "같은 이름의 파일은 \(TransferSettings.conflictPolicy.consequence)."
-            : "전송이 끝나면 원본을 삭제합니다."
-        return "다음 \(request.items.count)개 항목을 \(verb). \(consequence)"
+            ? String(localized: "같은 이름의 파일은 \(TransferSettings.conflictPolicy.consequence).")
+            : String(localized: "전송이 끝나면 원본을 삭제합니다.")
+        return String(localized: "다음 \(request.items.count)개 항목을 \(verb). \(consequence)")
     }
 
     private var targetPath: String {
@@ -91,12 +91,12 @@ struct WriteConfirmationSheet: View {
                         .keyboardShortcut(.cancelAction)
                     if isProd {
                         // No Return shortcut: writing to production takes a deliberate click.
-                        Button(request.kind == .move ? "이동" : "복사", role: .destructive) {
+                        Button(request.kind == .move ? String(localized: "이동") : String(localized: "복사"), role: .destructive) {
                             confirm()
                             dismiss()
                         }
                     } else {
-                        Button(request.kind == .move ? "이동" : "복사") {
+                        Button(request.kind == .move ? String(localized: "이동") : String(localized: "복사")) {
                             confirm()
                             dismiss()
                         }

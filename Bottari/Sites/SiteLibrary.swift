@@ -29,7 +29,7 @@ final class SiteLibrary {
         do {
             sites = try store.load()
         } catch {
-            storageError = "저장된 연결을 읽을 수 없습니다: \(error.localizedDescription)"
+            storageError = String(localized: "저장된 연결을 읽을 수 없습니다: \(error.localizedDescription)")
         }
         reloadSSHConfig()
     }
@@ -64,7 +64,7 @@ final class SiteLibrary {
 
     @discardableResult
     func add(_ site: SavedSite = SavedSite(
-        name: "새 서버",
+        name: String(localized: "새 서버"),
         endpoint: SFTPEndpoint(host: "", username: NSUserName()),
         authentication: .agent(socket: nil)
     )) -> SavedSite {
@@ -117,8 +117,8 @@ final class SiteLibrary {
     private func connectS3(_ site: SavedSite, _ settings: SavedSite.S3Settings, typedSecrets: [String: String]) async throws -> S3Provider {
         let stored = secrets
         let key = site.s3SecretKey
-        let secret = try await Task.detached { try typedSecrets[key] ?? stored.secret(for: key) }.value
-        guard let secret, !secret.isEmpty else { throw CloudConnectError("저장된 S3 비밀 키가 없습니다.") }
+        let secret = try await Task.detached { try typedSecrets[key] ?? stored.readableSecret(for: key) }.value
+        guard let secret, !secret.isEmpty else { throw CloudConnectError(String(localized: "저장된 S3 비밀 키가 없습니다.")) }
         let provider = S3Provider(
             configuration: S3Configuration(bucket: settings.bucket, region: settings.region, endpoint: settings.endpoint, accessKey: settings.accessKey, usesPathStyle: settings.usesPathStyle),
             secretKey: secret,
@@ -135,8 +135,8 @@ final class SiteLibrary {
     private func connectDrive(_ site: SavedSite, _ settings: SavedSite.DriveSettings) async throws -> GoogleDriveProvider {
         let stored = secrets
         let key = site.googleSignInKey
-        guard let saved = try await Task.detached(operation: { try stored.secret(for: key) }).value, let archived = Data(base64Encoded: saved) else {
-            throw CloudConnectError("Google 계정에 로그인되어 있지 않습니다. 연결 관리에서 로그인하십시오.")
+        guard let saved = try await Task.detached(operation: { try stored.readableSecret(for: key) }).value, let archived = Data(base64Encoded: saved) else {
+            throw CloudConnectError(String(localized: "Google 계정에 로그인되어 있지 않습니다. 연결 관리에서 로그인하십시오."))
         }
         let authorization = try GoogleAuthorization(archived: archived)
         let provider = GoogleDriveProvider(
@@ -152,13 +152,18 @@ final class SiteLibrary {
         return provider
     }
 
-    /// Opens Google's sign-in page and keeps the result in the Keychain.
+    /// Opens Google's sign-in page and keeps the result in the Keychain. A
+    /// site without a client of its own uses the one built into the app.
     func signInToGoogle(_ site: SavedSite, clientSecret: String?) async throws {
         guard case .googleDrive(var settings) = site.kind else { return }
         let window = NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible } ?? NSWindow()
-        let storedSecret = try? secrets.secret(for: site.googleClientSecretKey)
-        let secret = clientSecret?.isEmpty == false ? clientSecret : storedSecret
-        let authorization = try await GoogleAuthorization.signIn(clientID: settings.clientID, clientSecret: secret, presentingWindow: window)
+        let storedSecret = try? secrets.readableSecret(for: site.googleClientSecretKey)
+        let ownClient = !settings.clientID.isEmpty
+        guard let clientID = ownClient ? settings.clientID : GoogleClient.builtIn?.id else {
+            throw CloudConnectError(String(localized: "OAuth 클라이언트 ID를 입력하십시오."))
+        }
+        let secret = clientSecret?.isEmpty == false ? clientSecret : ownClient ? storedSecret : GoogleClient.builtIn?.secret
+        let authorization = try await GoogleAuthorization.signIn(clientID: clientID, clientSecret: secret, presentingWindow: window)
         try secrets.setSecret(authorization.archived.base64EncodedString(), for: site.googleSignInKey)
         if let clientSecret, !clientSecret.isEmpty {
             try? secrets.setSecret(clientSecret, for: site.googleClientSecretKey)
@@ -194,19 +199,24 @@ final class SiteLibrary {
             let via = try await Task.detached {
                 try detour.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: stored)
             }.value
-            plan.hops = via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential)] + plan.hops
+            plan = plan.through(via)
         }
         let provider = try await SFTPFileProvider.connect(
             to: plan.endpoint,
             credential: plan.credential,
             hostKeys: .knownHosts(AppServices.knownHosts),
             via: plan.hops,
+            proxyCommand: plan.proxyCommand,
             displayName: site.name
         )
         if keepingTypedSecrets, !typedSecrets.isEmpty {
             await Task.detached {
                 for (key, value) in typedSecrets {
-                    try? stored.setSecret(value, for: key)
+                    do {
+                        try stored.setSecret(value, for: key)
+                    } catch {
+                        Log.app.error("키체인에 저장하지 못함: \(key): \(error.localizedDescription)")
+                    }
                 }
             }.value
         }
@@ -219,7 +229,7 @@ final class SiteLibrary {
             storageError = nil
             settingsChanged()
         } catch {
-            storageError = "연결 목록을 저장할 수 없습니다: \(error.localizedDescription)"
+            storageError = String(localized: "연결 목록을 저장할 수 없습니다: \(error.localizedDescription)")
         }
     }
 }
@@ -242,4 +252,17 @@ struct CloudConnectError: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+}
+
+/// The Google Cloud OAuth client a release build carries (Config/release.env),
+/// so Google Drive works without each user making a client of their own.
+enum GoogleClient {
+    static let builtIn: (id: String, secret: String?)? = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        func value(_ key: String) -> String? {
+            guard let text = info[key] as? String, !text.isEmpty, !text.hasPrefix("$(") else { return nil }
+            return text
+        }
+        return value("BottariGoogleClientID").map { ($0, value("BottariGoogleClientSecret")) }
+    }()
 }

@@ -16,7 +16,7 @@ public struct PlayerState: Equatable, Sendable {
         public let isExternal: Bool
 
         public var label: String {
-            [title, language, codec].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty("트랙 \(id)")
+            [title, language, codec].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty(String(localized: "트랙 \(id)"))
         }
     }
 
@@ -60,7 +60,7 @@ public final class MPVPlayer: @unchecked Sendable {
 
     public init(layer: CAMetalLayer?) throws {
         setlocale(LC_NUMERIC, "C")
-        guard let handle = mpv_create() else { throw PlayerError("mpv를 시작할 수 없습니다") }
+        guard let handle = mpv_create() else { throw PlayerError(String(localized: "mpv를 시작할 수 없습니다")) }
         self.handle = handle
         if let layer {
             // mpv draws into the layer through MoltenVK; "wid" is the layer's address.
@@ -74,6 +74,16 @@ public final class MPVPlayer: @unchecked Sendable {
             set("ao", "null")
         }
         set("ytdl", "no")
+        // None of mpv's own Lua scripts (on-screen controls, stats, console …):
+        // Bottari draws its own controls, and LuaJIT writes code into memory at
+        // run time, which the hardened runtime of a signed build kills the app for.
+        // Unknown names in older or newer mpv versions are simply refused.
+        set("config", "no")
+        set("load-scripts", "no")
+        for script in ["osc", "load-stats-overlay", "load-console", "load-osd-console", "load-auto-profiles",
+                       "load-select", "load-commands", "load-context-menu", "load-positioning"] {
+            set(script, "no")
+        }
         set("keep-open", "yes")
         set("idle", "yes")
         set("subs-match-os-language", "yes")
@@ -84,7 +94,7 @@ public final class MPVPlayer: @unchecked Sendable {
         guard mpv_initialize(handle) >= 0 else {
             mpv_terminate_destroy(handle)
             self.handle = nil
-            throw PlayerError("mpv를 초기화할 수 없습니다")
+            throw PlayerError(String(localized: "mpv를 초기화할 수 없습니다"))
         }
         mpv_stream_cb_add_ro(handle, "bottari", Unmanaged.passUnretained(self).toOpaque(), openStream)
         for (name, format) in [
@@ -234,7 +244,7 @@ public final class MPVPlayer: @unchecked Sendable {
                     }
                 case MPV_EVENT_END_FILE:
                     if let end = event.data?.assumingMemoryBound(to: mpv_event_end_file.self).pointee, end.reason == MPV_END_FILE_REASON_ERROR {
-                        self.state.error = "재생할 수 없습니다: \(String(cString: mpv_error_string(end.error)))"
+                        self.state.error = String(localized: "재생할 수 없습니다: \(String(cString: mpv_error_string(end.error)))")
                         changed = true
                     }
                 case MPV_EVENT_SHUTDOWN:

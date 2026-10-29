@@ -14,7 +14,7 @@ public struct SFTPFileProvider: FileProvider {
     /// Whether this account may run commands. Most may; SFTP-only accounts
     /// (chroot jails, many NAS boxes) may not.
     public let canRunCommands: Bool
-    let connection: SFTPConnection
+    let link: SFTPLink
 
     /// Bytes asked for per read request. Servers may answer with less.
     static let chunkSize: UInt32 = 128 * 1024
@@ -26,9 +26,9 @@ public struct SFTPFileProvider: FileProvider {
     static let writeSliceSize = 32_000
 
     public var capabilities: ProviderCapabilities {
-        var capabilities: ProviderCapabilities = [.rangeRead, .resumableWrite, .modificationTime]
+        var capabilities: ProviderCapabilities = [.rangeRead, .resumableWrite, .modificationTime, .permissions]
         if canRunCommands {
-            capabilities.formUnion([.exec, .serverSideCopy, .checksum])
+            capabilities.formUnion([.exec, .serverSideCopy, .checksum, .symbolicLinks])
         }
         return capabilities
     }
@@ -41,16 +41,18 @@ public struct SFTPFileProvider: FileProvider {
         return target + " via " + jumps.map { "\($0.username)@\($0.hostKeyID)" }.joined(separator: ",")
     }
 
-    private var sftp: SFTPClient { connection.sftp }
-
     public static func connect(
         to endpoint: SFTPEndpoint,
         credential: SFTPCredential,
         hostKeys: HostKeyTrust,
         via hops: [SSHHop] = [],
+        proxyCommand: String? = nil,
         displayName: String? = nil
     ) async throws -> SFTPFileProvider {
-        let connection = try await SFTPConnection.open(to: endpoint, credential: credential, hostKeys: hostKeys, via: hops)
+        let reopen: @Sendable () async throws -> SFTPConnection = {
+            try await SFTPConnection.open(to: endpoint, credential: credential, hostKeys: hostKeys, via: hops, proxyCommand: proxyCommand)
+        }
+        let connection = try await reopen()
         do {
             let home = RemotePath(try await connection.sftp.getRealPath(atPath: "."))
             return SFTPFileProvider(
@@ -59,7 +61,7 @@ public struct SFTPFileProvider: FileProvider {
                 endpoint: endpoint,
                 jumps: hops.map(\.endpoint),
                 canRunCommands: await probeCommands(on: connection),
-                connection: connection
+                link: SFTPLink(connection, reopen: reopen)
             )
         } catch {
             await connection.close()
@@ -68,25 +70,30 @@ public struct SFTPFileProvider: FileProvider {
     }
 
     public func disconnect() async {
-        await connection.close()
+        await link.close()
     }
 
     /// The same for every copy of this provider, different for each connection.
-    public var connectionID: ObjectIdentifier { ObjectIdentifier(connection) }
+    /// It stays the same when a dropped connection is opened again.
+    public var connectionID: ObjectIdentifier { ObjectIdentifier(link) }
 
-    public var isConnected: Bool { connection.client.isConnected }
+    public var isConnected: Bool { link.current.client.isConnected }
 
-    /// Runs `action` once the SSH connection drops (or is closed).
+    /// Runs `action` whenever the SSH connection drops (or is closed). The next
+    /// request opens it again; this is for whoever holds channels on it.
     public func whenDisconnected(_ action: @escaping @Sendable () -> Void) {
-        connection.client.onDisconnect(perform: action)
+        link.whenDisconnected(action)
     }
 
     // MARK: - FileProvider
 
     public func list(_ path: RemotePath) async throws -> [FileItem] {
         let names: [SFTPMessage.Name]
+        let sftp: SFTPClient
         do {
-            names = try await sftp.listDirectory(atPath: path.string)
+            (names, sftp) = try await link.retrying { connection in
+                (try await connection.sftp.listDirectory(atPath: path.string), connection.sftp)
+            }
         } catch {
             throw await refine(error, path, expectingDirectory: true)
         }
@@ -105,14 +112,14 @@ public struct SFTPFileProvider: FileProvider {
 
     public func stat(_ path: RemotePath) async throws -> FileItem {
         do {
-            return Self.item(path, try await sftp.getAttributes(at: path.string))
+            return Self.item(path, try await link.retrying { try await $0.sftp.getAttributes(at: path.string) })
         } catch {
             throw Self.translate(error, path)
         }
     }
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
-        let reader = Reader(connection: connection, path: path, start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max)
+        let reader = Reader(link: link, path: path, start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max)
         return AsyncThrowingStream(unfolding: {
             do {
                 return try await reader.next()
@@ -132,6 +139,7 @@ public struct SFTPFileProvider: FileProvider {
         // connection never leaves a half-written file where the original was.
         // What was written stays in the partial file so a retry can resume.
         let temp = path.partialWritePath
+        let sftp = try await link.live().sftp
         do {
             if offset > 0 {
                 // Drop anything past the point the caller resumes from.
@@ -149,7 +157,7 @@ public struct SFTPFileProvider: FileProvider {
             throw Self.translate(error, path)
         }
         do {
-            try await swapIntoPlace(temp, path, backup: parent.appending(".\(path.name).bottari-old"))
+            try await swapIntoPlace(temp, path, backup: parent.appending(".\(path.name).bottari-old"), on: sftp)
         } catch {
             // Everything was written; what went wrong is the destination itself
             // (a folder in the way, no permission), so a resume would not help.
@@ -160,7 +168,19 @@ public struct SFTPFileProvider: FileProvider {
 
     public func setModified(_ date: Date, at path: RemotePath) async throws {
         do {
-            try await sftp.setAttributes(at: path.string, to: SFTPFileAttributes(accessModificationTime: .init(accessTime: date, modificationTime: date)))
+            try await link.retrying {
+                try await $0.sftp.setAttributes(at: path.string, to: SFTPFileAttributes(accessModificationTime: .init(accessTime: date, modificationTime: date)))
+            }
+        } catch {
+            throw Self.translate(error, path)
+        }
+    }
+
+    public func setPermissions(_ mode: UInt16, at path: RemotePath) async throws {
+        var attributes = SFTPFileAttributes()
+        attributes.permissions = UInt32(mode & 0o7777)
+        do {
+            try await link.retrying { try await $0.sftp.setAttributes(at: path.string, to: attributes) }
         } catch {
             throw Self.translate(error, path)
         }
@@ -168,23 +188,57 @@ public struct SFTPFileProvider: FileProvider {
 
     // MARK: - Commands
 
+    /// `ln -s`: Citadel has no SFTP request for links, and OpenSSH's server
+    /// takes that request's two paths in the opposite order to the spec anyway.
+    public func makeSymbolicLink(at path: RemotePath, to target: String) async throws {
+        guard canRunCommands else { throw ProviderError.unsupported(String(localized: "심볼릭 링크")) }
+        _ = try await run("ln -s -- \(Self.quote(target)) \(Self.quote(path.string))")
+    }
+
+    /// `find` on the server when it runs commands, which is far quicker than
+    /// listing every folder over SFTP; the listing walk otherwise.
+    public func search(_ query: String, in folder: RemotePath, limit: Int) -> AsyncThrowingStream<FileItem, any Error> {
+        guard canRunCommands else { return FileSearch.walk(self, from: folder, matching: query, limit: limit) }
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        let pattern = trimmed.contains(where: { $0 == "*" || $0 == "?" }) ? trimmed : "*\(trimmed)*"
+        // Each match comes back as "d path" or "f path"; links to folders count as files.
+        let command = "find \(Self.quote(folder.string)) -mindepth 1 -iname \(Self.quote(pattern)) "
+            + "-exec sh -c 'for p; do if [ -d \"$p\" ] && [ ! -L \"$p\" ]; then echo \"d $p\"; else echo \"f $p\"; fi; done' sh {} + "
+            + "2>/dev/null | head -n \(limit)"
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let output = try await run(command)
+                    for line in output.split(separator: "\n") where line.count > 2 {
+                        let kind: FileItem.Kind = line.hasPrefix("d ") ? .directory : .file
+                        continuation.yield(FileItem(path: RemotePath(String(line.dropFirst(2))), kind: kind))
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     /// Runs a shell command on the server and returns what it printed.
     public func run(_ command: String) async throws -> String {
-        try await Self.run(command, on: connection)
+        try await Self.run(command, on: try await link.live())
     }
 
     /// `cp -a`, so nothing passes through the Mac.
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
-        guard canRunCommands else { throw ProviderError.unsupported("서버 내 복사") }
+        guard canRunCommands else { throw ProviderError.unsupported(String(localized: "서버 내 복사")) }
         _ = try await run("cp -a -- \(Self.quote(from.string)) \(Self.quote(to.string))")
     }
 
     public func checksum(_ path: RemotePath) async throws -> String {
-        guard canRunCommands else { throw ProviderError.unsupported("체크섬") }
+        guard canRunCommands else { throw ProviderError.unsupported(String(localized: "체크섬")) }
         let file = Self.quote(path.string)
         let output = try await run("sha256sum -- \(file) 2>/dev/null || shasum -a 256 -- \(file)")
         guard let hash = output.split(whereSeparator: \.isWhitespace).first, hash.count == 64 else {
-            throw ProviderError.io("체크섬을 읽을 수 없습니다: \(output)")
+            throw ProviderError.io(String(localized: "체크섬을 읽을 수 없습니다: \(output)"))
         }
         return hash.lowercased()
     }
@@ -222,7 +276,7 @@ public struct SFTPFileProvider: FileProvider {
             }
         } catch let failed as SSHClient.CommandFailed {
             let message = String(buffer: errors).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw ProviderError.io("서버 명령 실패 (종료 코드 \(failed.exitCode))" + (message.isEmpty ? "" : ": \(message)"))
+            throw ProviderError.io(String(localized: "서버 명령 실패 (종료 코드 \(failed.exitCode))") + (message.isEmpty ? "" : ": \(message)"))
         }
         return String(buffer: output)
     }
@@ -246,7 +300,7 @@ public struct SFTPFileProvider: FileProvider {
 
     public func makeDirectory(_ path: RemotePath) async throws {
         do {
-            try await sftp.createDirectory(atPath: path.string)
+            try await link.live().sftp.createDirectory(atPath: path.string)
         } catch {
             throw await refineClash(error, path)
         }
@@ -254,7 +308,7 @@ public struct SFTPFileProvider: FileProvider {
 
     public func move(_ from: RemotePath, to: RemotePath) async throws {
         do {
-            try await sftp.rename(at: from.string, to: to.string)
+            try await link.live().sftp.rename(at: from.string, to: to.string)
         } catch {
             if case ProviderError.notFound = Self.translate(error, from) {
                 throw ProviderError.notFound(from)
@@ -266,7 +320,7 @@ public struct SFTPFileProvider: FileProvider {
     public func delete(_ path: RemotePath) async throws {
         do {
             // Unlink first: this also removes symlinks without following them.
-            try await sftp.remove(at: path.string)
+            try await link.live().sftp.remove(at: path.string)
         } catch {
             let translated = Self.translate(error, path)
             if case ProviderError.notFound = translated { throw translated }
@@ -275,7 +329,7 @@ public struct SFTPFileProvider: FileProvider {
                 try await delete(child.path)
             }
             do {
-                try await sftp.rmdir(at: path.string)
+                try await link.live().sftp.rmdir(at: path.string)
             } catch {
                 throw Self.translate(error, path)
             }
@@ -310,7 +364,9 @@ public struct SFTPFileProvider: FileProvider {
     /// keeping a few read requests ahead. The stream calls `next()` from one task
     /// at a time, which is what makes the mutable state safe.
     private final class Reader: @unchecked Sendable {
-        private let connection: SFTPConnection
+        private let link: SFTPLink
+        /// The connection the file was opened on; its handle means nothing on another.
+        private var connection: SFTPConnection?
         private let path: RemotePath
         private let end: Int64
         private var file: UncheckedSendable<SFTPFile>?
@@ -318,8 +374,8 @@ public struct SFTPFileProvider: FileProvider {
         private var ahead: [(offset: Int64, length: Int64, data: Task<ByteBuffer, any Error>)] = []
         private var finished = false
 
-        init(connection: SFTPConnection, path: RemotePath, start: Int64, end: Int64) {
-            self.connection = connection
+        init(link: SFTPLink, path: RemotePath, start: Int64, end: Int64) {
+            self.link = link
             self.path = path
             self.nextRequest = start
             self.end = end
@@ -328,7 +384,7 @@ public struct SFTPFileProvider: FileProvider {
         deinit {
             // The consumer stopped early, e.g. a cancelled transfer or a seek.
             cancelAhead()
-            if let file {
+            if let file, let connection {
                 connection.track { try? await file.value.close() }
             }
         }
@@ -337,7 +393,7 @@ public struct SFTPFileProvider: FileProvider {
             guard !finished else { return nil }
             do {
                 try Task.checkCancellation()
-                let file = try await openedFile()
+                let (file, connection) = try await openedFile()
                 while ahead.count < SFTPFileProvider.readsInFlight, nextRequest < end {
                     let offset = nextRequest
                     let length = min(Int64(SFTPFileProvider.chunkSize), end - offset)
@@ -374,11 +430,13 @@ public struct SFTPFileProvider: FileProvider {
             }
         }
 
-        private func openedFile() async throws -> UncheckedSendable<SFTPFile> {
-            if let file { return file }
+        private func openedFile() async throws -> (UncheckedSendable<SFTPFile>, SFTPConnection) {
+            if let file, let connection { return (file, connection) }
+            let connection = try await link.live()
             let opened = UncheckedSendable(try await connection.sftp.openFile(filePath: path.string, flags: .read))
             file = opened
-            return opened
+            self.connection = connection
+            return (opened, connection)
         }
 
         private func finish() async -> Data? {
@@ -410,7 +468,7 @@ public struct SFTPFileProvider: FileProvider {
 
     /// Moves `temp` onto `path`, keeping the original's permissions. If any step
     /// fails, the original is put back.
-    private func swapIntoPlace(_ temp: RemotePath, _ path: RemotePath, backup: RemotePath) async throws {
+    private func swapIntoPlace(_ temp: RemotePath, _ path: RemotePath, backup: RemotePath, on sftp: SFTPClient) async throws {
         try? await sftp.remove(at: backup.string)
         var hadOriginal = true
         do {
@@ -446,7 +504,7 @@ public struct SFTPFileProvider: FileProvider {
         let translated = Self.translate(error, path)
         switch translated {
         case ProviderError.notFound, ProviderError.io:
-            guard let attributes = try? await sftp.getAttributes(at: path.string) else { return translated }
+            guard let attributes = try? await link.live().sftp.getAttributes(at: path.string) else { return translated }
             let isDirectory = attributes.permissions.map { $0 & 0o170000 == 0o040000 } ?? false
             if expectingDirectory, !isDirectory { return ProviderError.notADirectory(path) }
             if !expectingDirectory, isDirectory { return ProviderError.isADirectory(path) }
@@ -461,7 +519,7 @@ public struct SFTPFileProvider: FileProvider {
         let translated = Self.translate(error, path)
         guard case ProviderError.io = translated,
               let parent = path.parent,
-              let siblings = try? await sftp.listDirectory(atPath: parent.string),
+              let siblings = try? await link.live().sftp.listDirectory(atPath: parent.string),
               siblings.flatMap(\.components).contains(where: { $0.filename == path.name })
         else { return translated }
         return ProviderError.alreadyExists(path)
@@ -506,7 +564,7 @@ public struct SFTPFileProvider: FileProvider {
         case SFTPError.errorStatus(let status):
             return translate(status.errorCode, message: status.message, path)
         case SFTPError.connectionClosed:
-            return ProviderError.io("서버와의 연결이 끊어졌습니다")
+            return ProviderError.io(String(localized: "서버와의 연결이 끊어졌습니다"))
         default:
             return ProviderError.io(String(describing: error))
         }
@@ -517,25 +575,8 @@ public struct SFTPFileProvider: FileProvider {
         case .noSuchFile: .notFound(path)
         case .permissionDenied: .permissionDenied(path)
         case .unsupportedOperation: .unsupported(message.isEmpty ? "SFTP" : message)
-        case .noConnection, .connectionLost: .io("서버와의 연결이 끊어졌습니다")
-        default: .io(message.isEmpty ? "SFTP 오류: \(code)" : message)
+        case .noConnection, .connectionLost: .io(String(localized: "서버와의 연결이 끊어졌습니다"))
+        default: .io(message.isEmpty ? String(localized: "SFTP 오류: \(String(describing: code))") : message)
         }
-    }
-}
-
-/// Resumes a continuation with whichever answer comes first.
-private final class FirstAnswer: Sendable {
-    private let continuation = Mutex<CheckedContinuation<Bool, Never>?>(nil)
-
-    func wait(with continuation: CheckedContinuation<Bool, Never>) {
-        self.continuation.withLock { $0 = continuation }
-    }
-
-    func give(_ answer: Bool) {
-        let waiting = continuation.withLock { current in
-            defer { current = nil }
-            return current
-        }
-        waiting?.resume(returning: answer)
     }
 }

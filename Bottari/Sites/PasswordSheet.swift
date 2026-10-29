@@ -36,22 +36,27 @@ struct PasswordRequest: Identifiable {
             owner = sites.first { $0.passwordKey == key } ?? site
             self.key = key
             isPassphrase = false
-            reason = typed[key] == nil ? nil : "비밀번호가 맞지 않습니다."
+            reason = typed[key] == nil ? nil : String(localized: "비밀번호가 맞지 않습니다.")
+        case SiteConnectError.passwordUnreadable(_, let key):
+            owner = sites.first { $0.passwordKey == key } ?? site
+            self.key = key
+            isPassphrase = false
+            reason = String(localized: "키체인에 저장된 비밀번호를 읽을 수 없습니다. 다시 입력하면 새로 저장합니다.")
         case SFTPConnectError.authenticationFailed:
             owner = site
             key = site.passwordKey
             isPassphrase = false
             reason = switch (typed[key] != nil, site.authentication) {
-            case (true, _): "비밀번호가 맞지 않습니다."
-            case (false, .password): "저장된 비밀번호가 맞지 않습니다."
-            case (false, _): "서버가 키를 거부했습니다. 저장하면 다음부터 키가 거부될 때 이 비밀번호를 사용합니다."
+            case (true, _): String(localized: "비밀번호가 맞지 않습니다.")
+            case (false, .password): String(localized: "저장된 비밀번호가 맞지 않습니다.")
+            case (false, _): String(localized: "서버가 키를 거부했습니다. 저장하면 다음부터 키가 거부될 때 이 비밀번호를 사용합니다.")
             }
         case SFTPConnectError.unreadableKey:
             guard case .keyFile = site.authentication else { return nil }
             owner = site
             key = site.passphraseKey
             isPassphrase = true
-            reason = typed[key] == nil ? nil : "키 암호가 맞지 않습니다."
+            reason = typed[key] == nil ? nil : String(localized: "키 암호가 맞지 않습니다.")
         default:
             return nil
         }
@@ -79,7 +84,7 @@ struct PasswordSheet: View {
     @State private var keeps = true
     @FocusState private var focused: Bool
 
-    private var noun: String { request.isPassphrase ? "키 암호" : "비밀번호" }
+    private var noun: String { request.isPassphrase ? String(localized: "키 암호") : String(localized: "비밀번호") }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

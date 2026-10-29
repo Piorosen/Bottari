@@ -26,14 +26,11 @@ public final class TerminalSession: Sendable {
     private let input: AsyncStream<Input>.Continuation
     private let task: Task<Void, Never>
 
-    init(client: SSHClient, columns: Int, rows: Int, folder: RemotePath?) {
+    init(link: SFTPLink, columns: Int, rows: Int, folder: RemotePath?) {
         let (events, output) = AsyncStream.makeStream(of: Event.self)
         let (inputs, input) = AsyncStream.makeStream(of: Input.self)
         self.events = events
         self.input = input
-        // Citadel's client and PTY handles are not marked Sendable; they only send
-        // through NIO channels, which are.
-        let client = UncheckedSendable(client)
         task = Task {
             let request = SSHChannelRequestEvent.PseudoTerminalRequest(
                 wantReply: true,
@@ -45,6 +42,9 @@ public final class TerminalSession: Sendable {
                 terminalModes: SSHTerminalModes([:])
             )
             do {
+                // Citadel's client and PTY handles are not marked Sendable; they only
+                // send through NIO channels, which are.
+                let client = UncheckedSendable(try await link.live().client)
                 try await client.value.withPTY(request) { inbound, outbound in
                     let inbound = UncheckedSendable(inbound)
                     let outbound = UncheckedSendable(outbound)
@@ -109,13 +109,13 @@ public final class TerminalSession: Sendable {
 extension SFTPFileProvider {
     /// A shell on the server, starting in `folder`.
     public func openTerminal(columns: Int, rows: Int, in folder: RemotePath? = nil) -> TerminalSession {
-        TerminalSession(client: connection.client, columns: columns, rows: rows, folder: folder)
+        TerminalSession(link: link, columns: columns, rows: rows, folder: folder)
     }
 
     /// Listens on a free port of 127.0.0.1 and carries each connection through
     /// SSH to `host:port` as the server sees it, like `ssh -L`.
     public func forward(toHost host: String, port: Int) async throws -> PortForward {
-        try await PortForward.open(on: connection.client, host: host, port: port)
+        try await PortForward.open(on: link.live().client, host: host, port: port)
     }
 }
 
@@ -160,7 +160,7 @@ public final class PortForward: Sendable {
             .get()
         guard let localPort = listener.localAddress?.port else {
             try? await listener.close()
-            throw ProviderError.io("터널 포트를 열 수 없습니다")
+            throw ProviderError.io(String(localized: "터널 포트를 열 수 없습니다"))
         }
         return PortForward(localPort: localPort, listener: listener)
     }

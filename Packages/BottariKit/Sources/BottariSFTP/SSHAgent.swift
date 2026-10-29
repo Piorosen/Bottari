@@ -1,3 +1,4 @@
+import Citadel
 import Crypto
 import Foundation
 import NIOCore
@@ -114,65 +115,50 @@ enum SSHAgentError: Error, Equatable {
     case unexpectedReply
 }
 
-// MARK: - Agent-held Ed25519 keys for NIOSSH
+// MARK: - Agent-held keys for NIOSSH
 
-/// An Ed25519 key whose private half stays in the agent; NIOSSH asks it to sign.
-/// On the wire it is indistinguishable from a normal `ssh-ed25519` key.
-struct AgentEd25519PrivateKey: NIOSSHPrivateKeyProtocol {
-    static let keyPrefix = "ssh-ed25519"
+extension SSHAgentClient {
+    /// One authentication attempt per way to offer each key the agent holds,
+    /// and how many keys it holds; nil if the agent cannot be asked.
+    func attempts(username: String) -> (attempts: [SSHAuthenticationMethod], held: Int)? {
+        guard let identities = try? identities() else { return nil }
+        return (offers(for: identities, username: username), identities.count)
+    }
 
-    let agent: SSHAgentClient
-    let identity: SSHAgentClient.Identity
-    let rawPublicKey: Data
+    /// Ed25519 and ECDSA keys as they are, RSA with SHA-512, then RSA with
+    /// SHA-1 after all of them, for servers too old for SHA-2. Certificates
+    /// and security keys (`sk-…`) are left out.
+    func offers(for identities: [Identity], username: String) -> [SSHAuthenticationMethod] {
+        var preferred: [SSHAuthenticationMethod] = []
+        var legacy: [SSHAuthenticationMethod] = []
+        func offer<Kind>(_ key: OfferedPrivateKey<Kind>) -> SSHAuthenticationMethod {
+            PrivateKeyFile.offer(key, username: username)
+        }
+        for identity in identities {
+            switch identity.keyType {
+            case Ed25519Kind.name: preferred.append(offer(key(Ed25519Kind.self, identity)))
+            case ECDSAP256Kind.name: preferred.append(offer(key(ECDSAP256Kind.self, identity)))
+            case ECDSAP384Kind.name: preferred.append(offer(key(ECDSAP384Kind.self, identity)))
+            case ECDSAP521Kind.name: preferred.append(offer(key(ECDSAP521Kind.self, identity)))
+            case RSASHA1Kind.name:
+                preferred.append(offer(key(RSASHA512Kind.self, identity, flags: RSASHA512Kind.agentFlags)))
+                legacy.append(offer(key(RSASHA1Kind.self, identity, flags: RSASHA1Kind.agentFlags)))
+            default:
+                continue
+            }
+        }
+        return preferred + legacy
+    }
 
-    init?(agent: SSHAgentClient, identity: SSHAgentClient.Identity) {
+    /// The agent's key `identity` offered as `Kind`, the agent signing with `flags`.
+    func key<Kind: OfferedKeyKind>(_ kind: Kind.Type, _ identity: Identity, flags: UInt32 = 0) -> OfferedPrivateKey<Kind> {
         var wire = SSHWire(identity.blob)
-        guard let type = try? wire.readString(), type == Data(Self.keyPrefix.utf8),
-              let raw = try? wire.readString(), raw.count == 32 else { return nil }
-        self.agent = agent
-        self.identity = identity
-        self.rawPublicKey = raw
-    }
-
-    var publicKey: NIOSSHPublicKeyProtocol {
-        AgentEd25519PublicKey(rawRepresentation: rawPublicKey)
-    }
-
-    func signature<D: DataProtocol>(for data: D) throws -> NIOSSHSignatureProtocol {
-        var reply = SSHWire(try agent.sign(Data(data), with: identity.blob))
-        guard try reply.readString() == Data(Self.keyPrefix.utf8) else { throw SSHAgentError.unexpectedReply }
-        return AgentEd25519Signature(rawRepresentation: try reply.readString())
-    }
-}
-
-struct AgentEd25519PublicKey: NIOSSHPublicKeyProtocol {
-    static let publicKeyPrefix = "ssh-ed25519"
-    let rawRepresentation: Data
-
-    func isValidSignature<D: DataProtocol>(_ signature: NIOSSHSignatureProtocol, for data: D) -> Bool {
-        guard let key = try? Curve25519.Signing.PublicKey(rawRepresentation: rawRepresentation) else { return false }
-        return key.isValidSignature(signature.rawRepresentation, for: data)
-    }
-
-    func write(to buffer: inout ByteBuffer) -> Int {
-        buffer.writeSSHString(rawRepresentation)
-    }
-
-    static func read(from buffer: inout ByteBuffer) throws -> AgentEd25519PublicKey {
-        AgentEd25519PublicKey(rawRepresentation: try buffer.readSSHString())
-    }
-}
-
-struct AgentEd25519Signature: NIOSSHSignatureProtocol {
-    static let signaturePrefix = "ssh-ed25519"
-    let rawRepresentation: Data
-
-    func write(to buffer: inout ByteBuffer) -> Int {
-        buffer.writeSSHString(rawRepresentation)
-    }
-
-    static func read(from buffer: inout ByteBuffer) throws -> AgentEd25519Signature {
-        AgentEd25519Signature(rawRepresentation: try buffer.readSSHString())
+        _ = try? wire.readString()
+        return OfferedPrivateKey<Kind>(body: wire.remainder) { [self] data in
+            var reply = SSHWire(try sign(data, with: identity.blob, flags: flags))
+            guard try reply.readString() == Data(Kind.name.utf8) else { throw SSHAgentError.unexpectedReply }
+            return try reply.readString()
+        }
     }
 }
 
@@ -226,6 +212,11 @@ struct SSHWire {
         let value = data[offset..<offset + 4].reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
         offset += 4
         return value
+    }
+
+    /// Everything not read yet.
+    var remainder: Data {
+        Data(data[offset...])
     }
 
     mutating func readString() throws -> Data {

@@ -54,7 +54,7 @@ struct MainWindow: View {
             }
         }
         .alert(
-            "작업을 완료할 수 없습니다",
+            String(localized: "작업을 완료할 수 없습니다"),
             isPresented: Binding(get: { workspace.refusal != nil }, set: { if !$0 { workspace.refusal = nil } })
         ) {
             Button("확인") {}
@@ -117,7 +117,7 @@ struct MainWindow: View {
             Button {
                 openWindow(id: "transfers")
             } label: {
-                Label(activeTransfers > 0 ? "전송 \(activeTransfers)" : "전송", glyph: "bt.transfer", size: 17)
+                Label(activeTransfers > 0 ? String(localized: "전송 \(activeTransfers)") : String(localized: "전송"), glyph: "bt.transfer", size: 17)
                     .labelStyle(.titleAndIcon)
             }
             .help("전송 센터")
@@ -132,7 +132,7 @@ struct MainWindow: View {
             } label: {
                 Label("미리보기", glyph: "bt.inspector", size: 17)
             }
-            .help(workspace.showsInspector ? "미리보기 닫기" : "미리보기 열기")
+            .help(workspace.showsInspector ? String(localized: "미리보기 닫기") : String(localized: "미리보기 열기"))
             Button {
                 openSettings()
             } label: {

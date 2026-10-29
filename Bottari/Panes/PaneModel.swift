@@ -31,6 +31,14 @@ final class PaneModel {
     private(set) var downloadStatus: String?
     @ObservationIgnored private var previewDownload: Task<Void, Never>?
 
+    /// What to find under the folder; nil while the pane shows the folder itself.
+    private(set) var searchQuery: String?
+    private(set) var searchResults: [FileItem] = []
+    private(set) var isSearching = false
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    /// Matches shown at most; a search stops there.
+    static let searchLimit = 500
+
     private var backStack: [RemotePath] = []
     private var forwardStack: [RemotePath] = []
     private var siteID: SavedSite.ID?
@@ -53,7 +61,21 @@ final class PaneModel {
         (provider as? SFTPFileProvider).map { "\($0.endpoint.username)@\($0.endpoint.hostKeyID)" }
     }
     var visibleItems: [FileItem] { showsHiddenFiles ? items : items.filter { !$0.isHidden } }
-    var selectedItems: [FileItem] { items.filter { selection.contains($0.id) } }
+    var selectedItems: [FileItem] { items(withIDs: selection) }
+    /// What the list shows: search results once something is typed to find,
+    /// the folder otherwise.
+    var shownItems: [FileItem] {
+        guard showsSearchResults else { return visibleItems }
+        return showsHiddenFiles ? searchResults : searchResults.filter { !$0.isHidden }
+    }
+
+    var showsSearchResults: Bool {
+        !(searchQuery ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    func items(withIDs ids: Set<FileItem.ID>) -> [FileItem] {
+        (showsSearchResults ? searchResults : items).filter { ids.contains($0.id) }
+    }
     var canGoBack: Bool { !backStack.isEmpty || path.parent != nil }
     var canGoForward: Bool { !forwardStack.isEmpty }
 
@@ -87,7 +109,7 @@ final class PaneModel {
         forwardStack = []
         hasStarted = true
         if await !load(start), start != newProvider.home, await load(newProvider.home) {
-            errorMessage = "시작 폴더를 열 수 없어 홈 폴더를 열었습니다: \(start.string)"
+            errorMessage = String(localized: "시작 폴더를 열 수 없어 홈 폴더를 열었습니다: \(start.string)")
         }
         await AppServices.connections.release(previous)
     }
@@ -183,6 +205,63 @@ final class PaneModel {
         errorMessage = nil
     }
 
+    // MARK: - Search
+
+    func beginSearch() {
+        if searchQuery == nil { searchQuery = "" }
+    }
+
+    /// Looks for `query` under the folder, a moment after the typing stops.
+    func search(_ query: String) {
+        searchQuery = query
+        searchTask?.cancel()
+        searchResults = []
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            isSearching = false
+            return
+        }
+        isSearching = true
+        let provider = provider
+        let folder = path
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            do {
+                for try await item in provider.search(query, in: folder, limit: Self.searchLimit) {
+                    guard !Task.isCancelled else { return }
+                    self?.searchResults.append(item)
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.errorMessage = error.localizedDescription
+            }
+            self?.isSearching = false
+        }
+    }
+
+    func endSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        searchQuery = nil
+        searchResults = []
+        isSearching = false
+    }
+
+    /// Opens the folder holding a search result, with the result selected.
+    func reveal(_ item: FileItem) async {
+        guard let parent = item.path.parent else { return }
+        endSearch()
+        await open(parent)
+        if path == parent { selection = [item.id] }
+    }
+
+    /// Where a result sits, relative to the folder searched: "logs/old".
+    func searchLocation(of item: FileItem) -> String {
+        guard let parent = item.path.parent, parent != path else { return "" }
+        let prefix = path.string.hasSuffix("/") ? path.string : path.string + "/"
+        return parent.string.hasPrefix(prefix) ? String(parent.string.dropFirst(prefix.count)) : parent.string
+    }
+
     // MARK: - Quick Look
 
     /// Space: previews the selection, or closes the preview. Files on a server
@@ -223,10 +302,10 @@ final class PaneModel {
     /// A local copy of a server file through the cache, reporting progress in the footer.
     func download(_ item: FileItem) async throws -> URL {
         let total = item.size.map { ByteFormat.string($0) }
-        downloadStatus = "받는 중…"
+        downloadStatus = String(localized: "받는 중…")
         defer { downloadStatus = nil }
         return try await AppServices.fileCache.localURL(for: item, from: provider) { [weak self] received in
-            let text = "받는 중 · \(ByteFormat.string(received))" + (total.map { " / \($0)" } ?? "")
+            let text = String(localized: "받는 중 · \(ByteFormat.string(received))") + (total.map { " / \($0)" } ?? "")
             Task { @MainActor in
                 if self?.downloadStatus != nil { self?.downloadStatus = text }
             }
@@ -237,7 +316,7 @@ final class PaneModel {
 
     /// Creates "새 폴더" (or the next free name) and starts renaming it, like Finder.
     func makeFolder() async {
-        let name = FileNames.available("새 폴더", isDirectory: true, taken: Set(items.map(\.name)))
+        let name = FileNames.available(String(localized: "새 폴더"), isDirectory: true, taken: Set(items.map(\.name)))
         let folder = path.appending(name)
         do {
             try await provider.makeDirectory(folder)
@@ -273,6 +352,67 @@ final class PaneModel {
         selection = [target]
     }
 
+    /// Which items under a chosen folder a permission change reaches.
+    enum PermissionScope: CaseIterable {
+        case chosenOnly, everything, filesOnly, foldersOnly
+
+        var title: String {
+            switch self {
+            case .chosenOnly: String(localized: "선택한 항목만")
+            case .everything: String(localized: "하위 폴더와 파일 모두")
+            case .filesOnly: String(localized: "하위 파일만")
+            case .foldersOnly: String(localized: "하위 폴더만")
+            }
+        }
+    }
+
+    /// Sets `mode` on the chosen items and, by `scope`, on what is inside the
+    /// chosen folders. Linked folders are not entered.
+    func setPermissions(_ mode: UInt16, on chosen: [FileItem], scope: PermissionScope) async {
+        isLoading = true
+        do {
+            for item in chosen {
+                try await provider.setPermissions(mode, at: item.path)
+                if item.isDirectory, !item.isSymbolicLink, scope != .chosenOnly {
+                    try await setPermissions(mode, inside: item.path, scope: scope)
+                }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await reload()
+    }
+
+    private func setPermissions(_ mode: UInt16, inside folder: RemotePath, scope: PermissionScope) async throws {
+        for child in try await provider.list(folder) {
+            let applies = scope == .everything || (scope == .filesOnly) != child.isDirectory
+            if applies, !child.isSymbolicLink {
+                try await provider.setPermissions(mode, at: child.path)
+            }
+            if child.isDirectory, !child.isSymbolicLink {
+                try await setPermissions(mode, inside: child.path, scope: scope)
+            }
+        }
+    }
+
+    /// Makes "<name> 링크" here pointing at `item`, and starts renaming it like
+    /// Finder's Make Alias. The link holds the bare name when the item is in
+    /// this folder, so it survives the folder moving; its full path otherwise.
+    func makeLink(to item: FileItem) async {
+        let name = FileNames.available(String(localized: "\(item.name) 링크"), isDirectory: false, taken: Set(items.map(\.name)))
+        let link = path.appending(name)
+        do {
+            try await provider.makeSymbolicLink(at: link, to: item.path.parent == path ? item.name : item.path.string)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        endSearch()
+        await reload()
+        selection = [link]
+        renaming = link
+    }
+
     /// Moves items to the trash where the provider has one, otherwise deletes them.
     func remove(_ doomed: [FileItem], permanently: Bool) async {
         let trash = !permanently && provider.capabilities.contains(.trash)
@@ -295,7 +435,7 @@ final class PaneModel {
     /// Packs items into "<name>.tar.gz" (or "보관함.tar.gz" for several) on the server.
     func compressOnServer(_ chosen: [FileItem]) async {
         guard let server = provider as? SFTPFileProvider, let first = chosen.first else { return }
-        let base = chosen.count == 1 ? first.name : "보관함"
+        let base = chosen.count == 1 ? first.name : String(localized: "보관함")
         let archive = path.appending(FileNames.available("\(base).tar.gz", isDirectory: false, taken: Set(items.map(\.name))))
         await runOnServer {
             try await server.compress(chosen.map(\.path), into: archive)
@@ -307,7 +447,7 @@ final class PaneModel {
     func extractOnServer(_ archive: FileItem) async {
         guard let server = provider as? SFTPFileProvider else { return }
         let name = archive.name.replacingOccurrences(of: #"\.(tar\.(gz|bz2|xz)|tgz|tar|zip)$"#, with: "", options: [.regularExpression, .caseInsensitive])
-        let folder = path.appending(FileNames.available(name.isEmpty ? "풀린 파일" : name, isDirectory: true, taken: Set(items.map(\.name))))
+        let folder = path.appending(FileNames.available(name.isEmpty ? String(localized: "풀린 파일") : name, isDirectory: true, taken: Set(items.map(\.name))))
         await runOnServer {
             try await server.extract(archive.path, into: folder)
         }
@@ -351,9 +491,12 @@ final class PaneModel {
         do {
             let listing = try await provider.list(destination)
             guard generation == loadGeneration else { return false }
+            if destination != path { endSearch() }
             path = destination
             items = listing
-            selection = keepingSelection ? selection.intersection(listing.map(\.id)) : []
+            if searchQuery == nil {
+                selection = keepingSelection ? selection.intersection(listing.map(\.id)) : []
+            }
             errorMessage = nil
             return true
         } catch {

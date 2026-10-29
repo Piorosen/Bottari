@@ -6,14 +6,87 @@ import Synchronization
 public struct TransferEndpoint: Sendable {
     public let provider: any FileProvider
     public let name: String
+    /// How the app finds this place again after a restart, e.g. a saved
+    /// site's ID. Without it on both sides a job is not saved for later.
+    public let place: String?
 
-    public init(_ provider: any FileProvider, name: String? = nil) {
+    public init(_ provider: any FileProvider, name: String? = nil, place: String? = nil) {
         self.provider = provider
         self.name = name ?? provider.displayName
+        self.place = place
     }
 }
 
-public enum TransferKind: Sendable {
+/// A job as far as it got, saved so it can carry on after the app restarts.
+public struct TransferRecord: Codable, Identifiable, Hashable, Sendable {
+    public struct Place: Codable, Hashable, Sendable {
+        /// `TransferEndpoint.place`.
+        public var place: String
+        public var name: String
+
+        public init(place: String, name: String) {
+            self.place = place
+            self.name = name
+        }
+    }
+
+    public var id: UUID
+    public var kind: TransferKind
+    /// The files and folders the user picked.
+    public var items: [RemotePath]
+    public var source: Place
+    public var destination: Place
+    public var folder: RemotePath
+    public var policy: ConflictPolicy
+    public var verifiesChecksums: Bool
+    /// Source files already transferred or skipped; a resumed job leaves them be.
+    public var done: [RemotePath]
+    /// Source files cut off midway, whose partial copies a resumed job continues.
+    public var unfinished: [RemotePath]
+    public var totalFiles: Int
+    public var totalBytes: Int64
+    public var transferredBytes: Int64
+    public var savedAt: Date
+
+    public init(
+        id: UUID,
+        kind: TransferKind,
+        items: [RemotePath],
+        source: Place,
+        destination: Place,
+        folder: RemotePath,
+        policy: ConflictPolicy,
+        verifiesChecksums: Bool,
+        done: [RemotePath],
+        unfinished: [RemotePath],
+        totalFiles: Int,
+        totalBytes: Int64,
+        transferredBytes: Int64,
+        savedAt: Date
+    ) {
+        self.id = id
+        self.kind = kind
+        self.items = items
+        self.source = source
+        self.destination = destination
+        self.folder = folder
+        self.policy = policy
+        self.verifiesChecksums = verifiesChecksums
+        self.done = done
+        self.unfinished = unfinished
+        self.totalFiles = totalFiles
+        self.totalBytes = totalBytes
+        self.transferredBytes = transferredBytes
+        self.savedAt = savedAt
+    }
+
+    public var name: String {
+        guard let first = items.first else { return "" }
+        return items.count == 1 ? first.name : String(localized: "\(first.name) 외 \(items.count - 1)개")
+    }
+}
+
+public enum TransferKind: String, Codable, Sendable {
     case copy
     /// Copy, then remove the originals.
     case move

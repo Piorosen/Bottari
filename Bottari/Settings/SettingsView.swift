@@ -53,11 +53,11 @@ enum SettingsSection: CaseIterable {
 
     var title: String {
         switch self {
-        case .look: "모양"
-        case .keys: "단축키"
-        case .sync: "iCloud 동기화"
-        case .transfers: "전송"
-        case .connections: "연결"
+        case .look: String(localized: "모양")
+        case .keys: String(localized: "단축키")
+        case .sync: String(localized: "iCloud 동기화")
+        case .transfers: String(localized: "전송")
+        case .connections: String(localized: "연결")
         }
     }
 
@@ -144,14 +144,16 @@ struct GeneralSettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsGroup("전송") {
+                SettingsGroup(String(localized: "전송")) {
                     HStack {
                         Text("최대 동시 전송").font(.ui(.body, weight: .medium))
                         Spacer()
                         Button { maxConcurrent = max(1, maxConcurrent - 1) } label: { Image(systemName: "minus") }
+                            .iconHelp(String(localized: "동시 전송 줄이기"))
                             .buttonStyle(IconButtonStyle())
                         Text("\(maxConcurrent)").font(.themeMono(.body)).frame(minWidth: 24)
                         Button { maxConcurrent = min(8, maxConcurrent + 1) } label: { Image(systemName: "plus") }
+                            .iconHelp(String(localized: "동시 전송 늘리기"))
                             .buttonStyle(IconButtonStyle())
                     }
                     Rectangle().fill(Palette.line).frame(height: 1)
@@ -166,11 +168,11 @@ struct GeneralSettings: View {
                         }
                     }
                     Rectangle().fill(Palette.line).frame(height: 1)
-                    SettingSwitch(title: "보낸 뒤 체크섬 비교", detail: "SHA-256 사용, 서버는 명령을 실행할 수 있는 경우에만 지원", isOn: $verifiesChecksums)
+                    SettingSwitch(title: String(localized: "보낸 뒤 체크섬 비교"), detail: String(localized: "SHA-256 사용, 서버는 명령을 실행할 수 있는 경우에만 지원"), isOn: $verifiesChecksums)
                 }
-                SettingsGroup("업데이트") {
+                SettingsGroup(String(localized: "업데이트")) {
                     if Updates.shared.isAvailable {
-                        SettingSwitch(title: "자동으로 업데이트 확인", isOn: Binding(get: { Updates.shared.automaticallyChecks }, set: { Updates.shared.automaticallyChecks = $0 }))
+                        SettingSwitch(title: String(localized: "자동으로 업데이트 확인"), isOn: Binding(get: { Updates.shared.automaticallyChecks }, set: { Updates.shared.automaticallyChecks = $0 }))
                         Button("지금 확인") { Updates.shared.checkForUpdates() }
                             .buttonStyle(PanelButtonStyle())
                             .fixedSize()
@@ -202,7 +204,7 @@ struct ConnectionSettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsGroup("알려진 호스트 키", footer: "처음 연결할 때 서버 키를 저장하고, 이후 키가 다르면 연결하지 않습니다. 서버를 다시 설치한 경우 여기서 키를 삭제한 후 다시 연결하십시오.") {
+                SettingsGroup(String(localized: "알려진 호스트 키"), footer: String(localized: "처음 연결할 때 서버 키를 저장하고, 이후 키가 다르면 연결하지 않습니다. 서버를 다시 설치한 경우 여기서 키를 삭제한 후 다시 연결하십시오.")) {
                     if keys.isEmpty {
                         Text("저장된 키 없음").font(.ui(.callout)).foregroundStyle(.secondary)
                     }
@@ -228,7 +230,7 @@ struct ConnectionSettings: View {
                         }
                     }
                 }
-                SettingsGroup("비밀번호와 키 암호") {
+                SettingsGroup(String(localized: "비밀번호와 키 암호")) {
                     Label("macOS 키체인에만 저장됩니다. 연결 목록 파일과 iCloud 동기화 파일에는 포함되지 않습니다.", systemImage: "lock.fill")
                         .font(.ui(.callout))
                 }
@@ -249,7 +251,7 @@ struct AppearanceSettings: View {
         HStack(alignment: .top, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    SettingsGroup("테마") {
+                    SettingsGroup(String(localized: "테마")) {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 12) {
                             ForEach(Theme.presets, id: \.theme.name) { preset in
                                 Button {
@@ -261,14 +263,14 @@ struct AppearanceSettings: View {
                             }
                         }
                     }
-                    SettingsGroup("강조 색") {
+                    SettingsGroup(String(localized: "강조 색")) {
                         HStack(spacing: 10) {
-                            swatch(nil, label: "시스템")
+                            swatch(nil, label: String(localized: "시스템"))
                             ForEach(Theme.accents, id: \.hex) { accent in
                                 swatch(accent.hex, label: accent.name)
                             }
                             Rectangle().fill(Palette.line).frame(width: 1, height: 20)
-                            ColorPicker("사용자 지정 색", selection: accentBinding, supportsOpacity: false)
+                            ColorPicker(String(localized: "사용자 지정 색"), selection: accentBinding, supportsOpacity: false)
                                 .labelsHidden()
                             TextField("색 코드", text: $accentText, prompt: Text(verbatim: "#3651C9"))
                                 .designField(mono: true)
@@ -276,7 +278,7 @@ struct AppearanceSettings: View {
                                 .onSubmit(applyAccentText)
                         }
                     }
-                    SettingsGroup("글자와 간격") {
+                    SettingsGroup(String(localized: "글자와 간격")) {
                         HStack {
                             Text("밀도").font(.ui(.body, weight: .medium))
                             Spacer()
@@ -287,14 +289,14 @@ struct AppearanceSettings: View {
                             }
                         }
                         Rectangle().fill(Palette.line).frame(height: 1)
-                        fontChoices("본문 글꼴", system: "시스템 (SF)", choices: ThemeStore.uiFontChoices, selection: binding(\.font.ui), mono: false)
+                        fontChoices(String(localized: "본문 글꼴"), system: String(localized: "시스템 (SF)"), choices: ThemeStore.uiFontChoices, selection: binding(\.font.ui), mono: false)
                         Rectangle().fill(Palette.line).frame(height: 1)
-                        fontChoices("고정폭 글꼴 (경로, 크기, 코드)", system: "시스템 (SF Mono)", choices: ThemeStore.monoFontChoices, selection: binding(\.font.mono), mono: true)
+                        fontChoices(String(localized: "고정폭 글꼴 (경로, 크기, 코드)"), system: String(localized: "시스템 (SF Mono)"), choices: ThemeStore.monoFontChoices, selection: binding(\.font.mono), mono: true)
                         Rectangle().fill(Palette.line).frame(height: 1)
-                        SettingSwitch(title: "새 패인에서 숨김 파일 보기", isOn: binding(\.list.showHidden))
-                        SettingSwitch(title: "Finder 아이콘 사용", detail: "선 아이콘 대신 Finder의 색 아이콘", isOn: binding(\.list.finderIcons))
+                        SettingSwitch(title: String(localized: "새 패인에서 숨김 파일 보기"), isOn: binding(\.list.showHidden))
+                        SettingSwitch(title: String(localized: "Finder 아이콘 사용"), detail: String(localized: "선 아이콘 대신 Finder의 색 아이콘"), isOn: binding(\.list.finderIcons))
                     }
-                    SettingsGroup("서버 태그 색") {
+                    SettingsGroup(String(localized: "서버 태그 색")) {
                         ForEach(Theme.tagChoices, id: \.tag) { choice in
                             HStack(spacing: 10) {
                                 TagChip(tag: choice.tag)
@@ -335,7 +337,7 @@ struct AppearanceSettings: View {
     }
 
     private var themeFiles: some View {
-        SettingsGroup("테마 파일", footer: "~/Library/Application Support/Bottari/themes/에 저장됨") {
+        SettingsGroup(String(localized: "테마 파일"), footer: String(localized: "~/Library/Application Support/Bottari/themes/에 저장됨")) {
             HStack {
                 Button("가져오기…", action: importTheme).buttonStyle(PanelButtonStyle()).fixedSize()
                 Button("내보내기…", action: exportTheme).buttonStyle(PanelButtonStyle()).fixedSize()
@@ -373,7 +375,7 @@ struct AppearanceSettings: View {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(IconButtonStyle())
-                    .help("테마 파일 삭제")
+                    .iconHelp(String(localized: "테마 파일 삭제"))
                 }
             }
             DisclosureGroup("JSON 보기") {
@@ -436,7 +438,7 @@ struct AppearanceSettings: View {
                 }
                 // A theme from elsewhere may name a font this Mac does not have.
                 if let missing = selection.wrappedValue, !choices.contains(missing) {
-                    fontCard(missing, label: "\(missing) (설치 안 됨)", selection: selection, mono: mono)
+                    fontCard(missing, label: String(localized: "\(missing) (설치 안 됨)"), selection: selection, mono: mono)
                 }
             }
         }
@@ -448,7 +450,7 @@ struct AppearanceSettings: View {
             selection.wrappedValue = family
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(mono ? "/var/www 2.8 KB" : "가나다 Aa")
+                Text(mono ? "/var/www 2.8 KB" : String(localized: "가나다 Aa"))
                     .font(family.map { .custom($0, size: 15) } ?? .system(size: 15, design: mono ? .monospaced : .default))
                 Text(label).font(.ui(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -470,7 +472,7 @@ struct AppearanceSettings: View {
             try store.importTheme(from: url)
             fileError = nil
         } catch {
-            fileError = "테마 파일을 읽을 수 없습니다: \(error.localizedDescription)"
+            fileError = String(localized: "테마 파일을 읽을 수 없습니다: \(error.localizedDescription)")
         }
     }
 
@@ -485,7 +487,7 @@ struct AppearanceSettings: View {
             try store.export(to: url)
             fileError = nil
         } catch {
-            fileError = "테마 파일을 저장할 수 없습니다: \(error.localizedDescription)"
+            fileError = String(localized: "테마 파일을 저장할 수 없습니다: \(error.localizedDescription)")
         }
     }
 }
@@ -553,7 +555,7 @@ struct ThemePreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("미리보기")
+            SectionLabel(String(localized: "미리보기"))
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("서버").font(.ui(.caption2)).foregroundStyle(.secondary)
@@ -628,7 +630,7 @@ struct KeySettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsGroup("기본 배열") {
+                SettingsGroup(String(localized: "기본 배열")) {
                     HStack(spacing: 10) {
                         ForEach(KeyLayout.allCases) { layout in
                             let selected = keymap.layout == layout
@@ -649,28 +651,28 @@ struct KeySettings: View {
                         }
                     }
                 }
-                SettingsGroup("단축키", footer: "단축키를 클릭한 후 새 키를 누르십시오. Esc를 누르면 취소됩니다. ⌘ 또는 ⌃ 조합과 F 키는 메뉴에도 표시되며, Space, ↵, Tab 같은 키는 파일 목록에서만 동작합니다.") {
+                SettingsGroup(String(localized: "단축키"), footer: String(localized: "단축키를 클릭한 후 새 키를 누르십시오. Esc를 누르면 취소됩니다. ⌘ 또는 ⌃ 조합과 F 키는 메뉴에도 표시되며, Space, ↵, Tab 같은 키는 파일 목록에서만 동작합니다.")) {
                     ForEach(PaneAction.allCases) { action in
                         HStack(spacing: 8) {
                             Text(action.title).font(.ui(.body))
                             Spacer()
                             if recording != action, let clash = keymap.clash(for: action) {
-                                Badge("겹침: \(clash)", color: .orange)
+                                Badge(String(localized: "겹침: \(clash)"), color: .orange)
                             }
                             if keymap.isCustom(action) {
-                                Badge("사용자 지정", color: .themeAccent)
+                                Badge(String(localized: "사용자 지정"), color: .themeAccent)
                                 Button {
                                     keymap.set(nil, for: action)
                                 } label: {
                                     Image(systemName: "arrow.uturn.backward")
                                 }
                                 .buttonStyle(.borderless)
-                                .help("\(keymap.layout.title) 기본값 복원")
+                                .iconHelp(String(localized: "\(keymap.layout.title) 기본값 복원"))
                             }
                             Button {
                                 recording == action ? stopRecording() : startRecording(action)
                             } label: {
-                                Text(recording == action ? "키 입력 대기 중…" : keymap.combo(for: action).description)
+                                Text(recording == action ? String(localized: "키 입력 대기 중…") : keymap.combo(for: action).description)
                                     .font(.themeMono(.body))
                                     .foregroundStyle(recording == action ? Color.themeAccent : Palette.text)
                                     .frame(minWidth: 120)
@@ -732,28 +734,28 @@ struct SyncSettings: View {
                             .foregroundStyle(Color(light: 0x0F7C5A, dark: 0x3CC48E))
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel("동기화할 항목")
+                        SectionLabel(String(localized: "동기화할 항목"))
                         ForEach(SettingsSync.Item.allCases) { item in
                             SettingSwitch(title: item.title, detail: item.subtitle, isOn: Binding(get: { sync.items.contains(item) }, set: { sync.set(item, on: $0) }))
                                 .padding(12)
                                 .card()
                         }
-                        SettingSwitch(title: "비밀번호와 키 암호", detail: "iCloud 키체인 사용, Developer ID 서명과 키체인 공유 권한 필요", badge: "서명된 앱 필요", isOn: .constant(false))
+                        SettingSwitch(title: String(localized: "비밀번호와 키 암호"), detail: String(localized: "iCloud 키체인 사용, Developer ID 서명과 키체인 공유 권한 필요"), badge: String(localized: "서명된 앱 필요"), isOn: .constant(false))
                             .disabled(true)
                             .padding(12)
                             .card()
                     }
                     .disabled(!sync.isEnabled)
                     VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel("저장 방식")
+                        SectionLabel(String(localized: "저장 방식"))
                         HStack(alignment: .top, spacing: 10) {
-                            method("iCloud Drive 폴더", recommended: true, detail: "iCloud Drive에 JSON 파일로 저장, 개발자 계정 불필요", place: "~/iCloud Drive/Bottari/", available: true)
-                            method("CloudKit", recommended: false, detail: "Apple 서버의 앱 전용 저장소. Apple Developer 계정과 앱 서명이 필요해 아직 지원하지 않음", place: "iCloud 비공개 데이터베이스", available: false)
+                            method(String(localized: "iCloud Drive 폴더"), recommended: true, detail: String(localized: "iCloud Drive에 JSON 파일로 저장, 개발자 계정 불필요"), place: "~/iCloud Drive/Bottari/", available: true)
+                            method("CloudKit", recommended: false, detail: String(localized: "Apple 서버의 앱 전용 저장소. Apple Developer 계정과 앱 서명이 필요해 아직 지원하지 않음"), place: String(localized: "iCloud 비공개 데이터베이스"), available: false)
                         }
                     }
-                    SettingsGroup("파일 창의 iCloud Drive") {
-                        SettingSwitch(title: "사이드바에 iCloud Drive 표시", isOn: $showsICloudDrive)
-                        SettingSwitch(title: "파일 옆에 iCloud 상태 표시", isOn: $showsCloudBadges)
+                    SettingsGroup(String(localized: "파일 창의 iCloud Drive")) {
+                        SettingSwitch(title: String(localized: "사이드바에 iCloud Drive 표시"), isOn: $showsICloudDrive)
+                        SettingSwitch(title: String(localized: "파일 옆에 iCloud 상태 표시"), isOn: $showsCloudBadges)
                     }
                 }
             }
@@ -798,7 +800,7 @@ struct SyncSettings: View {
                 Toggle("iCloud로 설정 동기화", isOn: Binding(get: { sync.isEnabled }, set: { sync.setEnabled($0) }))
                     .toggleStyle(.switch)
                     .labelsHidden()
-                Button(sync.isSyncing ? "동기화 중…" : "지금 동기화") { sync.syncNow() }
+                Button(sync.isSyncing ? String(localized: "동기화 중…") : String(localized: "지금 동기화")) { sync.syncNow() }
                     .buttonStyle(PanelButtonStyle())
                     .fixedSize()
                     .disabled(!sync.isEnabled || sync.isSyncing)
@@ -866,7 +868,7 @@ struct SyncSettings: View {
                     }
                     Spacer()
                     if device.id == sync.devices.last?.id {
-                        Badge("이 Mac", color: .themeAccent)
+                        Badge(String(localized: "이 Mac"), color: .themeAccent)
                     }
                 }
                 .padding(10)
@@ -907,15 +909,15 @@ struct SyncSettings: View {
     }
 
     private var status: String {
-        guard sync.isEnabled else { return "꺼짐 · 이 Mac에만 저장" }
-        if sync.folder == nil { return "iCloud Drive를 찾을 수 없음" }
-        return "iCloud Drive 사용 중 · 마지막 동기화: " + (sync.lastSync.map(Self.time) ?? "없음")
+        guard sync.isEnabled else { return String(localized: "꺼짐 · 이 Mac에만 저장") }
+        if sync.folder == nil { return String(localized: "iCloud Drive를 찾을 수 없음") }
+        return String(localized: "iCloud Drive 사용 중 · 마지막 동기화: ") + (sync.lastSync.map(Self.time) ?? String(localized: "없음"))
     }
 
     private var tree: String {
         let items = SettingsSync.Item.allCases.filter { sync.items.contains($0) }
         var lines = ["Bottari/"]
-        let entries = items.flatMap { item in item.files.map { ($0, item.title) } } + [("devices/", "동기화하는 Mac")]
+        let entries = items.flatMap { item in item.files.map { ($0, item.title) } } + [("devices/", String(localized: "동기화하는 Mac"))]
         for (index, entry) in entries.enumerated() {
             let branch = index == entries.count - 1 ? "└─ " : "├─ "
             lines.append(branch + entry.0.padding(toLength: 22, withPad: " ", startingAt: 0) + entry.1)
@@ -928,7 +930,7 @@ struct SyncSettings: View {
             HStack {
                 Text(title).font(.ui(.callout, weight: .semibold))
                 if recommended {
-                    Badge("기본", color: .themeAccent)
+                    Badge(String(localized: "기본"), color: .themeAccent)
                 }
             }
             Text(detail).font(.ui(.caption)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -942,8 +944,8 @@ struct SyncSettings: View {
     }
 
     static func time(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) { return "오늘 " + date.formatted(date: .omitted, time: .shortened) }
-        if Calendar.current.isDateInYesterday(date) { return "어제 " + date.formatted(date: .omitted, time: .shortened) }
+        if Calendar.current.isDateInToday(date) { return String(localized: "오늘 ") + date.formatted(date: .omitted, time: .shortened) }
+        if Calendar.current.isDateInYesterday(date) { return String(localized: "어제 ") + date.formatted(date: .omitted, time: .shortened) }
         return date.formatted(date: .abbreviated, time: .shortened)
     }
 }

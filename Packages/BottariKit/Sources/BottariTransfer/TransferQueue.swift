@@ -17,6 +17,10 @@ public final class TransferQueue {
     public var verifiesChecksums = false
     /// Called when a job ends or is removed, e.g. to close connections nothing uses any more.
     @ObservationIgnored public var onJobsChanged: (() -> Void)?
+    /// Called whenever jobs' records change: a file done, a job started,
+    /// paused or ended. Saving `jobs.compactMap(\.record)` then lets them carry
+    /// on after a restart.
+    @ObservationIgnored public var onCheckpoint: (() -> Void)?
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
     public init() {}
@@ -51,7 +55,46 @@ public final class TransferQueue {
         )
         job.verifiesChecksums = verifiesChecksums
         jobs.append(job)
+        Log.transfer.info("\(job.logName): \(items.count)개 항목, \(source.name) → \(destination.name):\(folder), \(job.route)")
         Task { [self] in await prepare(job) }
+        onCheckpoint?()
+        return job
+    }
+
+    /// Carries on with a job saved before the app quit. Files it had done are
+    /// left alone, ones it had cut off continue from their partial copies,
+    /// and items a move had already taken away are counted as done.
+    @discardableResult
+    public func resume(_ record: TransferRecord, from source: TransferEndpoint, to destination: TransferEndpoint) async -> TransferJob {
+        var items: [FileItem] = []
+        var gone: [RemotePath] = []
+        for path in record.items {
+            if let item = try? await source.provider.stat(path) {
+                items.append(item)
+            } else {
+                gone.append(path)
+            }
+        }
+        let job = TransferJob(
+            id: record.id,
+            kind: record.kind,
+            items: items,
+            source: source,
+            destination: destination,
+            folder: record.folder,
+            route: Self.route(record.kind, from: source.provider, to: destination.provider),
+            policy: record.policy
+        )
+        job.verifiesChecksums = record.verifiesChecksums
+        job.resumedDone = Set(record.done)
+        job.resumedUnfinished = Set(record.unfinished)
+        Log.transfer.info("\(job.logName): 지난번에 끝나지 않은 전송을 이어서 시작 (완료 \(record.done.count)개, 이어받을 파일 \(record.unfinished.count)개)")
+        for path in gone where record.kind == .copy {
+            job.failures.append(TransferFailure(path: path, message: String(localized: "원본을 찾을 수 없습니다: \(path.string)")))
+        }
+        jobs.append(job)
+        Task { [self] in await prepare(job) }
+        onCheckpoint?()
         return job
     }
 
@@ -90,6 +133,7 @@ public final class TransferQueue {
         for running in job.running.values {
             running.task.cancel()
         }
+        onCheckpoint?()
     }
 
     public func resume(_ job: TransferJob) {
@@ -98,6 +142,7 @@ public final class TransferQueue {
         job.lastSample = nil
         startTicker()
         pump()
+        onCheckpoint?()
     }
 
     public func pauseAll() {
@@ -123,6 +168,7 @@ public final class TransferQueue {
             question.answer.resume(returning: .skip)
         }
         if job.running.isEmpty { onJobsChanged?() }
+        onCheckpoint?()
     }
 
     /// Tries the failed files and folders again.
@@ -148,12 +194,14 @@ public final class TransferQueue {
             job.state = .finished
             onJobsChanged?()
         }
+        onCheckpoint?()
     }
 
     public func remove(_ job: TransferJob) {
         guard job.state.hasEnded, job.running.isEmpty else { return }
         jobs.removeAll { $0 === job }
         onJobsChanged?()
+        onCheckpoint?()
     }
 
     /// Clears finished and cancelled jobs from the list.
@@ -194,7 +242,7 @@ public final class TransferQueue {
         let rescan = WorkItem(source: item, destination: destination, action: .scan)
         let sameLocation = job.source.provider.locationID == job.destination.provider.locationID
         if sameLocation, item.isDirectory, item.path.isAncestor(of: destination) {
-            fail(item, "폴더를 자신의 하위 폴더로 이동하거나 복사할 수 없습니다: \(item.path)", retry: nil, in: job)
+            fail(item, String(localized: "폴더를 자신의 하위 폴더로 이동하거나 복사할 수 없습니다: \(item.path.string)"), retry: nil, in: job)
             return
         }
         if sameLocation, item.path == destination {
@@ -219,18 +267,35 @@ public final class TransferQueue {
         default: .stream
         }
 
+        if job.resumedDone.contains(item.path) {
+            // Done before the app quit.
+            job.done.insert(item.path)
+            job.totalFiles += 1
+            job.completedFiles += 1
+            let size = item.isDirectory ? 0 : item.size ?? 0
+            job.totalBytes += size
+            job.completedBytes += size
+            job.transferredBytes = job.completedBytes
+            return
+        }
         guard item.isDirectory else {
             if existing?.isDirectory == true {
-                fail(item, "같은 이름의 폴더가 이미 있습니다: \(destination)", retry: nil, in: job)
+                fail(item, String(localized: "같은 이름의 폴더가 이미 있습니다: \(destination.string)"), retry: nil, in: job)
             } else {
-                // A clash with an existing file is settled when its turn comes.
-                add(WorkItem(source: item, destination: destination, action: wholeItem), in: job)
+                // A clash with an existing file is settled when its turn comes. A file
+                // cut off before the app quit picks up its partial copy, which is
+                // also why it does not count as a clash with itself.
+                var work = WorkItem(source: item, destination: destination, action: wholeItem)
+                if job.resumedUnfinished.contains(item.path) {
+                    work.mayHavePartial = true
+                }
+                add(work, in: job)
             }
             return
         }
         if let existing {
             guard existing.isDirectory else {
-                fail(item, "같은 이름의 파일이 이미 있습니다: \(destination)", retry: nil, in: job)
+                fail(item, String(localized: "같은 이름의 파일이 이미 있습니다: \(destination.string)"), retry: nil, in: job)
                 return
             }
             // Folders merge, like FileZilla; clashes inside are settled file by file.
@@ -363,7 +428,7 @@ public final class TransferQueue {
                     return .planned
                 }
                 guard existing.isDirectory == work.source.isDirectory else {
-                    return .failed(existing.isDirectory ? "같은 이름의 폴더가 이미 있습니다: \(work.destination)" : "같은 이름의 파일이 이미 있습니다: \(work.destination)", work)
+                    return .failed(existing.isDirectory ? String(localized: "같은 이름의 폴더가 이미 있습니다: \(work.destination.string)") : String(localized: "같은 이름의 파일이 이미 있습니다: \(work.destination.string)"), work)
                 }
                 let answer = await resolve(TransferConflict(incoming: work.source, existing: existing), in: job)
                 work.settled = answer
@@ -406,7 +471,7 @@ public final class TransferQueue {
                     guard expected == actual else {
                         // A retry must replace the bad copy, not trip over it as a clash.
                         work.settled = .overwrite
-                        return .failed("체크섬이 일치하지 않습니다 (원본 \(expected.prefix(12))…, 대상 \(actual.prefix(12))…)", work)
+                        return .failed(String(localized: "체크섬이 일치하지 않습니다 (원본 \(expected.prefix(12))…, 대상 \(actual.prefix(12))…)"), work)
                     }
                     verified = true
                 }
@@ -431,7 +496,7 @@ public final class TransferQueue {
                 do {
                     try await source.delete(work.source.path)
                 } catch {
-                    return .failed("복사했으나 원본을 삭제할 수 없습니다: \(error.localizedDescription)", work)
+                    return .failed(String(localized: "복사했으나 원본을 삭제할 수 없습니다: \(error.localizedDescription)"), work)
                 }
             }
             let bytes = work.action == .stream ? resumedFrom + counter.total : (work.source.size ?? 0)
@@ -495,10 +560,13 @@ public final class TransferQueue {
             job.completedFiles += 1
             job.completedBytes += bytes
             if verified { job.verifiedFiles += 1 }
+            job.done.insert(running.work.source.path)
         case .skipped(let bytes):
             job.skippedFiles += 1
             job.skippedBytes += bytes
+            job.done.insert(running.work.source.path)
         case .failed(let message, let work):
+            Log.transfer.error("\(job.logName): \(running.work.source.path) 실패: \(message)")
             let failure = TransferFailure(path: running.work.source.path, message: message)
             job.failures.append(failure)
             job.retryable[failure.id] = work
@@ -516,6 +584,7 @@ public final class TransferQueue {
             onJobsChanged?()
         }
         pump()
+        onCheckpoint?()
     }
 
     private func finish(_ job: TransferJob) {
@@ -534,7 +603,9 @@ public final class TransferQueue {
             job.state = job.failures.isEmpty ? .finished : .failed
             job.bytesPerSecond = 0
             job.transferredBytes = job.completedBytes
+            Log.transfer.info("\(job.logName): \(job.state == .finished ? String(localized: "완료") : String(localized: "실패 \(job.failures.count)개")) (파일 \(job.completedFiles)개, 건너뜀 \(job.skippedFiles)개, \(job.completedBytes) B)")
             onJobsChanged?()
+            onCheckpoint?()
         }
     }
 

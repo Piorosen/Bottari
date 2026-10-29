@@ -22,7 +22,7 @@ public final class TransferJob: Identifiable {
         public var hasEnded: Bool { self == .finished || self == .failed || self == .cancelled }
     }
 
-    public nonisolated let id = UUID()
+    public nonisolated let id: UUID
     public let kind: TransferKind
     public let source: TransferEndpoint
     public let destination: TransferEndpoint
@@ -48,7 +48,7 @@ public final class TransferJob: Identifiable {
 
     public var name: String {
         guard let first = items.first else { return "" }
-        return items.count == 1 ? first.name : "\(first.name) 외 \(items.count - 1)개"
+        return items.count == 1 ? first.name : String(localized: "\(first.name) 외 \(items.count - 1)개")
     }
 
     public var fractionCompleted: Double {
@@ -83,6 +83,11 @@ public final class TransferJob: Identifiable {
     @ObservationIgnored var completedBytes: Int64 = 0
     @ObservationIgnored var skippedBytes: Int64 = 0
     @ObservationIgnored var lastSample: (bytes: Int64, at: ContinuousClock.Instant)?
+    /// Source paths finished or skipped, for `record`.
+    @ObservationIgnored var done: Set<RemotePath> = []
+    /// From a saved record: files already done, and files cut off midway.
+    @ObservationIgnored var resumedDone: Set<RemotePath> = []
+    @ObservationIgnored var resumedUnfinished: Set<RemotePath> = []
 
     struct Question {
         let conflict: TransferConflict
@@ -90,6 +95,7 @@ public final class TransferJob: Identifiable {
     }
 
     init(
+        id: UUID = UUID(),
         kind: TransferKind,
         items: [FileItem],
         source: TransferEndpoint,
@@ -98,6 +104,7 @@ public final class TransferJob: Identifiable {
         route: TransferRoute,
         policy: ConflictPolicy
     ) {
+        self.id = id
         self.kind = kind
         self.items = items
         self.source = source
@@ -107,7 +114,35 @@ public final class TransferJob: Identifiable {
         self.policy = policy
     }
 
+    /// "전송 1A2B3C4D", to tell jobs apart in the log.
+    var logName: String {
+        String(localized: "전송 \(id.uuidString.prefix(8))")
+    }
+
     var inFlightBytes: Int64 {
         running.values.reduce(0) { $0 + $1.counter.total }
+    }
+
+    /// The job as far as it got, while it has something left to do and both
+    /// places can be found again; nil otherwise.
+    public var record: TransferRecord? {
+        guard !state.hasEnded || state == .failed, let from = source.place, let to = destination.place else { return nil }
+        let cutOff = running.values.map(\.work) + pending.filter(\.mayHavePartial) + Array(retryable.values).filter(\.mayHavePartial)
+        return TransferRecord(
+            id: id,
+            kind: kind,
+            items: items.map(\.path),
+            source: .init(place: from, name: source.name),
+            destination: .init(place: to, name: destination.name),
+            folder: destinationFolder,
+            policy: policy,
+            verifiesChecksums: verifiesChecksums,
+            done: done.union(resumedDone).sorted { $0.string < $1.string },
+            unfinished: cutOff.filter { $0.action == .stream }.map(\.source.path),
+            totalFiles: totalFiles,
+            totalBytes: totalBytes,
+            transferredBytes: transferredBytes,
+            savedAt: Date()
+        )
     }
 }

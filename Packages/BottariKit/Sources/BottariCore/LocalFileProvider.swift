@@ -12,13 +12,13 @@ public struct LocalFileProvider: FileProvider {
 
     public var locationID: String { Self.locationID }
 
-    public init(displayName: String = "이 Mac", home: RemotePath = RemotePath(NSHomeDirectory()), privacy: PrivacyGuard = PrivacyGuard()) {
+    public init(displayName: String = String(localized: "이 Mac"), home: RemotePath = RemotePath(NSHomeDirectory()), privacy: PrivacyGuard = PrivacyGuard()) {
         self.displayName = displayName
         self.home = home
         self.privacy = privacy
     }
 
-    public var capabilities: ProviderCapabilities { [.rangeRead, .serverSideCopy, .trash, .checksum, .resumableWrite, .modificationTime] }
+    public var capabilities: ProviderCapabilities { [.rangeRead, .serverSideCopy, .trash, .checksum, .resumableWrite, .modificationTime, .permissions, .symbolicLinks] }
 
     public func list(_ path: RemotePath) async throws -> [FileItem] {
         try requireDirectory(path)
@@ -147,6 +147,28 @@ public struct LocalFileProvider: FileProvider {
     public func makeDirectory(_ path: RemotePath) async throws {
         try mapErrors(path) {
             try FileManager.default.createDirectory(atPath: path.string, withIntermediateDirectories: false)
+        }
+    }
+
+    /// Leaves out folders macOS guards with a privacy prompt, unless the search
+    /// starts inside one: finding a file should not make macOS stop and ask.
+    public func search(_ query: String, in folder: RemotePath, limit: Int) -> AsyncThrowingStream<FileItem, any Error> {
+        let privacy = privacy
+        let insideGuarded = privacy.isGuarded(folder)
+        return FileSearch.walk(self, from: folder, matching: query, limit: limit) { child in
+            insideGuarded || !privacy.isGuardedFolder(child.path)
+        }
+    }
+
+    public func setPermissions(_ mode: UInt16, at path: RemotePath) async throws {
+        try mapErrors(path) {
+            try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: mode)], ofItemAtPath: path.string)
+        }
+    }
+
+    public func makeSymbolicLink(at path: RemotePath, to target: String) async throws {
+        try mapErrors(path) {
+            try FileManager.default.createSymbolicLink(atPath: path.string, withDestinationPath: target)
         }
     }
 

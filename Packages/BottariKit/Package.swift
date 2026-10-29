@@ -14,10 +14,12 @@ let package = Package(
         .library(name: "BottariCloud", targets: ["BottariCloud"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/orlandos-nl/Citadel.git", from: "0.12.1"),
+        // Forks kept as submodules in Packages/: Citadel, pointed at the swift-nio-ssh
+        // fork below so both use the same copy.
+        .package(path: "../Citadel"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
-        // Citadel builds on this fork of swift-nio-ssh; depend on the same one to import NIOSSH.
-        .package(url: "https://github.com/Wellz26/swift-nio-ssh.git", "0.3.4" ..< "0.4.0"),
+        // Wellz26's swift-nio-ssh, which Citadel builds on, with SSH agent forwarding added.
+        .package(path: "../swift-nio-ssh"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.12.3"),
         .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2"),
         .package(url: "https://github.com/raspu/Highlightr.git", from: "2.3.0"),
@@ -41,6 +43,7 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "_CryptoExtras", package: "swift-crypto"),
                 .product(name: "KeychainAccess", package: "KeychainAccess"),
             ]
         ),

@@ -311,6 +311,77 @@ import Testing
         #expect(mac.state.withLock { $0.readOffsets } == [0, Int64(partial.count)])
     }
 
+    @Test func aSavedJobCarriesOnAfterARestart() async throws {
+        let payload = Data((0..<40_000).map { UInt8(truncatingIfNeeded: $0) })
+        mac.addFile("/notes.txt", "notes")
+        mac.addFile("/movie.mp4", payload)
+        mac.state.withLock { state in
+            state.chunkSize = 1000
+            state.chunkDelay = .milliseconds(5)
+        }
+        queue.maxConcurrentTransfers = 1
+        var checkpoints = 0
+        queue.onCheckpoint = { checkpoints += 1 }
+
+        let job = queue.enqueue(
+            .copy,
+            [try await mac.stat("/notes.txt"), try await mac.stat("/movie.mp4")],
+            from: TransferEndpoint(mac, place: "local"),
+            to: TransferEndpoint(server, name: "NAS", place: "site:nas"),
+            into: .root
+        )
+        try await eventually { job.completedFiles == 1 && job.inFlightBytes > 0 }
+        queue.pause(job)
+        try await eventually { job.running.isEmpty }
+        #expect(checkpoints >= 3)
+
+        // What the app writes to disk, and reads back on the next launch.
+        let saved = try #require(job.record)
+        let record = try JSONDecoder().decode(TransferRecord.self, from: JSONEncoder().encode(saved))
+        #expect(record.done == ["/notes.txt"])
+        #expect(record.unfinished == ["/movie.mp4"])
+        #expect(record.destination == .init(place: "site:nas", name: "NAS"))
+        let partial = try #require(server.data("/.movie.mp4.bottari-part"))
+
+        mac.state.withLock { state in
+            state.chunkDelay = nil
+            state.readOffsets = []
+        }
+        let restarted = TransferQueue()
+        let resumed = await restarted.resume(record, from: TransferEndpoint(mac, place: "local"), to: TransferEndpoint(server, place: "site:nas"))
+        _ = try await finished(resumed)
+
+        #expect(resumed.state == .finished)
+        #expect(resumed.id == job.id)
+        #expect(server.data("/movie.mp4") == payload)
+        #expect(resumed.completedFiles == 2)
+        // notes.txt was not sent again, and the movie went on from its partial copy.
+        #expect(mac.state.withLock { $0.readOffsets } == [Int64(partial.count)])
+        #expect(resumed.record == nil)
+    }
+
+    @Test func jobsWithoutPlacesAreNotSaved() async throws {
+        mac.addFile("/a.txt", "a")
+        let job = try await transfer(.copy, ["/a.txt"], from: mac, to: server)
+        #expect(job.record == nil)
+    }
+
+    @Test func aResumedMoveCountsWhatAlreadyLeftAsDone() async throws {
+        mac.addFile("/left/b.txt", "b")
+        let record = TransferRecord(
+            id: UUID(), kind: .move, items: ["/a.txt", "/left"],
+            source: .init(place: "local", name: "Mac"), destination: .init(place: "site:nas", name: "NAS"),
+            folder: .root, policy: .ask, verifiesChecksums: false,
+            done: ["/left/a-done.txt"], unfinished: [], totalFiles: 2, totalBytes: 2, transferredBytes: 1, savedAt: Date()
+        )
+        let job = try await finished(await queue.resume(record, from: TransferEndpoint(mac, place: "local"), to: TransferEndpoint(server, place: "site:nas")))
+
+        #expect(job.state == .finished)
+        #expect(job.failures.isEmpty)
+        #expect(server.text("/left/b.txt") == "b")
+        #expect(!mac.exists("/left"))
+    }
+
     @Test func cancellingLeavesNothingHalfWritten() async throws {
         mac.addFile("/movie.mp4", Data(count: 40_000))
         mac.addFile("/later.txt", "later")

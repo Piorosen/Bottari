@@ -75,6 +75,9 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public var authentication: Authentication
     /// Jump hosts, first hop first: saved-site names, `~/.ssh/config` aliases or `user@host:port`.
     public var proxyJump: [String]
+    /// A command whose standard input and output carry the connection, as
+    /// `~/.ssh/config` writes it (`%h`, `%p`, `%r`, `%n`). Unused with jump hosts.
+    public var proxyCommand: String?
     public var tag: Tag?
     public var startPath: String?
     /// The `~/.ssh/config` alias this site was imported from, so importing again skips it.
@@ -92,6 +95,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         endpoint: SFTPEndpoint,
         authentication: Authentication,
         proxyJump: [String] = [],
+        proxyCommand: String? = nil,
         tag: Tag? = nil,
         startPath: String? = nil,
         sshConfigAlias: String? = nil,
@@ -105,6 +109,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         self.endpoint = endpoint
         self.authentication = authentication
         self.proxyJump = proxyJump
+        self.proxyCommand = proxyCommand
         self.tag = tag
         self.startPath = startPath
         self.sshConfigAlias = sshConfigAlias
@@ -122,6 +127,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         endpoint = try values.decode(SFTPEndpoint.self, forKey: .endpoint)
         authentication = try values.decode(Authentication.self, forKey: .authentication)
         proxyJump = try values.decodeIfPresent([String].self, forKey: .proxyJump) ?? []
+        proxyCommand = try values.decodeIfPresent(String.self, forKey: .proxyCommand)
         tag = try values.decodeIfPresent(Tag.self, forKey: .tag)
         startPath = try values.decodeIfPresent(String.self, forKey: .startPath)
         sshConfigAlias = try values.decodeIfPresent(String.self, forKey: .sshConfigAlias)
@@ -151,6 +157,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
             endpoint: SFTPEndpoint(host: host.hostName, port: host.port, username: host.user ?? defaultUser),
             authentication: authentication,
             proxyJump: host.proxyJump,
+            proxyCommand: host.proxyCommand,
             sshConfigAlias: host.alias
         )
     }
@@ -218,6 +225,31 @@ public struct ConnectionPlan: Equatable, Sendable {
     public var endpoint: SFTPEndpoint
     public var credential: SFTPCredential
     public var hops: [SSHHop]
+    /// How to reach `endpoint` when there are no hops, tokens filled in.
+    public var proxyCommand: String?
+
+    init(endpoint: SFTPEndpoint, credential: SFTPCredential, hops: [SSHHop], proxyCommand: String?) {
+        self.endpoint = endpoint
+        self.credential = credential
+        // Only the first server is dialled itself; the rest are reached through
+        // the one before, so their own ProxyCommands do not apply.
+        self.hops = hops.enumerated().map { index, hop in
+            var hop = hop
+            if index > 0 { hop.proxyCommand = nil }
+            return hop
+        }
+        self.proxyCommand = hops.isEmpty ? proxyCommand : nil
+    }
+
+    /// This plan reached through `via`'s server, which becomes the first hop.
+    public func through(_ via: ConnectionPlan) -> ConnectionPlan {
+        ConnectionPlan(
+            endpoint: endpoint,
+            credential: credential,
+            hops: via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential, proxyCommand: via.proxyCommand)] + hops,
+            proxyCommand: nil
+        )
+    }
 }
 
 /// Why a saved site could not be turned into a connection plan.
@@ -226,6 +258,9 @@ public enum SiteConnectError: Error, Equatable, Sendable {
     /// (the one connected to, or a jump host on the way). `key` is where its
     /// password goes in the secret store, so it can be asked for and kept.
     case passwordMissing(site: String, key: String)
+    /// A password is saved for the site, but the Keychain would not hand it
+    /// to this app; typing it again replaces the saved one.
+    case passwordUnreadable(site: String, key: String)
     case keyFileUnreadable(path: String)
     /// Jump hosts refer back to each other.
     case jumpLoop(String)
@@ -234,9 +269,10 @@ public enum SiteConnectError: Error, Equatable, Sendable {
 extension SiteConnectError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .passwordMissing(let site, _): "\(site)의 비밀번호가 저장되어 있지 않습니다."
-        case .keyFileUnreadable(let path): "키 파일을 읽을 수 없습니다: \(path)"
-        case .jumpLoop(let name): "점프 호스트가 서로를 참조하고 있습니다: \(name)"
+        case .passwordMissing(let site, _): String(localized: "\(site)의 비밀번호가 저장되어 있지 않습니다.")
+        case .passwordUnreadable(let site, _): String(localized: "키체인에 저장된 \(site)의 비밀번호를 읽을 수 없습니다. 다시 입력하면 새로 저장합니다.")
+        case .keyFileUnreadable(let path): String(localized: "키 파일을 읽을 수 없습니다: \(path)")
+        case .jumpLoop(let name): String(localized: "점프 호스트가 서로를 참조하고 있습니다: \(name)")
         }
     }
 }
@@ -248,7 +284,7 @@ extension SavedSite {
 
     /// The key files `ssh` falls back to when a host names none, limited to the
     /// kinds Bottari can read, Ed25519 first.
-    public static let defaultKeyFiles = ["id_ed25519", "id_rsa"]
+    public static let defaultKeyFiles = ["id_ed25519", "id_ecdsa", "id_rsa"]
 
     /// An agent credential that, like `ssh`, goes on to the default key files
     /// in `sshDirectory` (none when it is nil or empty).
@@ -272,14 +308,21 @@ extension SavedSite {
             guard let text = readFile((path as NSString).expandingTildeInPath) else {
                 throw SiteConnectError.keyFileUnreadable(path: path)
             }
-            keys = .privateKey(text, passphrase: try secrets.secret(for: passphraseKey))
+            // An unreadable passphrase is asked for again, like a missing one.
+            keys = .privateKey(text, passphrase: try secrets.readableSecret(for: passphraseKey))
         case .password:
-            guard let password = try password ?? secrets.secret(for: passwordKey) else {
+            let stored: String?
+            do {
+                stored = try password ?? secrets.secret(for: passwordKey)
+            } catch SecretStoreError.unreadable {
+                throw SiteConnectError.passwordUnreadable(site: name, key: passwordKey)
+            }
+            guard let stored else {
                 throw SiteConnectError.passwordMissing(site: name, key: passwordKey)
             }
-            return .password(password)
+            return .password(stored)
         }
-        guard let password = try password ?? secrets.secret(for: passwordKey) else { return keys }
+        guard let password = try password ?? secrets.readableSecret(for: passwordKey) else { return keys }
         return .fallback(keys, then: .password(password))
     }
 
@@ -299,8 +342,15 @@ extension SavedSite {
         return ConnectionPlan(
             endpoint: endpoint,
             credential: try credential(secrets: secrets, password: password, sshDirectory: sshConfig.directory, readFile: readFile),
-            hops: try resolver.hops(for: proxyJump, visiting: [name])
+            hops: try resolver.hops(for: proxyJump, visiting: [name]),
+            proxyCommand: expandedProxyCommand
         )
+    }
+
+    /// The ProxyCommand with its tokens filled in for this site, if it has one.
+    var expandedProxyCommand: String? {
+        guard let command = proxyCommand?.trimmingCharacters(in: .whitespaces), !command.isEmpty else { return nil }
+        return ProxyCommand.expand(command, for: endpoint, alias: sshConfigAlias ?? name)
     }
 
     /// `[user@]host[:port]`, as ProxyJump writes a hop.
@@ -338,7 +388,11 @@ private struct HopResolver {
             if let site {
                 // A jump host can have its own jump hosts; those come first.
                 hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
-                hops.append(SSHHop(endpoint: site.endpoint, credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile)))
+                hops.append(SSHHop(
+                    endpoint: site.endpoint,
+                    credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile),
+                    proxyCommand: site.expandedProxyCommand
+                ))
             } else {
                 let credential = SavedSite.agentCredential(socket: nil, sshDirectory: sshConfig.directory, readFile: readFile)
                 hops.append(SSHHop(endpoint: SavedSite.endpoint(parsingHop: name, defaultUser: defaultUser), credential: credential))

@@ -91,7 +91,7 @@ public struct GoogleDriveProvider: FileProvider {
     }
 
     public func checksum(_ path: RemotePath) async throws -> String {
-        guard let sha = try await resolve(path).sha256 else { throw ProviderError.unsupported("체크섬") }
+        guard let sha = try await resolve(path).sha256 else { throw ProviderError.unsupported(String(localized: "체크섬")) }
         return sha.lowercased()
     }
 
@@ -128,7 +128,7 @@ public struct GoogleDriveProvider: FileProvider {
     private func startUpload(_ method: String, _ url: String, metadata: [String: Any], path: RemotePath) async throws -> String {
         let body = try JSONSerialization.data(withJSONObject: metadata)
         let (_, _, headers) = try await requestWithHeaders(method, url, query: [("uploadType", "resumable"), ("supportsAllDrives", "true")], headers: ["Content-Type": "application/json; charset=UTF-8"], body: body, path: path)
-        guard let location = headers["Location"] ?? headers["location"] else { throw ProviderError.io("Drive 업로드를 시작할 수 없습니다") }
+        guard let location = headers["Location"] ?? headers["location"] else { throw ProviderError.io(String(localized: "Drive 업로드를 시작할 수 없습니다")) }
         return location
     }
 
@@ -285,14 +285,14 @@ public struct GoogleDriveProvider: FileProvider {
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         request.setValue("Bearer \(try await tokens.accessToken())", forHTTPHeaderField: "Authorization")
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ProviderError.io("Drive 응답이 올바르지 않습니다") }
+        guard let http = response as? HTTPURLResponse else { throw ProviderError.io(String(localized: "Drive 응답이 올바르지 않습니다")) }
         let fields = http.allHeaderFields.reduce(into: [String: String]()) { $0["\($1.key)"] = "\($1.value)" }
         if (200..<300).contains(http.statusCode) || allowing.contains(http.statusCode) { return (data, http.statusCode, fields) }
         let message = (try? JSONDecoder().decode(DriveError.self, from: data))?.error.message ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
         switch http.statusCode {
         case 404: throw ProviderError.notFound(path)
         case 401, 403: throw ProviderError.permissionDenied(path)
-        default: throw ProviderError.io("Drive 오류 \(http.statusCode): \(message)")
+        default: throw ProviderError.io(String(localized: "Drive 오류 \(http.statusCode): \(message)"))
         }
     }
 }

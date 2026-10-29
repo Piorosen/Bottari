@@ -117,14 +117,71 @@ import Testing
         #expect(parsed.resolve("orb").port == 32222)
     }
 
-    @Test func matchBlocksAreSkipped() {
+    @Test func matchBlocksApplyWhenTheirConditionsHold() {
         let parsed = config("""
-        Match exec "true"
-          User fromMatch
         Host box
           HostName box.example.com
+        Match host *.example.com
+          User fromHost
+        Match originalhost other !user root
+          User fromOriginal
+        Match exec "true"
+          Port 2222
+        Match !localuser me
+          Port 2200
+        Match all
+          IdentityFile ~/.ssh/everyone
         """)
-        #expect(parsed.resolve("box").user == nil)
         #expect(parsed.aliases == ["box"])
+        let box = parsed.resolve("box")
+        #expect(box.user == "fromHost")
+        // `exec` is never run, so its block does not apply.
+        #expect(box.port == 22)
+        #expect(box.identityFiles == ["/Users/me/.ssh/everyone"])
+        #expect(parsed.resolve("other").user == "fromOriginal")
+    }
+
+    @Test func matchLocalNetworkChecksTheMacsAddresses() {
+        let text = """
+        Match localnetwork 10.1.0.0/16,!10.1.9.0/24
+          ProxyJump none
+        Host *
+          ProxyJump bastion
+        """
+        func resolve(_ addresses: [String]) -> [String] {
+            SSHConfig(text: text, directory: "/Users/me/.ssh", home: "/Users/me", localUser: "me", readFile: { _ in nil }, localAddresses: { addresses })
+                .resolve("db").proxyJump
+        }
+        #expect(resolve(["10.1.2.3"]).isEmpty)
+        #expect(resolve(["192.168.0.5", "fe80::1"]) == ["bastion"])
+        #expect(resolve(["10.1.9.7"]) == ["bastion"])
+    }
+
+    @Test func proxyCommandKeepsTheWholeLineAndRulesOutProxyJump() {
+        let parsed = config("""
+        Host tunnel
+          ProxyCommand=cloudflared access ssh --hostname %h  
+          ProxyJump bastion
+        Host jumped
+          ProxyJump bastion
+          ProxyCommand nc %h %p
+        Host plain
+          ProxyCommand none
+        """)
+        #expect(parsed.resolve("tunnel").proxyCommand == "cloudflared access ssh --hostname %h")
+        #expect(parsed.resolve("tunnel").proxyJump.isEmpty)
+        #expect(parsed.resolve("jumped").proxyCommand == nil)
+        #expect(parsed.resolve("jumped").proxyJump == ["bastion"])
+        #expect(parsed.resolve("plain").proxyCommand == nil)
+    }
+
+    @Test func addressRanges() {
+        #expect(IPRange("10.0.0.0/8")?.contains("10.255.1.1") == true)
+        #expect(IPRange("10.0.0.0/8")?.contains("11.0.0.1") == false)
+        #expect(IPRange("192.168.1.0/25")?.contains("192.168.1.127") == true)
+        #expect(IPRange("192.168.1.0/25")?.contains("192.168.1.128") == false)
+        #expect(IPRange("fd00::/8")?.contains("fd12:3456::1") == true)
+        #expect(IPRange("fd00::/8")?.contains("10.0.0.1") == false)
+        #expect(IPRange("not an address") == nil)
     }
 }

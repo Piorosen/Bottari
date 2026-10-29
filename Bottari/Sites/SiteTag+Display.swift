@@ -8,7 +8,7 @@ extension SavedSite.Tag {
         case .prod: "PROD"
         case .staging: "STAGING"
         case .dev: "DEV"
-        case .personal: "개인"
+        case .personal: String(localized: "개인")
         }
     }
 
@@ -33,7 +33,7 @@ extension SavedSite {
     var summary: String {
         switch kind {
         case .s3(let settings): return "s3://\(settings.bucket)"
-        case .googleDrive(let settings): return settings.account.isEmpty ? "로그인 필요" : settings.account
+        case .googleDrive(let settings): return settings.account.isEmpty ? String(localized: "로그인 필요") : settings.account
         case .sftp: break
         }
         var text = "\(endpoint.username)@\(endpoint.host)"
@@ -63,6 +63,7 @@ struct TagChip: View {
             .padding(.vertical, 1)
             .foregroundStyle(tag == .prod ? .white : tag.color)
             .background(tag == .prod ? tag.color : tag.color.opacity(0.14), in: .rect(cornerRadius: 3))
+            .accessibilityLabel("\(tag.label) 서버")
     }
 }
 

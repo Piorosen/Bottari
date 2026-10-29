@@ -28,7 +28,7 @@ struct TransferBar: View {
             } label: {
                 HStack(spacing: 6) {
                     Glyph("bt.transfer", size: 15)
-                    Text(activeCount > 0 ? "전송 \(activeCount)개 진행 중" : "전송")
+                    Text(activeCount > 0 ? String(localized: "전송 \(activeCount)개 진행 중") : String(localized: "전송"))
                         .font(.ui(.callout, weight: .semibold))
                     Image(systemName: "chevron.up")
                         .font(.system(size: 9, weight: .semibold))
@@ -65,6 +65,13 @@ struct TransferBar: View {
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
+            } else if !AppServices.transferRecords.interrupted.isEmpty {
+                Button("끝나지 않은 전송 \(AppServices.transferRecords.interrupted.count)개 · 이어서 보내기") {
+                    openWindow(id: "transfers")
+                }
+                .buttonStyle(.link)
+                .font(.ui(.callout))
+                Spacer(minLength: 8)
             } else {
                 Text("대기 중인 전송 없음")
                     .font(.ui(.callout))

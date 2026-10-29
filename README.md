@@ -6,6 +6,8 @@
 
 <p align="center">여러 서버와 클라우드를 한 창에서 다루는 macOS 파일 관리자</p>
 
+<p align="center"><a href="https://github.com/Piorosen/Bottari/actions/workflows/ci.yml"><img src="https://github.com/Piorosen/Bottari/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
+
 보따리는 FileZilla 같은 두 패인 파일 관리자다. 왼쪽은 Mac, 오른쪽은 서버로 고정하지 않고, 두 패인 모두 Mac, SFTP 서버, S3, Google Drive, iCloud Drive 중 어디든 열 수 있다. 서버 사이 전송, 원격 파일 편집, 이미지와 영상 보기, SSH 터미널, 원격 화면을 한 앱에서 처리한다.
 
 ## 기능
@@ -16,20 +18,25 @@
 - 드래그, ⌘C/⌘V, 우클릭으로 패인 사이 복사와 이동
 - 보따리: 여러 서버의 파일을 모아 두었다가 한 위치로 한 번에 보내기, 프리셋으로 저장
 - ⌘K 명령 팔레트로 폴더 이동, 연결, 명령 실행
+- ⌘F로 지금 폴더 아래에서 이름 찾기(`*.log` 같은 패턴 포함). 명령을 쓸 수 있는 서버에서는 `find`로 서버에서 찾는다
+- 권한 변경(하위 항목 포함), 심볼릭 링크 만들기
 
 ### 전송
 
 - 서버 사이 전송. Mac을 거쳐 스트리밍하며 임시 파일을 만들지 않음
 - 동시 전송 수, 같은 이름 처리 방식, 일시정지, 재시도, 이어받기
+- 앱을 종료해도 끝나지 않은 전송을 기억했다가 다음 실행 때 이어서 보내기. 끝난 파일은 건너뛰고, 끊긴 파일은 받은 부분부터 이어 받는다
 - 전송 후 SHA-256 비교, 수정 시각 보존
 - 셸 명령을 쓸 수 있는 서버에서는 복사(`cp -a`), 압축, 압축 풀기를 서버에서 직접 실행
 
 ### 연결
 
 - 비밀번호(키체인 저장), ssh-agent, 키 파일, `~/.ssh/config` 가져오기
-- 에이전트에 맞는 키가 없으면 `ssh`처럼 `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`로 이어서 시도
-- 점프 호스트(ProxyJump)를 거친 연결과 파일 전송
-- 호스트 키 확인
+- 에이전트와 키 파일 모두 Ed25519, ECDSA, RSA. RSA는 OpenSSH 8.8 이후 기본인 `rsa-sha2-512`로 서명한다. 키 파일은 OpenSSH 형식(암호 포함)과 PEM
+- 에이전트에 맞는 키가 없으면 `ssh`처럼 `~/.ssh`의 `id_ed25519`, `id_ecdsa`, `id_rsa`로 이어서 시도
+- 점프 호스트(ProxyJump)와 ProxyCommand를 거친 연결과 파일 전송. `~/.ssh/config`의 `Match`(host, user, localnetwork 등)도 반영한다
+- 호스트 키 확인. `~/.ssh/known_hosts`(해시된 이름 포함)에 있는 키는 바로 믿고, 다르거나 `@revoked`인 키는 거부한다
+- 서버가 조용하면 주기적으로 확인하고, 잠자기나 네트워크 변경으로 끊긴 연결은 다음 요청 때 자동으로 다시 연다
 - PROD 태그: 패인 위 경고 띠, 쓰기 전 확인, 읽기 전용 열기
 
 ### 보기와 편집
@@ -54,6 +61,11 @@
 | 단축키 | Finder식, Commander식(F5 복사, F6 이동, F7 새 폴더, F8 삭제). 키를 직접 눌러 지정하고 겹치는 키를 표시 |
 | iCloud 동기화 | 연결 목록, 즐겨찾기, 테마, 단축키, 보따리 프리셋을 `iCloud Drive/Bottari/`에 JSON으로 두고 Mac끼리 병합. 양쪽에서 다르게 바뀐 항목은 어느 쪽을 쓸지 직접 고른다. 비밀번호는 파일에 쓰지 않는다. 기본은 꺼짐 |
 
+### 언어와 진단
+
+- 한국어와 영어 화면. macOS 언어 설정을 따른다
+- 연결, 재연결, 전송 기록을 `~/Library/Logs/Bottari/bottari.log`에 남기고, 도움말 › 진단 정보 저장…으로 버전, 연결 요약(비밀번호 제외), 최근 로그를 파일 하나로 저장한다
+
 ## 요구 사항
 
 - 실행: macOS 15 이상
@@ -61,12 +73,23 @@
 
 ## 빌드
 
+처음 받을 때는 서브모듈도 함께 받는다. `Packages/swift-nio-ssh`는 SSH 에이전트 포워딩을 더한 [swift-nio-ssh 포크](https://github.com/Piorosen/swift-nio-ssh)이고, `Packages/Citadel`은 그 포크를 쓰도록 바꾼 [Citadel 포크](https://github.com/Piorosen/Citadel)다.
+
 ```sh
-make build    # Debug 빌드
-make run      # 빌드 후 실행
-make test     # BottariKit 패키지 테스트(swift test)
-make open     # Xcode로 열기
+git clone --recurse-submodules https://github.com/Piorosen/Bottari.git
+# 이미 받았다면
+git submodule update --init
 ```
+
+```sh
+make build      # Debug 빌드
+make run        # 빌드 후 실행
+make test       # BottariKit 패키지 테스트(swift test)
+make snapshots  # 화면 스냅샷과 자체 점검
+make open       # Xcode로 열기
+```
+
+빌드 결과는 저장소가 아니라 `~/Library/Developer/Xcode/DerivedData/Bottari-make`에 둔다. 저장소가 데스크탑이나 문서 폴더 안에 있으면, 그 안에서 빌드한 앱이 실행될 때마다 macOS가 그 폴더 접근을 다시 묻기 때문이다. 키체인에 Apple Development 인증서가 있으면 그것으로 서명해서, 빌드를 다시 해도 macOS가 같은 앱으로 알아보고 이전에 허용한 권한을 유지한다. 인증서가 없으면 ad-hoc으로 서명한다.
 
 `xcode-select`가 Command Line Tools를 가리키고 있으면 Swift가 오래된 버전이라 빌드되지 않는다. 시스템 설정을 바꾸지 않으려면 명령마다 Xcode를 지정한다.
 
@@ -78,10 +101,10 @@ Xcode에서 테스트하려면 `Packages/BottariKit/Package.swift`를 열고 ⌘
 
 ### 화면 스냅샷
 
-Debug 빌드는 창을 띄우지 않고 샘플 데이터로 각 화면을 PNG로 그릴 수 있다. 편집기, 플레이어, VNC, 설정, 동기화는 스스로 점검한 결과를 `*-check.txt`에 PASS/FAIL로 남긴다. 사용자의 테마, 단축키, 연결 목록은 건드리지 않는다.
+Debug 빌드는 창을 띄우지 않고 샘플 데이터로 각 화면을 PNG로 그릴 수 있다. 편집기, 플레이어, VNC, 설정, 동기화는 스스로 점검한 결과를 `*-check.txt`에 PASS/FAIL로 남긴다. 사용자의 테마, 단축키, 연결 목록, 전송 기록은 건드리지 않는다.
 
 ```sh
-open -n -g -j -W .build/xcode/Build/Products/Debug/Bottari.app --args -renderSnapshots /tmp/bottari-shots
+make snapshots SHOTS=/tmp/bottari-shots
 ```
 
 ### 아이콘
@@ -103,6 +126,7 @@ App Store에는 올리지 않는다. 앱 샌드박스 없이 Developer ID로 서
 2. 공증 프로필을 만든다: `xcrun notarytool store-credentials bottari-notary --apple-id … --team-id …`
 3. Sparkle 키를 만든다: `scripts/sparkle-keys.sh`. 개인 키는 로그인 키체인에 저장되고, 출력된 공개 키는 다음 단계에서 쓴다.
 4. `cp Config/release.env.example Config/release.env` 후 `TEAM_ID`, `SPARKLE_PUBLIC_KEY`를 채운다. 이 파일은 커밋하지 않는다.
+5. (선택) Google Cloud에서 "데스크톱 앱" 유형의 OAuth 클라이언트를 만들어 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 넣으면, 사용자가 클라이언트를 따로 만들지 않고 Google Drive에 로그인할 수 있다. 동의 화면을 게시하지 않으면 7일마다 다시 로그인해야 한다.
 
 릴리스마다:
 

@@ -14,21 +14,21 @@ struct Sidebar: View {
     private var activePane: PaneModel { workspace.pane(workspace.activeSide) }
 
     private static let macFolders: [(String, String, String)] = [
-        ("데스크탑", "bt.desktop", "Desktop"), ("문서", "bt.document", "Documents"),
-        ("다운로드", "bt.download", "Downloads"),
+        (MacFolder.desktop, "bt.desktop", "Desktop"), (MacFolder.documents, "bt.document", "Documents"),
+        (MacFolder.downloads, "bt.download", "Downloads"),
     ]
 
-    private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "이 Mac"
+    private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? String(localized: "이 Mac")
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if !Favorites.shared.items.isEmpty {
-                        group("즐겨찾기") {
+                        group(String(localized: "즐겨찾기")) {
                             ForEach(Favorites.shared.items) { favorite in
                                 SidebarRow(symbol: "bt.star", title: favorite.name, isCurrent: isCurrent(favorite)) {
-                                    Text(favorite.siteID.flatMap { library.site($0)?.name } ?? "이 Mac")
+                                    Text(favorite.siteID.flatMap { library.site($0)?.name } ?? String(localized: "이 Mac"))
                                         .font(.themeMono(.caption2))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
@@ -43,14 +43,14 @@ struct Sidebar: View {
                     }
                     let servers = sites.filter(\.isSFTP)
                     if !servers.isEmpty {
-                        group("서버") {
+                        group(String(localized: "서버")) {
                             ForEach(servers, content: siteRow)
                         }
                     }
                     let clouds = sites.filter { !$0.isSFTP }
                     let iCloud = showsICloudDrive ? LocalFileProvider.iCloudDrive : nil
                     if !clouds.isEmpty || iCloud != nil {
-                        group("클라우드") {
+                        group(String(localized: "클라우드")) {
                             if let iCloud {
                                 SidebarRow(symbol: "bt.cloud", title: "iCloud Drive", isCurrent: activePane.isLocal && activePane.path.string.hasPrefix(iCloud.string)) {
                                     EmptyView()
@@ -61,7 +61,7 @@ struct Sidebar: View {
                             ForEach(clouds, content: siteRow)
                         }
                     }
-                    group("이 Mac") {
+                    group(String(localized: "이 Mac")) {
                         let home = RemotePath(NSHomeDirectory())
                         SidebarRow(symbol: "bt.mac", title: Self.computerName, isCurrent: activePane.isLocal && activePane.path == home) {
                             EmptyView()
@@ -76,7 +76,7 @@ struct Sidebar: View {
                                 workspace.openOnMac(path)
                             }
                         }
-                        SidebarRow(symbol: "bt.apps", title: "응용 프로그램", isCurrent: activePane.isLocal && activePane.path == "/Applications") {
+                        SidebarRow(symbol: "bt.apps", title: String(localized: "응용 프로그램"), isCurrent: activePane.isLocal && activePane.path == "/Applications") {
                             EmptyView()
                         } action: {
                             workspace.openOnMac("/Applications")
@@ -205,7 +205,7 @@ private struct BundleCard: View {
                                 Button(preset.name) {
                                     Task {
                                         let missing = await bundle.load(preset)
-                                        if !missing.isEmpty { workspace.refusal = "찾지 못한 항목: \(missing.joined(separator: ", "))" }
+                                        if !missing.isEmpty { workspace.refusal = String(localized: "찾지 못한 항목: \(missing.joined(separator: ", "))") }
                                     }
                                 }
                             }
@@ -222,6 +222,7 @@ private struct BundleCard: View {
                 } label: {
                     Image(systemName: "ellipsis")
                 }
+                .iconHelp(String(localized: "보따리 메뉴"))
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
@@ -292,4 +293,12 @@ private struct BundleCard: View {
         let pane = workspace.pane(workspace.activeSide)
         return pane.site?.name ?? (pane.isLocal ? pane.path.name : pane.provider.displayName)
     }
+}
+
+/// The names of the Mac's own folders. Keys of their own, since "다운로드" alone
+/// is also the transfer direction, which English calls something else.
+enum MacFolder {
+    static let desktop = String(localized: "folder.desktop", defaultValue: "데스크탑")
+    static let documents = String(localized: "folder.documents", defaultValue: "문서")
+    static let downloads = String(localized: "folder.downloads", defaultValue: "다운로드")
 }

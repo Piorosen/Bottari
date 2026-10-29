@@ -12,13 +12,13 @@ struct FileCommands: Commands {
         // Keys come from the keymap (Settings › 단축키); plain keys such as
         // Space are left to the file list, so they still type in text fields.
         CommandGroup(after: .newItem) {
-            action(.newFolder, "새 폴더", needsSelection: false)
+            action(.newFolder, String(localized: "새 폴더"), needsSelection: false)
             Divider()
-            action(.copyToOther, "반대편 패인에 복사")
-            action(.moveToOther, "반대편 패인으로 이동")
-            action(.rename, "이름 바꾸기")
-            action(.preview, "빠른 미리보기")
-            action(.edit, "편집기로 열기")
+            action(.copyToOther, String(localized: "반대편 패인에 복사"))
+            action(.moveToOther, String(localized: "반대편 패인으로 이동"))
+            action(.rename, String(localized: "이름 바꾸기"))
+            action(.preview, String(localized: "빠른 미리보기"))
+            action(.edit, String(localized: "편집기로 열기"))
         }
         CommandGroup(replacing: .pasteboard) {
             Button("잘라내기") { sendToTextField(#selector(NSText.cut(_:))) }
@@ -56,14 +56,14 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("a")
             Divider()
-            action(.bundle, "보따리에 담기")
+            action(.bundle, String(localized: "보따리에 담기"))
             Button("경로 복사") {
                 if let focus { focus.workspace.copyPaths(from: focus.side) }
             }
             .keyboardShortcut("c", modifiers: [.command, .option])
             .disabled(focus?.pane.selection.isEmpty ?? true)
             // Disabled outside panes, so text fields keep ⌘⌫ for themselves.
-            action(.delete, focus?.pane.provider.capabilities.contains(.trash) == false ? "삭제…" : "휴지통으로 이동")
+            action(.delete, focus?.pane.provider.capabilities.contains(.trash) == false ? String(localized: "삭제…") : String(localized: "휴지통으로 이동"))
         }
         CommandMenu("이동") {
             // Disabled outside panes, so text fields keep ⌘↑ and ⌘↓ for themselves.
@@ -81,6 +81,10 @@ struct FileCommands: Commands {
                 }
                 .keyboardShortcut(.downArrow)
                 Divider()
+                Button("이 폴더에서 찾기") {
+                    if let focus { focus.workspace.searchRequest = focus.side }
+                }
+                .keyboardShortcut("f")
                 Button("새로고침") { run { await $0.reload() } }
                     .keyboardShortcut("r")
                 Divider()
@@ -109,8 +113,8 @@ struct FileCommands: Commands {
     }
 
     private var pasteTitle: String {
-        guard focus != nil, let count = AppServices.clipboard.content?.items.count else { return "붙여넣기" }
-        return "붙여넣기 (\(count)개)"
+        guard focus != nil, let count = AppServices.clipboard.content?.items.count else { return String(localized: "붙여넣기") }
+        return String(localized: "붙여넣기 (\(count)개)")
     }
 
     private func sendToTextField(_ action: Selector) {

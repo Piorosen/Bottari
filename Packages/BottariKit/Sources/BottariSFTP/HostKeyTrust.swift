@@ -1,3 +1,4 @@
+import BottariCore
 import Citadel
 import Crypto
 import Foundation
@@ -8,7 +9,8 @@ import NIOSSH
 public enum HostKeyTrust: Sendable {
     /// Accepts any key. Only for tests against a server on this machine.
     case acceptAnything
-    /// Trusts a server's key the first time and refuses it if it changes later, like `ssh`.
+    /// Trusts a server's key the first time and refuses it if it changes later,
+    /// like `ssh`, taking `ssh`'s own known_hosts into account.
     case knownHosts(KnownHosts)
 
     func validator(for endpoint: SFTPEndpoint) -> SSHHostKeyValidator {
@@ -29,15 +31,27 @@ public enum HostKeyTrust: Sendable {
 }
 
 /// Remembered host keys, one per `host:port`, optionally saved to a JSON file.
+/// `ssh`'s known_hosts files are read too, never written: a key `ssh`
+/// already trusts needs no second confirmation, and one that contradicts
+/// them is refused as `ssh` would.
 public final class KnownHosts: @unchecked Sendable {
     private let lock = NSLock()
     private var keys: [String: String]
     private var rejections: [String: SFTPConnectError] = [:]
     private let fileURL: URL?
+    private let openSSHFiles: [URL]
 
-    /// Loads remembered keys from `fileURL` if it exists; `nil` keeps them in memory only.
-    public init(fileURL: URL?) {
+    /// `ssh`'s own lists: the user's and the system-wide one.
+    public static let openSSHDefaultFiles = [
+        URL(fileURLWithPath: NSHomeDirectory()).appending(path: ".ssh/known_hosts"),
+        URL(fileURLWithPath: "/etc/ssh/ssh_known_hosts"),
+    ]
+
+    /// Loads remembered keys from `fileURL` if it exists; `nil` keeps them in
+    /// memory only. `openSSHFiles` are consulted on every check.
+    public init(fileURL: URL?, openSSHFiles: [URL] = []) {
         self.fileURL = fileURL
+        self.openSSHFiles = openSSHFiles
         if let fileURL, let data = try? Data(contentsOf: fileURL),
            let saved = try? JSONDecoder().decode([String: String].self, from: data) {
             keys = saved
@@ -69,16 +83,43 @@ public final class KnownHosts: @unchecked Sendable {
         }
     }
 
-    /// Checks a presented key: remembers it if the host is new, rejects it if it differs.
+    /// Checks a presented key: remembers it if the host is new, rejects it if
+    /// it differs. A key in `ssh`'s known_hosts is trusted and remembered (it
+    /// may be the new key of a reinstalled server); a host `ssh` knows with a
+    /// different key of the same kind, or a revoked key, is refused.
     func check(_ presented: String, for endpoint: SFTPEndpoint) -> Bool {
-        lock.withLock {
+        let openSSH = OpenSSHKnownHosts.load(openSSHFiles).verdict(for: presented, host: endpoint.hostKeyID)
+        return lock.withLock {
             let id = endpoint.hostKeyID
+            switch openSSH {
+            case .trusted:
+                if keys[id] != presented {
+                    keys[id] = presented
+                    save()
+                }
+                return true
+            case .revoked:
+                rejections[id] = .hostKeyRevoked(host: id)
+                Log.connection.error("\(id): known_hosts에서 폐기된 호스트 키")
+                return false
+            case .changed(let expected) where keys[id] == nil:
+                Log.connection.error("\(id): known_hosts와 다른 호스트 키")
+                rejections[id] = .hostKeyChangedInKnownHosts(
+                    host: id,
+                    expected: Self.fingerprint(ofOpenSSHKey: expected),
+                    presented: Self.fingerprint(ofOpenSSHKey: presented)
+                )
+                return false
+            case .changed, .unknown:
+                break
+            }
             guard let trusted = keys[id] else {
                 keys[id] = presented
                 save()
                 return true
             }
             guard trusted == presented else {
+                Log.connection.error("\(id): 저장된 것과 다른 호스트 키")
                 rejections[id] = .hostKeyChanged(
                     host: id,
                     expected: Self.fingerprint(ofOpenSSHKey: trusted),
@@ -123,5 +164,102 @@ struct KnownHostsValidator: NIOSSHClientServerAuthenticationDelegate {
         } else {
             validationCompletePromise.fail(HostKeyRejected())
         }
+    }
+}
+
+/// `ssh`'s known_hosts: `[@marker] patterns keytype base64 [comment]` per
+/// line, host names plain (with `*`, `?` and `!`) or hashed (`|1|salt|hash`).
+struct OpenSSHKnownHosts {
+    enum Verdict: Equatable {
+        case trusted
+        /// The host is listed with another key of the same kind.
+        case changed(expected: String)
+        case revoked
+        case unknown
+    }
+
+    private struct Entry {
+        var marker: String?
+        var hosts: String
+        /// `type base64`, as `String(openSSHPublicKey:)` writes keys.
+        var key: String
+    }
+
+    private let entries: [Entry]
+
+    init(text: String) {
+        entries = text.split(whereSeparator: \.isNewline).compactMap { line in
+            var fields = line.split(whereSeparator: \.isWhitespace).map(String.init)
+            guard let first = fields.first, !first.hasPrefix("#") else { return nil }
+            var marker: String?
+            if first.hasPrefix("@") {
+                marker = first
+                fields.removeFirst()
+            }
+            guard fields.count >= 3 else { return nil }
+            return Entry(marker: marker, hosts: fields[0], key: "\(fields[1]) \(fields[2])")
+        }
+    }
+
+    static func load(_ files: [URL]) -> OpenSSHKnownHosts {
+        OpenSSHKnownHosts(text: files.compactMap { try? String(contentsOf: $0, encoding: .utf8) }.joined(separator: "\n"))
+    }
+
+    /// What the lists say about `presented` (`type base64`) for `host`, which
+    /// is `name` or `[name]:port` as `SFTPEndpoint.hostKeyID` writes it.
+    func verdict(for presented: String, host: String) -> Verdict {
+        let type = presented.split(separator: " ").first.map(String.init) ?? ""
+        var expected: String?
+        for entry in entries where Self.matches(host, entry.hosts) {
+            switch entry.marker {
+            case "@revoked" where entry.key == presented:
+                return .revoked
+            case nil where entry.key == presented:
+                return .trusted
+            case nil where entry.key.hasPrefix(type + " "):
+                expected = expected ?? entry.key
+            default:
+                continue
+            }
+        }
+        return expected.map { .changed(expected: $0) } ?? .unknown
+    }
+
+    /// Whether `host` is one of the comma-separated `patterns`, or matches
+    /// their hash. A matching negated pattern rules the line out.
+    static func matches(_ host: String, _ patterns: String) -> Bool {
+        if patterns.hasPrefix("|1|") {
+            let parts = patterns.split(separator: "|", omittingEmptySubsequences: true)
+            guard parts.count == 3, let salt = Data(base64Encoded: String(parts[1])),
+                  let hash = Data(base64Encoded: String(parts[2])) else { return false }
+            // `ssh` hashes the name in lower case.
+            let mac = HMAC<Insecure.SHA1>.authenticationCode(for: Data(host.lowercased().utf8), using: SymmetricKey(data: salt))
+            return Data(mac) == hash
+        }
+        var matched = false
+        for pattern in patterns.split(separator: ",") {
+            if pattern.hasPrefix("!") {
+                if glob(pattern.dropFirst(), host) { return false }
+            } else if glob(pattern, host) {
+                matched = true
+            }
+        }
+        return matched
+    }
+
+    /// `*` and `?` only, case-insensitively, as `ssh` matches host patterns;
+    /// brackets in `[host]:port` are literal.
+    static func glob(_ pattern: Substring, _ text: String) -> Bool {
+        let pattern = Array(pattern.lowercased())
+        let text = Array(text.lowercased())
+        func match(_ p: Int, _ t: Int) -> Bool {
+            if p == pattern.count { return t == text.count }
+            if pattern[p] == "*" {
+                return (t...text.count).contains { match(p + 1, $0) }
+            }
+            guard t < text.count, pattern[p] == "?" || pattern[p] == text[t] else { return false }
+            return match(p + 1, t + 1)
+        }
+        return match(0, 0)
     }
 }

@@ -82,6 +82,16 @@ extension Font {
     }
 }
 
+// MARK: - Accessibility
+
+extension View {
+    /// A tooltip that is also what VoiceOver says, for buttons that show only
+    /// an icon: otherwise it reads the icon's file name, or nothing.
+    func iconHelp(_ text: String) -> some View {
+        help(text).accessibilityLabel(text)
+    }
+}
+
 // MARK: - Cards
 
 extension View {
@@ -188,7 +198,13 @@ struct Glyph: View {
 }
 
 extension Label where Title == Text, Icon == Glyph {
-    /// A label whose icon is a `Glyph`, for toolbars and menus.
+    /// A label whose icon is a `Glyph`, for toolbars and menus. A literal
+    /// title is looked up in the string catalog, as with SwiftUI's own labels.
+    init(_ titleKey: LocalizedStringKey, glyph: String, size: CGFloat = 16) {
+        self.init { Text(titleKey) } icon: { Glyph(glyph, size: size) }
+    }
+
+    @_disfavoredOverload
     init(_ title: String, glyph: String, size: CGFloat = 16) {
         self.init { Text(title) } icon: { Glyph(glyph, size: size) }
     }
@@ -204,6 +220,8 @@ struct StatusDot: View {
             .fill(on ? color : .clear)
             .overlay(Circle().strokeBorder(on ? color : Color.secondary, lineWidth: 1.2))
             .frame(width: 7, height: 7)
+            .accessibilityElement()
+            .accessibilityLabel(on ? String(localized: "연결됨") : String(localized: "연결 안 됨"))
     }
 }
 

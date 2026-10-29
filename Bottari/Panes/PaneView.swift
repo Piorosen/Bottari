@@ -15,6 +15,7 @@ struct PaneView: View {
     @AppStorage("panes.showsCloudBadges") private var showsCloudBadges = true
     @State private var siteManager: SiteManagerRequest?
     @State private var isDropTarget = false
+    @State private var permissions: PermissionsRequest?
 
     init(workspace: Workspace, side: PaneSide) {
         self.workspace = workspace
@@ -41,7 +42,11 @@ struct PaneView: View {
                 workspace.drop(providers, onto: side)
             }
             .overlay {
-                if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
+                if model.showsSearchResults {
+                    if model.shownItems.isEmpty && !model.isSearching {
+                        ContentUnavailableView("찾은 항목 없음", systemImage: "magnifyingglass")
+                    }
+                } else if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
                     ContentUnavailableView("빈 폴더", systemImage: "folder")
                 }
             }
@@ -87,6 +92,16 @@ struct PaneView: View {
                 Task { await model.switchProvider(to: provider, site: site) }
             }
         }
+        .sheet(item: $permissions) { request in
+            PermissionsSheet(items: request.items) { mode, scope in
+                Task { await model.setPermissions(mode, on: request.items, scope: scope) }
+            }
+        }
+        .onChange(of: workspace.searchRequest) {
+            guard workspace.searchRequest == side else { return }
+            model.beginSearch()
+            workspace.searchRequest = nil
+        }
     }
 
     private var isProd: Bool { model.site?.tag == .prod }
@@ -108,12 +123,12 @@ struct PaneView: View {
                         Image(systemName: "chevron.left").frame(width: 20, height: 20)
                     }
                     .disabled(!model.canGoBack)
-                    .help("뒤로 (⌫)")
+                    .iconHelp(String(localized: "뒤로 (⌫)"))
                     Button { Task { await model.goForward() } } label: {
                         Image(systemName: "chevron.right").frame(width: 20, height: 20)
                     }
                     .disabled(!model.canGoForward)
-                    .help("앞으로")
+                    .iconHelp(String(localized: "앞으로"))
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
@@ -152,6 +167,9 @@ struct PaneView: View {
                 Task { await model.open(target) }
             }
             .padding(.leading, 4)
+            if model.searchQuery != nil {
+                SearchField(model: model) { listFocused = true }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.top, 12)
@@ -204,26 +222,31 @@ struct PaneView: View {
         HStack(spacing: 6) {
             if model.provider is SFTPFileProvider {
                 Button { workspace.openTerminal(in: side) } label: { Glyph("bt.terminal", size: 15) }
-                    .help("SSH 터미널 (⌃`)")
+                    .iconHelp(String(localized: "SSH 터미널 (⌃`)"))
                 if model.site?.remoteScreen != nil {
                     Button { workspace.openScreen(in: side) } label: { Glyph("bt.screen", size: 15) }
-                        .help("원격 화면")
+                        .iconHelp(String(localized: "원격 화면"))
                 }
             }
+            Button { model.searchQuery == nil ? model.beginSearch() : model.endSearch() } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .buttonStyle(IconButtonStyle(isOn: model.searchQuery != nil))
+            .iconHelp(String(localized: "이 폴더에서 찾기 (⌘F)"))
             Button { model.showsHiddenFiles.toggle() } label: {
                 Image(systemName: model.showsHiddenFiles ? "eye" : "eye.slash")
             }
             .buttonStyle(IconButtonStyle(isOn: model.showsHiddenFiles))
-            .help("숨김 파일 보기")
+            .iconHelp(String(localized: "숨김 파일 보기"))
             Button { Task { await model.reload() } } label: { Image(systemName: "arrow.clockwise") }
-                .help("새로고침")
+                .iconHelp(String(localized: "새로고침"))
             HStack(spacing: 0) {
                 ForEach(PaneModel.ViewMode.allCases, id: \.self) { mode in
                     Button { model.viewMode = mode } label: {
                         Image(systemName: mode == .list ? "list.bullet" : "square.grid.2x2")
                     }
                     .buttonStyle(IconButtonStyle(isOn: model.viewMode == mode))
-                    .help(mode == .list ? "목록으로 보기" : "격자로 보기")
+                    .iconHelp(mode == .list ? String(localized: "목록으로 보기") : String(localized: "격자로 보기"))
                 }
             }
         }
@@ -234,7 +257,7 @@ struct PaneView: View {
 
     private var fileTable: some View {
         Table(of: FileItem.self, selection: $model.selection) {
-            TableColumn("이름") { item in
+            TableColumn(String(localized: "이름")) { item in
                 HStack(spacing: 8) {
                     FileGlyph(item: item, isLocal: model.isLocal)
                     if model.renaming == item.id {
@@ -247,20 +270,27 @@ struct PaneView: View {
                         Text(item.name)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        if model.showsSearchResults, case let location = model.searchLocation(of: item), !location.isEmpty {
+                            Text(location)
+                                .font(.themeMono(.caption))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
                         if item.looksSecret {
-                            Badge("비밀값").fixedSize()
+                            Badge(String(localized: "비밀값")).fixedSize()
                         }
                         if showsCloudBadges, let cloud = item.cloud, cloud != .downloaded {
                             Image(systemName: cloud == .downloading ? "icloud.and.arrow.down" : "icloud")
                                 .foregroundStyle(.secondary)
-                                .help(cloud == .downloading ? "받는 중" : "iCloud에만 있음")
+                                .help(cloud == .downloading ? String(localized: "받는 중") : String(localized: "iCloud에만 있음"))
                         }
                     }
                 }
                 .padding(.vertical, ThemeStore.shared.rowPadding)
             }
             .width(min: 120, ideal: 170)
-            TableColumn("크기") { item in
+            TableColumn(String(localized: "크기")) { item in
                 Text(item.formattedSize)
                     .font(.ui(.callout))
                     .monospacedDigit()
@@ -268,29 +298,29 @@ struct PaneView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 50, ideal: 64, max: 110)
-            TableColumn("수정") { item in
+            TableColumn(String(localized: "수정")) { item in
                 Text(item.shortModified)
                     .font(.ui(.callout))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             .width(min: 76, ideal: 88, max: 140)
-            TableColumn("권한") { item in
+            TableColumn(String(localized: "권한")) { item in
                 Text(item.permissionString ?? "—")
                     .font(.themeMono(.caption))
                     .foregroundStyle(.secondary)
             }
             .width(min: 68, ideal: 76, max: 110)
         } rows: {
-            ForEach(model.visibleItems) { item in
+            ForEach(model.shownItems) { item in
                 TableRow(item)
                     .itemProvider { workspace.dragProvider(for: item, from: side) }
             }
         }
         .contextMenu(forSelectionType: FileItem.ID.self) { ids in
-            contextMenu(for: model.items.filter { ids.contains($0.id) })
+            contextMenu(for: model.items(withIDs: ids))
         } primaryAction: { ids in
-            guard ids.count == 1, let item = model.items.first(where: { ids.contains($0.id) }) else { return }
+            guard ids.count == 1, let item = model.items(withIDs: ids).first else { return }
             workspace.open(item, in: side)
         }
         .alternatingRowBackgrounds(.disabled)
@@ -306,7 +336,7 @@ struct PaneView: View {
     private var fileGrid: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 96, maximum: 120), spacing: 8)], spacing: 8) {
-                ForEach(model.visibleItems) { item in
+                ForEach(model.shownItems) { item in
                     let selected = model.selection.contains(item.id)
                     VStack(spacing: 6) {
                         FileGlyph(item: item, isLocal: model.isLocal, size: 34)
@@ -380,7 +410,7 @@ struct PaneView: View {
             if !readOnlyHere {
                 Button("새 폴더") { workspace.makeFolder(in: side) }
                 Divider()
-                Button(count.map { "붙여넣기 (\($0)개)" } ?? "붙여넣기") { workspace.paste(into: side, kind: .copy) }
+                Button(count.map { String(localized: "붙여넣기 (\($0)개)") } ?? String(localized: "붙여넣기")) { workspace.paste(into: side, kind: .copy) }
                     .disabled(count == nil)
                 Button("여기로 항목 이동") { workspace.paste(into: side, kind: .move) }
                     .disabled(count == nil)
@@ -397,7 +427,7 @@ struct PaneView: View {
             Button("새로고침") { Task { await model.reload() } }
         } else {
             if items.count == 1, let item = items.first {
-                Button(item.isDirectory ? "열기" : FileKind(item) == .image ? "이미지 뷰어로 열기" : "열기") {
+                Button(item.isDirectory ? String(localized: "열기") : FileKind(item) == .image ? String(localized: "이미지 뷰어로 열기") : String(localized: "열기")) {
                     workspace.open(item, in: side)
                 }
                 if !item.isDirectory {
@@ -421,14 +451,24 @@ struct PaneView: View {
                 }
                 Divider()
             }
-            if items.count == 1, let item = items.first, !readOnlyHere {
+            if model.showsSearchResults, items.count == 1, let item = items.first {
+                Button("포함된 폴더 열기") { Task { await model.reveal(item) } }
+                Divider()
+            }
+            if items.count == 1, let item = items.first, !readOnlyHere, !model.showsSearchResults {
                 Button("이름 바꾸기") {
                     model.selection = [item.id]
                     workspace.beginRenaming(in: side)
                 }
             }
+            if !readOnlyHere, model.provider.capabilities.contains(.permissions) {
+                Button("권한 변경…") { permissions = PermissionsRequest(items: items) }
+            }
+            if items.count == 1, let item = items.first, !readOnlyHere, model.provider.capabilities.contains(.symbolicLinks) {
+                Button("링크 만들기") { Task { await model.makeLink(to: item) } }
+            }
             if model.canRunCommands, !readOnlyHere {
-                Button(items.count == 1 ? "서버에서 압축 (tar.gz)" : "\(items.count)개를 서버에서 압축") {
+                Button(items.count == 1 ? String(localized: "서버에서 압축 (tar.gz)") : String(localized: "\(items.count)개를 서버에서 압축")) {
                     Task { await model.compressOnServer(items) }
                 }
                 if items.count == 1, let item = items.first, PaneModel.isArchive(item) {
@@ -464,7 +504,7 @@ struct PaneView: View {
             }
             if !readOnlyHere {
                 Divider()
-                Button(model.provider.capabilities.contains(.trash) ? "휴지통으로 이동" : "삭제…", role: .destructive) {
+                Button(model.provider.capabilities.contains(.trash) ? String(localized: "휴지통으로 이동") : String(localized: "삭제…"), role: .destructive) {
                     workspace.delete(items, in: side)
                 }
             }
@@ -491,12 +531,14 @@ struct PaneView: View {
     }
 
     private var summary: String {
-        let count = "\(model.visibleItems.count)개 항목"
+        let count = !model.showsSearchResults
+            ? String(localized: "\(model.visibleItems.count)개 항목")
+            : String(localized: "찾은 항목 \(model.shownItems.count)개") + (model.searchResults.count >= PaneModel.searchLimit ? String(localized: " (처음 \(PaneModel.searchLimit)개)") : "")
         let selected = model.selectedItems
         guard !selected.isEmpty else { return count }
         let bytes = selected.compactMap(\.size).reduce(0, +)
         let size = bytes > 0 ? " (\(ByteFormat.string(bytes)))" : ""
-        return "\(count) · \(selected.count)개 선택\(size)"
+        return String(localized: "\(count) · \(selected.count)개 선택\(size)")
     }
 }
 
@@ -538,6 +580,50 @@ private struct PlainTableRows: NSViewRepresentable {
     private static func tables(in view: NSView) -> [NSTableView] {
         if let table = view as? NSTableView { return [table] }
         return view.subviews.flatMap(tables)
+    }
+}
+
+/// "Find in this folder": what to look for, how the search is going, and the
+/// way back to the folder.
+private struct SearchField: View {
+    let model: PaneModel
+    let done: () -> Void
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("이 폴더 아래에서 찾을 이름 (*.log 같은 패턴도 됨)", text: $text)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onChange(of: text) { model.search(text) }
+                .onSubmit(done)
+                .onKeyPress(.escape) {
+                    model.endSearch()
+                    done()
+                    return .handled
+                }
+            if model.isSearching {
+                ProgressView().controlSize(.small)
+            }
+            Button("닫기") {
+                model.endSearch()
+                done()
+            }
+            .buttonStyle(.borderless)
+            .font(.ui(.caption))
+        }
+        .font(.ui(.callout))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Palette.panel2, in: .rect(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line))
+        .onAppear {
+            text = model.searchQuery ?? ""
+            focused = true
+        }
     }
 }
 

@@ -24,32 +24,32 @@ final class SettingsSync {
 
         var title: String {
             switch self {
-            case .sites: "연결 목록"
-            case .favorites: "사이드바 즐겨찾기"
-            case .themes: "테마"
-            case .keymap: "단축키"
-            case .presets: "보따리 프리셋"
+            case .sites: String(localized: "연결 목록")
+            case .favorites: String(localized: "사이드바 즐겨찾기")
+            case .themes: String(localized: "테마")
+            case .keymap: String(localized: "단축키")
+            case .presets: String(localized: "보따리 프리셋")
             }
         }
 
         /// With its subject particle: "연결 목록이", "테마가".
         var subject: String {
             switch self {
-            case .sites: "연결 목록이"
-            case .favorites: "사이드바 즐겨찾기가"
-            case .themes: "테마가"
-            case .keymap: "단축키가"
-            case .presets: "보따리 프리셋이"
+            case .sites: String(localized: "연결 목록이")
+            case .favorites: String(localized: "사이드바 즐겨찾기가")
+            case .themes: String(localized: "테마가")
+            case .keymap: String(localized: "단축키가")
+            case .presets: String(localized: "보따리 프리셋이")
             }
         }
 
         var subtitle: String {
             switch self {
-            case .sites: "서버 주소, 사용자, 태그, 점프 호스트 (비밀번호 제외)"
-            case .favorites: "사이드바에 추가한 폴더"
-            case .themes: "사용 중인 테마와 저장된 테마"
-            case .keymap: "선택한 배열과 사용자 지정 키"
-            case .presets: "자주 쓰는 파일 묶음"
+            case .sites: String(localized: "서버 주소, 사용자, 태그, 점프 호스트 (비밀번호 제외)")
+            case .favorites: String(localized: "사이드바에 추가한 폴더")
+            case .themes: String(localized: "사용 중인 테마와 저장된 테마")
+            case .keymap: String(localized: "선택한 배열과 사용자 지정 키")
+            case .presets: String(localized: "자주 쓰는 파일 묶음")
             }
         }
 
@@ -82,7 +82,7 @@ final class SettingsSync {
                 UserDefaults.standard.set(id, forKey: key)
                 return id
             }()
-            let name = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "이 Mac"
+            let name = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? String(localized: "이 Mac")
             var size = 0
             sysctlbyname("hw.model", nil, &size, nil, 0)
             var model = [UInt8](repeating: 0, count: max(size, 1))
@@ -160,7 +160,7 @@ final class SettingsSync {
     var folder: URL? { folderURL() }
 
     var otherMacName: String {
-        devices.first { $0.id != device.id }?.name ?? "다른 Mac"
+        devices.first { $0.id != device.id }?.name ?? String(localized: "다른 Mac")
     }
 
     /// Starts watching for changes: on this Mac, when the app comes back to the
@@ -235,7 +235,7 @@ final class SettingsSync {
     func syncNow() {
         guard isEnabled else { return }
         guard let folder = folderURL() else {
-            errors = ["iCloud Drive가 꺼져 있습니다. 시스템 설정 › Apple 계정 › iCloud에서 iCloud Drive를 켜십시오."]
+            errors = [String(localized: "iCloud Drive가 꺼져 있습니다. 시스템 설정 › Apple 계정 › iCloud에서 iCloud Drive를 켜십시오.")]
             return
         }
         guard !isSyncing else {
@@ -309,27 +309,27 @@ final class SettingsSync {
         }
         if let favorites = outcome.favorites {
             if favorites.items != sources.favorites.get() { sources.favorites.set(favorites.items) }
-            found += favorites.conflicts.map { listConflict($0, item: .favorites, file: "favorites.json", source: sources.favorites, title: \.name, detail: { _, _, _ in "위치가 다름" }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
+            found += favorites.conflicts.map { listConflict($0, item: .favorites, file: "favorites.json", source: sources.favorites, title: \.name, detail: { _, _, _ in String(localized: "위치가 다름") }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
         }
         if let presets = outcome.presets {
             if presets.items != sources.presets.get() { sources.presets.set(presets.items) }
-            found += presets.conflicts.map { listConflict($0, item: .presets, file: "bottari-presets.json", source: sources.presets, title: \.name, detail: { _, _, _ in "담긴 항목이 다름" }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
+            found += presets.conflicts.map { listConflict($0, item: .presets, file: "bottari-presets.json", source: sources.presets, title: \.name, detail: { _, _, _ in String(localized: "담긴 항목이 다름") }, copy: { var c = $0; c.id = UUID(); c.name += " (\($1))"; return c }) }
         }
         if let keymap = outcome.keymap {
             if keymap.value != sources.keymap.get() { sources.keymap.set(keymap.value) }
             if let conflict = keymap.conflict {
-                found.append(valueConflict(conflict, item: .keymap, file: "keymap.json", source: sources.keymap, title: "단축키", detail: "\(conflict.local.layout.title) · \(conflict.remote.layout.title)"))
+                found.append(valueConflict(conflict, item: .keymap, file: "keymap.json", source: sources.keymap, title: String(localized: "단축키"), detail: "\(conflict.local.layout.title) · \(conflict.remote.layout.title)"))
             }
         }
         if let theme = outcome.theme {
             if theme.value != sources.theme.get() { sources.theme.set(theme.value) }
             if let conflict = theme.conflict {
-                found.append(valueConflict(conflict, item: .themes, file: "theme.json", source: sources.theme, title: "사용 중인 테마", detail: "이 Mac: \(conflict.local.name) · \(otherMacName): \(conflict.remote.name)"))
+                found.append(valueConflict(conflict, item: .themes, file: "theme.json", source: sources.theme, title: String(localized: "사용 중인 테마"), detail: String(localized: "이 Mac: \(conflict.local.name) · \(otherMacName): \(conflict.remote.name)")))
             }
         }
         if let themes = outcome.themes {
             if themes.items != sources.themes.get() { sources.themes.set(themes.items) }
-            found += themes.conflicts.map { listConflict($0, item: .themes, file: "themes.json", source: sources.themes, title: \.name, detail: { _, _, _ in "색 또는 글꼴이 다름" }, copy: { var c = $0; c.name += " (\($1))"; return c }) }
+            found += themes.conflicts.map { listConflict($0, item: .themes, file: "themes.json", source: sources.themes, title: \.name, detail: { _, _, _ in String(localized: "색 또는 글꼴이 다름") }, copy: { var c = $0; c.name += " (\($1))"; return c }) }
         }
         conflicts = found
         if outcome.errors.isEmpty {
@@ -366,8 +366,8 @@ final class SettingsSync {
         let name = (mine ?? theirs)![keyPath: title]
         let description = switch (mine, theirs) {
         case (let mine?, let theirs?): detail(mine, theirs, other)
-        case (nil, _): "이 Mac에서 삭제됨, \(other)에서 수정됨"
-        case (_, nil): "이 Mac에서 수정됨, \(other)에서 삭제됨"
+        case (nil, _): String(localized: "이 Mac에서 삭제됨, \(other)에서 수정됨")
+        case (_, nil): String(localized: "이 Mac에서 수정됨, \(other)에서 삭제됨")
         }
         return Conflict(id: "\(item.rawValue)-\(conflict.id)", item: item, title: name, detail: description, canKeepBoth: mine != nil && theirs != nil) { choice in
             // Only the agreed state is touched here.
@@ -378,17 +378,17 @@ final class SettingsSync {
             var list = source.get()
             switch choice {
             case .keepMine:
-                return "이 Mac의 “\(name)” 유지, \(other)에도 반영"
+                return String(localized: "이 Mac의 “\(name)” 유지, \(other)에도 반영")
             case .useTheirs:
                 list.put(theirs, for: conflict.id)
                 source.set(list)
-                return theirs == nil ? "\(other)에 맞춰 “\(name)” 삭제됨" : "\(other)의 “\(name)” 적용됨"
+                return theirs == nil ? String(localized: "\(other)에 맞춰 “\(name)” 삭제됨") : String(localized: "\(other)의 “\(name)” 적용됨")
             case .keepBoth:
                 if let theirs {
                     let duplicate = copy(theirs, other)
                     list.append(duplicate)
                     source.set(list)
-                    return "사본 “\(duplicate[keyPath: title])” 생성됨"
+                    return String(localized: "사본 “\(duplicate[keyPath: title])” 생성됨")
                 }
                 return ""
             }
@@ -409,25 +409,25 @@ final class SettingsSync {
             try? SyncFolder(folder: baseFolder, baseFolder: baseFolder).setBase(file, value: conflict.remote)
             if choice == .useTheirs {
                 source.set(conflict.remote)
-                return "\(other)의 \(title) 적용됨"
+                return String(localized: "\(other)의 \(title) 적용됨")
             }
-            return "이 Mac의 \(title) 유지, \(other)에도 반영"
+            return String(localized: "이 Mac의 \(title) 유지, \(other)에도 반영")
         }
     }
 
     /// "포트 · 이 Mac: 22 · Mac mini: 2222"
     private static func siteDifference(_ mine: SavedSite, _ theirs: SavedSite, otherMac other: String) -> String {
         let fields: [(String, String, String)] = [
-            ("이름", mine.name, theirs.name),
-            ("주소", mine.endpoint.host, theirs.endpoint.host),
-            ("포트", String(mine.endpoint.port), String(theirs.endpoint.port)),
-            ("사용자", mine.endpoint.username, theirs.endpoint.username),
-            ("태그", mine.tag?.label ?? "없음", theirs.tag?.label ?? "없음"),
-            ("점프 호스트", mine.proxyJump.joined(separator: ", "), theirs.proxyJump.joined(separator: ", ")),
-            ("시작 폴더", mine.startPath ?? "", theirs.startPath ?? ""),
+            (String(localized: "이름"), mine.name, theirs.name),
+            (String(localized: "주소"), mine.endpoint.host, theirs.endpoint.host),
+            (String(localized: "포트"), String(mine.endpoint.port), String(theirs.endpoint.port)),
+            (String(localized: "사용자"), mine.endpoint.username, theirs.endpoint.username),
+            (String(localized: "태그"), mine.tag?.label ?? String(localized: "없음"), theirs.tag?.label ?? String(localized: "없음")),
+            (String(localized: "점프 호스트"), mine.proxyJump.joined(separator: ", "), theirs.proxyJump.joined(separator: ", ")),
+            (String(localized: "시작 폴더"), mine.startPath ?? "", theirs.startPath ?? ""),
         ]
-        guard let (label, here, there) = fields.first(where: { $0.1 != $0.2 }) else { return "기타 설정이 다름" }
-        return "\(label) · 이 Mac: \(here.isEmpty ? "없음" : here) · \(other): \(there.isEmpty ? "없음" : there)"
+        guard let (label, here, there) = fields.first(where: { $0.1 != $0.2 }) else { return String(localized: "기타 설정이 다름") }
+        return String(localized: "\(label) · 이 Mac: \(here.isEmpty ? String(localized: "없음") : here) · \(other): \(there.isEmpty ? String(localized: "없음") : there)")
     }
 
     private static func copy(_ site: SavedSite, otherMac: String) -> SavedSite {

@@ -7,7 +7,7 @@ enum AppServices {
     private static let supportDirectory = URL.applicationSupportDirectory.appending(path: "Bottari")
 
     /// Host keys the user has trusted, kept between launches like `~/.ssh/known_hosts`.
-    static let knownHosts = KnownHosts(fileURL: supportDirectory.appending(path: "known_hosts.json"))
+    static let knownHosts = KnownHosts(fileURL: supportDirectory.appending(path: "known_hosts.json"), openSSHFiles: KnownHosts.openSSHDefaultFiles)
 
     static let sites = SiteLibrary(
         store: SiteStore(fileURL: supportDirectory.appending(path: "sites.json")),
@@ -22,8 +22,16 @@ enum AppServices {
             connections.closeUnused()
             NotificationCenter.default.post(name: .transfersChanged, object: nil)
         }
+        queue.onCheckpoint = { transferRecords.checkpoint() }
         return queue
     }()
+
+    /// Transfers left unfinished when the app last quit.
+    static let transferRecords = TransferRecords(
+        fileURL: supportDirectory.appending(path: "transfers.json"),
+        queue: transfers,
+        saves: !AppDelegate.isRenderingSnapshots
+    )
 
     static let connections = ConnectionKeeper()
 

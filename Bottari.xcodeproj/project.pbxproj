@@ -212,6 +212,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				BOTTARI_GOOGLE_CLIENT_ID = "";
+				BOTTARI_GOOGLE_CLIENT_SECRET = "";
 				BOTTARI_SPARKLE_PUBLIC_KEY = "";
 				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
 				CODE_SIGN_IDENTITY = "-";
@@ -245,6 +247,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				BOTTARI_GOOGLE_CLIENT_ID = "";
+				BOTTARI_GOOGLE_CLIENT_SECRET = "";
 				BOTTARI_SPARKLE_PUBLIC_KEY = "";
 				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
 				CODE_SIGN_IDENTITY = "-";

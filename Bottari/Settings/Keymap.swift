@@ -102,7 +102,7 @@ extension KeyCombo: Codable {
     init(from decoder: any Decoder) throws {
         let text = try decoder.singleValueContainer().decode(String.self)
         guard let combo = KeyCombo(parsing: text) else {
-            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "알 수 없는 키: \(text)"))
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: String(localized: "알 수 없는 키: \(text)")))
         }
         self = combo
     }
@@ -121,16 +121,16 @@ enum PaneAction: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .copyToOther: "반대편 패인에 복사"
-        case .moveToOther: "반대편 패인으로 이동"
-        case .newFolder: "새 폴더"
-        case .rename: "이름 바꾸기"
-        case .delete: "삭제 (휴지통)"
-        case .preview: "미리보기"
-        case .edit: "편집"
-        case .bundle: "보따리에 담기"
-        case .switchPane: "패인 전환"
-        case .palette: "명령 팔레트"
+        case .copyToOther: String(localized: "반대편 패인에 복사")
+        case .moveToOther: String(localized: "반대편 패인으로 이동")
+        case .newFolder: String(localized: "새 폴더")
+        case .rename: String(localized: "이름 바꾸기")
+        case .delete: String(localized: "삭제 (휴지통)")
+        case .preview: String(localized: "미리보기")
+        case .edit: String(localized: "편집")
+        case .bundle: String(localized: "보따리에 담기")
+        case .switchPane: String(localized: "패인 전환")
+        case .palette: String(localized: "명령 팔레트")
         }
     }
 }
@@ -143,15 +143,15 @@ enum KeyLayout: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .finder: "Finder식"
-        case .commander: "Commander식"
+        case .finder: String(localized: "Finder식")
+        case .commander: String(localized: "Commander식")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .finder: "⌘ 조합 중심"
-        case .commander: "F5 복사, F6 이동, F7 새 폴더, F8 삭제"
+        case .finder: String(localized: "⌘ 조합 중심")
+        case .commander: String(localized: "F5 복사, F6 이동, F7 새 폴더, F8 삭제")
         }
     }
 
@@ -216,13 +216,13 @@ final class Keymap {
 
     /// The app's own fixed shortcuts, so a new key that takes one is flagged.
     static let reserved: [KeyCombo: String] = [
-        KeyCombo("c", command: true): "복사 (클립보드)", KeyCombo("v", command: true): "붙여넣기",
-        KeyCombo("x", command: true): "잘라내기", KeyCombo("a", command: true): "모두 선택",
-        KeyCombo("v", option: true, command: true): "여기로 항목 이동", KeyCombo("c", option: true, command: true): "경로 복사",
-        KeyCombo("r", command: true): "새로고침", KeyCombo("[", command: true): "뒤로", KeyCombo("]", command: true): "앞으로",
-        KeyCombo("up", command: true): "상위 폴더", KeyCombo("down", command: true): "열기", KeyCombo("`", control: true): "SSH 터미널",
-        KeyCombo(",", command: true): "설정", KeyCombo("q", command: true): "종료", KeyCombo("w", command: true): "창 닫기",
-        KeyCombo("n", command: true): "새 창", KeyCombo("delete"): "뒤로",
+        KeyCombo("c", command: true): String(localized: "복사 (클립보드)"), KeyCombo("v", command: true): String(localized: "붙여넣기"),
+        KeyCombo("x", command: true): String(localized: "잘라내기"), KeyCombo("a", command: true): String(localized: "모두 선택"),
+        KeyCombo("v", option: true, command: true): String(localized: "여기로 항목 이동"), KeyCombo("c", option: true, command: true): String(localized: "경로 복사"),
+        KeyCombo("r", command: true): String(localized: "새로고침"), KeyCombo("[", command: true): String(localized: "뒤로"), KeyCombo("]", command: true): String(localized: "앞으로"),
+        KeyCombo("up", command: true): String(localized: "상위 폴더"), KeyCombo("down", command: true): String(localized: "열기"), KeyCombo("`", control: true): String(localized: "SSH 터미널"),
+        KeyCombo(",", command: true): String(localized: "설정"), KeyCombo("q", command: true): String(localized: "종료"), KeyCombo("w", command: true): String(localized: "창 닫기"),
+        KeyCombo("n", command: true): String(localized: "새 창"), KeyCombo("delete"): String(localized: "뒤로"),
     ]
 
     private init() {

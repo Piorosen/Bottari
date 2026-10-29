@@ -22,8 +22,8 @@ nonisolated struct Theme: Codable, Hashable, Identifiable, Sendable {
 
         var title: String {
             switch self {
-            case .comfortable: "편안하게"
-            case .compact: "촘촘하게"
+            case .comfortable: String(localized: "편안하게")
+            case .compact: String(localized: "촘촘하게")
             }
         }
     }
@@ -77,7 +77,7 @@ nonisolated struct Theme: Codable, Hashable, Identifiable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "가져온 테마"
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? String(localized: "가져온 테마")
         base = try container.decodeIfPresent(Base.self, forKey: .base) ?? .system
         colors = try container.decodeIfPresent(Colors.self, forKey: .colors) ?? Colors()
         density = try container.decodeIfPresent(Density.self, forKey: .density) ?? .comfortable
@@ -88,16 +88,16 @@ nonisolated struct Theme: Codable, Hashable, Identifiable, Sendable {
 
     /// The design's colour sets. Choosing one keeps the accent, fonts and the rest.
     static let presets: [(theme: Theme, subtitle: String)] = [
-        (Theme(name: "시스템"), "macOS 설정 따름"),
-        (Theme(name: "종이", base: .light, colors: Colors(background: "#EFECE6", panel: "#FDFCFA", panel2: "#F5F2EC", line: "#E0DBD2", text: "#1C1A17")), "밝은 기본"),
-        (Theme(name: "먹", base: .dark, colors: Colors(background: "#131211", panel: "#1B1A18", panel2: "#211F1C", line: "#2F2C28", text: "#ECE8E1")), "어두운 기본"),
-        (Theme(name: "쪽빛 밤", base: .dark, colors: Colors(background: "#0D1022", panel: "#141A33", panel2: "#1A2140", line: "#2A3358", text: "#E4E8F7")), "푸른 어둠"),
-        (Theme(name: "모시", base: .light, colors: Colors(background: "#EEEDEA", panel: "#FBFAF8", panel2: "#F4F3F0", line: "#DEDBD5", text: "#1C1B19")), "따뜻한 회색"),
-        (Theme(name: "고대비", base: .light, colors: Colors(background: "#FFFFFF", panel: "#FFFFFF", panel2: "#F0F0F0", line: "#1A1A1A", text: "#000000")), "선명하게"),
+        (Theme(name: String(localized: "시스템")), String(localized: "macOS 설정 따름")),
+        (Theme(name: String(localized: "종이"), base: .light, colors: Colors(background: "#EFECE6", panel: "#FDFCFA", panel2: "#F5F2EC", line: "#E0DBD2", text: "#1C1A17")), String(localized: "밝은 기본")),
+        (Theme(name: String(localized: "먹"), base: .dark, colors: Colors(background: "#131211", panel: "#1B1A18", panel2: "#211F1C", line: "#2F2C28", text: "#ECE8E1")), String(localized: "어두운 기본")),
+        (Theme(name: String(localized: "쪽빛 밤"), base: .dark, colors: Colors(background: "#0D1022", panel: "#141A33", panel2: "#1A2140", line: "#2A3358", text: "#E4E8F7")), String(localized: "푸른 어둠")),
+        (Theme(name: String(localized: "모시"), base: .light, colors: Colors(background: "#EEEDEA", panel: "#FBFAF8", panel2: "#F4F3F0", line: "#DEDBD5", text: "#1C1B19")), String(localized: "따뜻한 회색")),
+        (Theme(name: String(localized: "고대비"), base: .light, colors: Colors(background: "#FFFFFF", panel: "#FFFFFF", panel2: "#F0F0F0", line: "#1A1A1A", text: "#000000")), String(localized: "선명하게")),
     ]
 
     static let accents: [(name: String, hex: String)] = [
-        ("쪽빛", "#2D5A8C"), ("청록", "#0F7C78"), ("자주", "#8A3FA0"), ("송진", "#9A6700"), ("진달래", "#B0306A"), ("먹", "#2B2F38"),
+        (String(localized: "쪽빛"), "#2D5A8C"), (String(localized: "청록"), "#0F7C78"), (String(localized: "자주"), "#8A3FA0"), (String(localized: "송진"), "#9A6700"), (String(localized: "진달래"), "#B0306A"), (String(localized: "먹"), "#2B2F38"),
     ]
 
     /// Choices per tag; the first is the default.

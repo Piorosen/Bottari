@@ -91,7 +91,7 @@ private struct EditorView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            BackButton(title: "목록으로") { NSApp.keyWindow?.performClose(nil) }
+            BackButton(title: String(localized: "목록으로")) { NSApp.keyWindow?.performClose(nil) }
                 .buttonStyle(PanelButtonStyle())
                 .fixedSize()
             HStack(spacing: 8) {
@@ -144,11 +144,11 @@ private struct EditorView: View {
             VStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("저장 과정").font(.ui(.body, weight: .semibold))
-                    step("서버 수정 시각과 크기 확인", model.remoteModified.map { "\($0.formatted(date: .omitted, time: .shortened))에 연 버전과 비교" })
-                    step("임시 이름으로 업로드", model.item.path.partialWritePath.string)
-                    step("원래 이름으로 바꾸기", "중간에 끊겨도 원본 유지")
+                    step(String(localized: "서버 수정 시각과 크기 확인"), model.remoteModified.map { String(localized: "\($0.formatted(date: .omitted, time: .shortened))에 연 버전과 비교") })
+                    step(String(localized: "임시 이름으로 업로드"), model.item.path.partialWritePath.string)
+                    step(String(localized: "원래 이름으로 바꾸기"), String(localized: "중간에 끊겨도 원본 유지"))
                     if !model.postSaveCommand.isEmpty {
-                        step("검사 명령 실행", model.postSaveCommand)
+                        step(String(localized: "검사 명령 실행"), model.postSaveCommand)
                     }
                 }
                 .padding(14)
@@ -219,7 +219,7 @@ private struct EditorView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView("여는 중…")
+            ProgressView(String(localized: "여는 중…"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView("열 수 없음", systemImage: "doc.text", description: Text(message))
@@ -291,7 +291,7 @@ private struct EditorView: View {
                 Text(language)
             }
             Spacer()
-            Text((model.isDirty ? "저장되지 않음 · " : model.savedAt.map { "저장됨 \($0.formatted(date: .omitted, time: .shortened)) · " } ?? "") + "줄 \(model.cursor.line), 칸 \(model.cursor.column)")
+            Text((model.isDirty ? String(localized: "저장되지 않음 · ") : model.savedAt.map { String(localized: "저장됨 \($0.formatted(date: .omitted, time: .shortened)) · ") } ?? "") + String(localized: "줄 \(model.cursor.line), 칸 \(model.cursor.column)"))
                 .foregroundStyle(model.isDirty ? Color.orange : .secondary)
         }
         .font(.themeMono(.caption))
@@ -370,11 +370,11 @@ private struct WindowCloseGuard: NSViewRepresentable {
         func windowShouldClose(_ window: NSWindow) -> Bool {
             guard isDirty else { return original?.windowShouldClose?(window) ?? true }
             let alert = NSAlert()
-            alert.messageText = "닫기 전에 변경 사항을 저장하겠습니까?"
-            alert.informativeText = "저장하지 않으면 변경 사항이 손실됩니다."
-            alert.addButton(withTitle: "저장")
-            alert.addButton(withTitle: "취소")
-            alert.addButton(withTitle: "저장 안 함")
+            alert.messageText = String(localized: "닫기 전에 변경 사항을 저장하겠습니까?")
+            alert.informativeText = String(localized: "저장하지 않으면 변경 사항이 손실됩니다.")
+            alert.addButton(withTitle: String(localized: "저장"))
+            alert.addButton(withTitle: String(localized: "취소"))
+            alert.addButton(withTitle: String(localized: "저장 안 함"))
             alert.beginSheetModal(for: window) { response in
                 switch response {
                 case .alertFirstButtonReturn:

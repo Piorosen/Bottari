@@ -23,6 +23,10 @@ public struct ProviderCapabilities: OptionSet, Hashable, Sendable {
     public static let resumableWrite = ProviderCapabilities(rawValue: 1 << 5)
     /// Sets a file's modification time.
     public static let modificationTime = ProviderCapabilities(rawValue: 1 << 6)
+    /// Changes POSIX permission bits with `setPermissions(_:at:)`.
+    public static let permissions = ProviderCapabilities(rawValue: 1 << 7)
+    /// Creates symbolic links with `makeSymbolicLink(at:to:)`.
+    public static let symbolicLinks = ProviderCapabilities(rawValue: 1 << 8)
 }
 
 /// One place files live: the Mac, an SFTP server, a cloud drive.
@@ -68,21 +72,30 @@ public protocol FileProvider: Sendable {
     func delete(_ path: RemotePath) async throws
     /// Moves an item to the provider's trash. Requires `.trash`.
     func trash(_ path: RemotePath) async throws
+    /// Sets the permission bits (`0o755` and the like). Requires `.permissions`.
+    func setPermissions(_ mode: UInt16, at path: RemotePath) async throws
+    /// Creates a symbolic link at `path` holding `target`, which may be
+    /// relative to the link's folder. Requires `.symbolicLinks`.
+    func makeSymbolicLink(at path: RemotePath, to target: String) async throws
+    /// Items under `folder` whose names match `query`, as they are found.
+    /// A query with `*` or `?` is a pattern; anything else matches names that
+    /// contain it. Case does not matter. Stops after `limit` matches.
+    func search(_ query: String, in folder: RemotePath, limit: Int) -> AsyncThrowingStream<FileItem, any Error>
 }
 
 extension FileProvider {
     public var isLocal: Bool { locationID == LocalFileProvider.locationID }
 
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
-        throw ProviderError.unsupported("서버 내 복사")
+        throw ProviderError.unsupported(String(localized: "서버 내 복사"))
     }
 
     public func trash(_ path: RemotePath) async throws {
-        throw ProviderError.unsupported("휴지통")
+        throw ProviderError.unsupported(String(localized: "휴지통"))
     }
 
     public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
-        guard offset == 0 else { throw ProviderError.unsupported("이어서 쓰기") }
+        guard offset == 0 else { throw ProviderError.unsupported(String(localized: "이어서 쓰기")) }
         try await write(path, from: data)
     }
 
@@ -91,11 +104,23 @@ extension FileProvider {
     }
 
     public func checksum(_ path: RemotePath) async throws -> String {
-        throw ProviderError.unsupported("체크섬")
+        throw ProviderError.unsupported(String(localized: "체크섬"))
     }
 
     public func setModified(_ date: Date, at path: RemotePath) async throws {
-        throw ProviderError.unsupported("수정 시각 변경")
+        throw ProviderError.unsupported(String(localized: "수정 시각 변경"))
+    }
+
+    public func setPermissions(_ mode: UInt16, at path: RemotePath) async throws {
+        throw ProviderError.unsupported(String(localized: "권한 변경"))
+    }
+
+    public func makeSymbolicLink(at path: RemotePath, to target: String) async throws {
+        throw ProviderError.unsupported(String(localized: "심볼릭 링크"))
+    }
+
+    public func search(_ query: String, in folder: RemotePath, limit: Int) -> AsyncThrowingStream<FileItem, any Error> {
+        FileSearch.walk(self, from: folder, matching: query, limit: limit)
     }
 
     /// Reads a whole file, or a range of it, into memory. Meant for small files

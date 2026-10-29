@@ -2,6 +2,7 @@ import BottariCore
 import Citadel
 import Foundation
 import NIOCore
+import Synchronization
 import Testing
 @testable import BottariSFTP
 
@@ -97,7 +98,7 @@ import Testing
 
     @Test func garbageKeyTextIsReportedAsUnreadable() {
         #expect(throws: SFTPConnectError.unreadableKey) {
-            _ = try SFTPCredential.privateKey("not a key").authenticationMethod(username: "me")
+            _ = try SFTPCredential.privateKey("not a key").authenticationAttempts(username: "me")
         }
     }
 
@@ -132,6 +133,62 @@ import Testing
             }
         }
         #expect(knownHosts.trustedKey(for: first.endpoint) == remembered)
+    }
+
+    // MARK: Dropped connections
+
+    @Test func aDroppedConnectionIsOpenedAgainOnTheNextRequest() async throws {
+        try await withConnection { server, provider in
+            try server.makeFile("/notes.txt", "hello")
+            let identity = provider.connectionID
+            let dropped = Counter()
+            provider.whenDisconnected { dropped.add() }
+
+            try await provider.link.current.client.close()
+            #expect(!provider.isConnected)
+            #expect(try await provider.list("/").map(\.name) == ["notes.txt"])
+            #expect(provider.isConnected)
+            #expect(provider.connectionID == identity)
+            #expect(String(decoding: try await provider.readData("/notes.txt"), as: UTF8.self) == "hello")
+            // Disconnect handlers run on a task of their own.
+            for _ in 0..<50 where dropped.value == 0 {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(dropped.value == 1)
+        }
+    }
+
+    @Test func requestsAfterADropShareOneReconnection() async throws {
+        try await withConnection { server, provider in
+            try server.makeDirectory("/a")
+            let before = provider.link.current
+            try await before.client.close()
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for _ in 0..<5 {
+                    group.addTask { _ = try await provider.stat("/a") }
+                }
+                try await group.waitForAll()
+            }
+            let after = provider.link.current
+            #expect(after !== before)
+            #expect(after.client.isConnected)
+        }
+    }
+
+    @Test func aDisconnectedProviderStaysClosed() async throws {
+        try await withConnection { _, provider in
+            await provider.disconnect()
+            await #expect(throws: ProviderError.self) { _ = try await provider.list("/") }
+            #expect(!provider.isConnected)
+        }
+    }
+
+    @Test func aQuietConnectionThatStillAnswersIsKept() async throws {
+        try await withConnection { _, provider in
+            let connection = provider.link.current
+            #expect(await connection.ping(within: .seconds(5)))
+            #expect(connection.heartbeat.quiet < .seconds(5))
+        }
     }
 
     // MARK: Browsing
@@ -345,5 +402,16 @@ import Testing
         #expect(fingerprint.hasPrefix("SHA256:"))
         #expect(!fingerprint.hasSuffix("="))
         #expect(fingerprint.count == "SHA256:".count + 43)
+    }
+}
+
+/// Counts calls from any thread.
+final class Counter: Sendable {
+    private let count = Mutex(0)
+
+    var value: Int { count.withLock { $0 } }
+
+    func add() {
+        count.withLock { $0 += 1 }
     }
 }

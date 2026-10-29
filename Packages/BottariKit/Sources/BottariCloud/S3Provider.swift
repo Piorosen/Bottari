@@ -166,7 +166,7 @@ public struct S3Provider: FileProvider {
         var request = URLRequest(url: configuration.url(for: key, query: [("uploads", "")]))
         request.httpMethod = "POST"
         let (data, _) = try await send(&request, path: path)
-        guard let id = S3XML.parse(data).values["UploadId"]?.first else { throw ProviderError.io("S3 업로드를 시작할 수 없습니다") }
+        guard let id = S3XML.parse(data).values["UploadId"]?.first else { throw ProviderError.io(String(localized: "S3 업로드를 시작할 수 없습니다")) }
         return id
     }
 
@@ -259,13 +259,13 @@ public struct S3Provider: FileProvider {
     func send(_ request: inout URLRequest, path: RemotePath, payload: Data? = nil, allowing allowed: Set<Int> = []) async throws -> (Data, HTTPURLResponse) {
         signer.sign(&request, payloadHash: payload.map(AWSSigner.hash) ?? AWSSigner.emptyPayloadHash)
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ProviderError.io("S3 응답이 올바르지 않습니다") }
+        guard let http = response as? HTTPURLResponse else { throw ProviderError.io(String(localized: "S3 응답이 올바르지 않습니다")) }
         if (200..<300).contains(http.statusCode) || allowed.contains(http.statusCode) { return (data, http) }
         let message = S3XML.parse(data).values["Message"]?.first ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
         switch http.statusCode {
         case 404: throw ProviderError.notFound(path)
         case 403: throw ProviderError.permissionDenied(path)
-        default: throw ProviderError.io("S3 오류 \(http.statusCode): \(message)")
+        default: throw ProviderError.io(String(localized: "S3 오류 \(http.statusCode): \(message)"))
         }
     }
 

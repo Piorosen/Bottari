@@ -15,17 +15,18 @@ struct TransferCenter: View {
     @AppStorage(TransferSettings.verifiesChecksumsKey) private var verifiesChecksums = false
 
     private var queue: TransferQueue { AppServices.transfers }
+    private var records: TransferRecords { AppServices.transferRecords }
 
     enum Filter: CaseIterable {
         case all, active, paused, finished, failed
 
         var title: String {
             switch self {
-            case .all: "전체"
-            case .active: "진행 중"
-            case .paused: "일시정지"
-            case .finished: "완료"
-            case .failed: "실패"
+            case .all: String(localized: "전체")
+            case .active: String(localized: "진행 중")
+            case .paused: String(localized: "filter.paused", defaultValue: "일시정지")
+            case .finished: String(localized: "완료")
+            case .failed: String(localized: "실패")
             }
         }
 
@@ -50,12 +51,15 @@ struct TransferCenter: View {
             VStack(spacing: 0) {
                 filterBar
                 Rectangle().fill(Palette.line).frame(height: 1)
-                if shown.isEmpty {
-                    ContentUnavailableView(filter == .all ? "전송 기록 없음" : "\(filter.title) 항목 없음", systemImage: "arrow.up.arrow.down")
+                if shown.isEmpty, records.interrupted.isEmpty {
+                    ContentUnavailableView(filter == .all ? String(localized: "전송 기록 없음") : String(localized: "\(filter.title) 항목 없음"), systemImage: "arrow.up.arrow.down")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 4) {
+                            if !records.interrupted.isEmpty {
+                                InterruptedTransfers(records: records)
+                            }
                             ForEach(shown) { job in
                                 TransferRow(job: job, isSelected: job.id == selected?.id)
                                     .onTapGesture { selection = job.id }
@@ -88,13 +92,13 @@ struct TransferCenter: View {
         .toolbar(removing: .title)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
-                BackButton(title: "메인으로") { dismissWindow(id: "transfers") }
-                WindowHeading(title: "전송 센터")
+                BackButton(title: String(localized: "메인으로")) { dismissWindow(id: "transfers") }
+                WindowHeading(title: String(localized: "전송 센터"))
             }
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 14) {
-                    speed("합계 속도", queue.jobs.filter { $0.state == .running }.map(\.bytesPerSecond).reduce(0, +))
-                    speed("Mac 경유 대역폭", queue.jobs.filter { $0.state == .running && $0.route == .viaMac }.map(\.bytesPerSecond).reduce(0, +))
+                    speed(String(localized: "합계 속도"), queue.jobs.filter { $0.state == .running }.map(\.bytesPerSecond).reduce(0, +))
+                    speed(String(localized: "Mac 경유 대역폭"), queue.jobs.filter { $0.state == .running && $0.route == .viaMac }.map(\.bytesPerSecond).reduce(0, +))
                 }
                 .padding(.horizontal, 8)
             }
@@ -150,16 +154,18 @@ struct TransferCenter: View {
     private var settings: some View {
         HStack(alignment: .top, spacing: 28) {
             VStack(alignment: .leading, spacing: 6) {
-                SectionLabel("동시 전송")
+                SectionLabel(String(localized: "동시 전송"))
                 HStack(spacing: 8) {
                     Button { maxConcurrent = max(1, maxConcurrent - 1) } label: { Image(systemName: "minus") }
+                        .iconHelp(String(localized: "동시 전송 줄이기"))
                     Text("\(maxConcurrent)").font(.themeMono(.body)).frame(minWidth: 20)
                     Button { maxConcurrent = min(8, maxConcurrent + 1) } label: { Image(systemName: "plus") }
+                        .iconHelp(String(localized: "동시 전송 늘리기"))
                 }
                 .buttonStyle(IconButtonStyle())
             }
             VStack(alignment: .leading, spacing: 6) {
-                SectionLabel("같은 이름의 파일")
+                SectionLabel(String(localized: "같은 이름의 파일"))
                 HStack(spacing: 6) {
                     ForEach(ConflictPolicy.allCases, id: \.self) { option in
                         Button(option.label) { policy = option }
@@ -170,7 +176,7 @@ struct TransferCenter: View {
             }
             .help("새 전송부터 적용")
             VStack(alignment: .leading, spacing: 6) {
-                SectionLabel("무결성 확인")
+                SectionLabel(String(localized: "무결성 확인"))
                 Toggle("전송 후 체크섬 비교", isOn: $verifiesChecksums)
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -270,17 +276,17 @@ struct TransferRow: View {
         HStack(spacing: 2) {
             if job.state == .paused {
                 Button { queue.resume(job) } label: { Image(systemName: "play.fill") }
-                    .help("재개")
+                    .iconHelp(String(localized: "재개"))
             } else if job.isActive {
                 Button { queue.pause(job) } label: { Image(systemName: "pause.fill") }
-                    .help("일시정지")
+                    .iconHelp(String(localized: "일시정지"))
             }
             if job.state.hasEnded {
                 Button { queue.remove(job) } label: { Image(systemName: "xmark") }
-                    .help("목록에서 제거")
+                    .iconHelp(String(localized: "목록에서 제거"))
             } else {
                 Button { queue.cancel(job) } label: { Image(systemName: "stop.fill") }
-                    .help("취소")
+                    .iconHelp(String(localized: "취소"))
             }
         }
         .font(.system(size: 11))
@@ -322,7 +328,7 @@ struct TransferRow: View {
             Image(systemName: "xmark.octagon.fill")
                 .foregroundStyle(.red)
             if let first = job.failures.first {
-                Text("\(first.path.name): \(first.message)" + (job.failures.count > 1 ? " 외 \(job.failures.count - 1)개" : ""))
+                Text("\(first.path.name): \(first.message)" + (job.failures.count > 1 ? String(localized: " 외 \(job.failures.count - 1)개") : ""))
                     .font(.ui(.caption))
                     .lineLimit(2)
                     .textSelection(.enabled)
@@ -355,7 +361,7 @@ private struct TransferDetail: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
-                    SectionLabel("선택한 전송")
+                    SectionLabel(String(localized: "선택한 전송"))
                     Text(job.name).font(.ui(.title3, weight: .bold)).lineLimit(2)
                     Text([job.sizeSummary, "\(job.stateTitle) \(job.percentText)"].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.themeMono(.caption))
@@ -372,18 +378,18 @@ private struct TransferDetail: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                SectionLabel("데이터 흐름")
+                SectionLabel(String(localized: "데이터 흐름"))
                 flow
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                SectionLabel("경로")
-                routeCard(title: "서버 간 직접", detail: "서버 간 SSH 에이전트 포워딩이 필요해 아직 지원하지 않음", chosen: false, available: false)
-                routeCard(title: job.route == .viaMac ? "Mac 경유" : job.routeTitle, detail: job.routeExplanation, chosen: true, available: true)
+                SectionLabel(String(localized: "경로"))
+                routeCard(title: String(localized: "서버 간 직접"), detail: String(localized: "서버 간 SSH 에이전트 포워딩이 필요해 아직 지원하지 않음"), chosen: false, available: false)
+                routeCard(title: job.route == .viaMac ? String(localized: "Mac 경유") : job.routeTitle, detail: job.routeExplanation, chosen: true, available: true)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                SectionLabel("실행되는 작업")
+                SectionLabel(String(localized: "실행되는 작업"))
                 Text(commands)
                     .font(.themeMono(.caption))
                     .textSelection(.enabled)
@@ -393,7 +399,7 @@ private struct TransferDetail: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel("쓰기 단계")
+                SectionLabel(String(localized: "쓰기 단계"))
                 ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                     HStack(alignment: .top, spacing: 10) {
                         StepMark(state: step.state)
@@ -447,11 +453,11 @@ private struct TransferDetail: View {
     }
 
     private func caption(for stop: RouteStop, at index: Int) -> String {
-        if stop.passingThrough { return "중계" }
+        if stop.passingThrough { return String(localized: "중계") }
         let provider = index == 0 ? job.source.provider : job.destination.provider
-        let verb = index == 0 && job.stops.count > 1 ? "읽기" : "쓰기"
-        if job.stops.count == 1 { return job.kind == .move ? "이름 바꾸기" : "서버에서 복사" }
-        return "\(provider.isLocal ? "파일" : provider.kindLabel) \(verb)"
+        let verb = index == 0 && job.stops.count > 1 ? String(localized: "읽기") : String(localized: "쓰기")
+        if job.stops.count == 1 { return job.kind == .move ? String(localized: "이름 바꾸기") : String(localized: "서버에서 복사") }
+        return "\(provider.isLocal ? String(localized: "파일") : provider.kindLabel) \(verb)"
     }
 
     private func routeCard(title: String, detail: String, chosen: Bool, available: Bool) -> some View {
@@ -475,13 +481,13 @@ private struct TransferDetail: View {
         let to = "\(job.destination.name):\(job.destinationFolder.appending(job.items.first?.name ?? "").string)"
         switch job.route {
         case .withinLocation:
-            return job.kind == .move ? "rename \(from)\n  → \(to)" : "cp -a \(from)\n  → \(to)\n다운로드 없이 서버에서 복사"
+            return job.kind == .move ? "rename \(from)\n  → \(to)" : String(localized: "cp -a \(from)\n  → \(to)\n다운로드 없이 서버에서 복사")
         case .local:
             return "read  \(from)\n  ↳ write \(to)"
         default:
             let reader = job.source.provider.isLocal ? "read " : "\(job.source.provider.kindLabel) read "
             let writer = job.destination.provider.isLocal ? "write" : "\(job.destination.provider.kindLabel) write"
-            return "\(reader) \(from)\n  ↳ \(writer) \(to)\n실패 시 받은 부분부터 이어서 전송"
+            return String(localized: "\(reader) \(from)\n  ↳ \(writer) \(to)\n실패 시 받은 부분부터 이어서 전송")
         }
     }
 
@@ -496,13 +502,13 @@ private struct TransferDetail: View {
         let finished = job.state == .finished
         let partName = job.items.first.map { RemotePath("/").appending($0.name).partialWritePath.name } ?? ".bottari-part"
         var steps = [
-            Step(title: "대상 크기 및 권한 확인", state: started ? .done : job.state == .preparing ? .current : .waiting),
-            Step(title: "임시 이름으로 쓰기", note: partName, state: finished ? .done : started ? .current : .waiting),
+            Step(title: String(localized: "대상 크기 및 권한 확인"), state: started ? .done : job.state == .preparing ? .current : .waiting),
+            Step(title: String(localized: "임시 이름으로 쓰기"), note: partName, state: finished ? .done : started ? .current : .waiting),
         ]
         if job.verifiesChecksums {
-            steps.append(Step(title: "체크섬 비교 (SHA-256)", state: finished ? .done : .waiting))
+            steps.append(Step(title: String(localized: "체크섬 비교 (SHA-256)"), state: finished ? .done : .waiting))
         }
-        steps.append(Step(title: "원래 이름으로 바꾸기 (rename)", note: "중단되어도 기존 파일 유지", state: finished ? .done : .waiting))
+        steps.append(Step(title: String(localized: "원래 이름으로 바꾸기 (rename)"), note: String(localized: "중단되어도 기존 파일 유지"), state: finished ? .done : .waiting))
         return steps
     }
 }
@@ -533,31 +539,104 @@ extension TransferJob {
     var routeDescription: String {
         let names = "\(source.name) → \(destination.name)"
         return switch route {
-        case .withinLocation: source.provider.isLocal ? "Mac 안에서 · \(source.name)" : "서버 안에서 \(kind == .move ? "이동" : "복사") · \(source.name)"
-        case .upload: "업로드 · \(names)"
-        case .download: "다운로드 · \(names)"
-        case .viaMac: "Mac 경유 · \(names)"
-        case .local: "Mac 안에서 · \(names)"
+        case .withinLocation: source.provider.isLocal ? String(localized: "Mac 안에서 · \(source.name)") : String(localized: "서버 안에서 \(kind == .move ? String(localized: "이동") : String(localized: "복사")) · \(source.name)")
+        case .upload: String(localized: "업로드 · \(names)")
+        case .download: String(localized: "다운로드 · \(names)")
+        case .viaMac: String(localized: "Mac 경유 · \(names)")
+        case .local: String(localized: "Mac 안에서 · \(names)")
         }
     }
 
     var routeTitle: String {
         switch route {
-        case .withinLocation: source.provider.isLocal ? "Mac 안에서" : "서버 안에서"
-        case .upload: "업로드"
-        case .download: "다운로드"
-        case .viaMac: "Mac 경유"
-        case .local: "Mac 안에서"
+        case .withinLocation: source.provider.isLocal ? String(localized: "Mac 안에서") : String(localized: "서버 안에서")
+        case .upload: String(localized: "업로드")
+        case .download: String(localized: "다운로드")
+        case .viaMac: String(localized: "Mac 경유")
+        case .local: String(localized: "Mac 안에서")
         }
     }
 
     var routeExplanation: String {
         switch route {
-        case .viaMac: "Mac이 중계하며 Mac의 대역폭 사용"
-        case .withinLocation: "다운로드 없이 서버에서 직접 처리"
-        case .upload: "Mac에서 읽어 바로 업로드"
-        case .download: "서버에서 받아 Mac에 저장"
-        case .local: "Mac 안에서 복사"
+        case .viaMac: String(localized: "Mac이 중계하며 Mac의 대역폭 사용")
+        case .withinLocation: String(localized: "다운로드 없이 서버에서 직접 처리")
+        case .upload: String(localized: "Mac에서 읽어 바로 업로드")
+        case .download: String(localized: "서버에서 받아 Mac에 저장")
+        case .local: String(localized: "Mac 안에서 복사")
         }
+    }
+}
+
+/// Transfers the app was in the middle of when it last quit, each ready to
+/// carry on from where it stopped.
+struct InterruptedTransfers: View {
+    let records: TransferRecords
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("지난번에 끝나지 않은 전송")
+                .font(.ui(.caption, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            ForEach(records.interrupted) { record in
+                row(record)
+            }
+        }
+        .padding(.bottom, 8)
+    }
+
+    private func row(_ record: TransferRecord) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: "arrow.clockwise")
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(Palette.panel2, in: .rect(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.name)
+                    .font(.ui(.body, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(record.source.name) → \(record.destination.name) · \(record.folder.string)")
+                    .font(.themeMono(.caption))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let problem = records.problems[record.id] {
+                    Text(problem)
+                        .font(.ui(.caption))
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(progress(record))
+                .font(.ui(.caption))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            if records.resuming.contains(record.id) {
+                ProgressView().controlSize(.small)
+            } else {
+                Button("이어서 전송") { Task { await records.resume(record) } }
+                    .buttonStyle(PanelButtonStyle())
+                    .fixedSize()
+            }
+            Button { records.forget(record) } label: { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .iconHelp(String(localized: "목록에서 지우기"))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Palette.panel2, in: .rect(cornerRadius: 8))
+    }
+
+    private func progress(_ record: TransferRecord) -> String {
+        var parts = [String(localized: "파일 \(record.done.count)/\(max(record.totalFiles, record.done.count))개 완료")]
+        if record.totalBytes > 0 {
+            parts.append("\(ByteFormat.string(record.transferredBytes)) / \(ByteFormat.string(record.totalBytes))")
+        }
+        return parts.joined(separator: " · ")
     }
 }

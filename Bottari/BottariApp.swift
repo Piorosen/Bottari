@@ -21,6 +21,12 @@ struct BottariApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             FileCommands()
+            CommandGroup(after: .help) {
+                Button("진단 정보 저장…") { Diagnostics.save() }
+                Button("로그 폴더 열기") {
+                    NSWorkspace.shared.open(Diagnostics.logFile.deletingLastPathComponent())
+                }
+            }
             if Updates.shared.isAvailable {
                 CommandGroup(after: .appInfo) {
                     Button("업데이트 확인…") { Updates.shared.checkForUpdates() }
@@ -57,7 +63,7 @@ struct BottariApp: App {
 
         // Only once there is a tunnel to switch.
         MenuBarExtra(
-            "Bottari 터널",
+            String(localized: "Bottari 터널"),
             systemImage: TunnelStore.shared.activeCount > 0 ? "point.3.filled.connected.trianglepath.dotted" : "point.3.connected.trianglepath.dotted",
             isInserted: Binding(get: { !AppDelegate.isRenderingSnapshots && !TunnelStore.shared.profiles.isEmpty }, set: { _ in })
         ) {
@@ -110,8 +116,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         #endif
+        Diagnostics.startLogging()
         ThemeStore.shared.applyAppearance()
         SettingsSync.shared.start()
         _ = Updates.shared
+        _ = AppServices.transferRecords
+    }
+
+    /// Quitting mid-transfer is fine, since the transfer carries on next time,
+    /// but say so first.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let active = AppServices.transfers.jobs.filter(\.isActive)
+        guard !active.isEmpty, !Self.isRenderingSnapshots else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "전송 \(active.count)개가 진행 중입니다")
+        let resumable = active.allSatisfy { $0.record != nil }
+        alert.informativeText = resumable
+            ? String(localized: "지금 종료하면 다음에 Bottari를 열 때 전송 센터에서 이어서 보낼 수 있습니다.")
+            : String(localized: "지금 종료하면 일부 전송은 처음부터 다시 시작해야 합니다.")
+        alert.addButton(withTitle: String(localized: "종료"))
+        alert.addButton(withTitle: String(localized: "취소"))
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        guard !Self.isRenderingSnapshots else { return }
+        AppServices.transferRecords.saveNow()
     }
 }

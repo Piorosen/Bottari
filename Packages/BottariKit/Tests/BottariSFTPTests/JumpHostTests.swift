@@ -35,6 +35,25 @@ import Testing
         }
     }
 
+    /// A Keychain that holds everything but will not hand any of it over.
+    struct RefusingSecrets: SecretStore {
+        func secret(for key: String) throws -> String? { throw SecretStoreError.unreadable(key: key) }
+        func setSecret(_ value: String?, for key: String) throws {}
+    }
+
+    @Test func secretsTheKeychainWillNotHandOverAreAskedForAgain() throws {
+        let nas = site("nas", .password)
+        #expect(throws: SiteConnectError.passwordUnreadable(site: "nas", key: nas.passwordKey)) {
+            try nas.credential(secrets: RefusingSecrets())
+        }
+        // Typed just now, it is used as is.
+        #expect(try nas.credential(secrets: RefusingSecrets(), password: "typed") == .password("typed"))
+        // Keys still work; the unreadable passphrase or fallback password is left out.
+        #expect(try site("prod", .keyFile(path: "/keys/prod")).credential(secrets: RefusingSecrets(), readFile: readFile)
+            == .privateKey("PROD KEY", passphrase: nil))
+        #expect(try site("box", .agent(socket: "/tmp/agent.sock")).credential(secrets: RefusingSecrets()) == .agent(socket: "/tmp/agent.sock"))
+    }
+
     @Test func keySitesWithAPasswordTryTheKeysFirst() throws {
         let nas = site("nas", .agent(socket: "/tmp/agent.sock"))
         let prod = site("prod", .keyFile(path: "/keys/prod"))
@@ -85,6 +104,28 @@ import Testing
             SSHHop(endpoint: relay.endpoint, credential: .agent(socket: nil, fallbackKeys: ["BASTION KEY"])),
             SSHHop(endpoint: SFTPEndpoint(host: "edge.example.com", port: 2200, username: "admin"), credential: .agent(socket: nil, fallbackKeys: ["BASTION KEY"])),
         ])
+    }
+
+    @Test func proxyCommandsApplyOnlyToTheServerDialledFirst() throws {
+        var tunnelled = site("prod", .keyFile(path: "/keys/prod"))
+        tunnelled.proxyCommand = "cloudflared access ssh --hostname %h --port %p --user %r # %n %%"
+        let direct = try tunnelled.connectionPlan(sites: [tunnelled], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: readFile)
+        #expect(direct.hops.isEmpty)
+        #expect(direct.proxyCommand == "cloudflared access ssh --hostname prod.example.com --port 22 --user deploy # prod %")
+
+        // Behind a jump host whose own ProxyCommand reaches it, the target's no longer applies.
+        var gateway = site("gateway", .keyFile(path: "/keys/prod"))
+        gateway.proxyCommand = "nc -X 5 -x proxy:1080 %h %p"
+        var behind = tunnelled
+        behind.proxyJump = ["gateway", "bastion"]
+        let plan = try behind.connectionPlan(sites: [gateway, behind], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: readFile)
+        #expect(plan.proxyCommand == nil)
+        #expect(plan.hops.map(\.proxyCommand) == ["nc -X 5 -x proxy:1080 gateway.example.com 22", nil])
+
+        // A tunnel's server put in front becomes the first hop, with its ProxyCommand.
+        let detoured = direct.through(try gateway.connectionPlan(sites: [gateway], sshConfig: config, secrets: InMemorySecretStore(), readFile: readFile))
+        #expect(detoured.proxyCommand == nil)
+        #expect(detoured.hops.map(\.proxyCommand) == ["nc -X 5 -x proxy:1080 gateway.example.com 22"])
     }
 
     @Test func agentFallsBackToTheDefaultKeyFiles() throws {
@@ -158,6 +199,31 @@ import Testing
             #expect(knownHosts.trustedKey(for: target.endpoint) != nil)
             #expect(knownHosts.trustedKey(for: jump.endpoint) != knownHosts.trustedKey(for: target.endpoint))
             await provider.disconnect()
+        }
+    }
+
+    @Test func connectsThroughAProxyCommand() async throws {
+        try await withJumpAndTarget { _, target in
+            try target.makeFile("/piped.txt", "through nc")
+            let provider = try await SFTPFileProvider.connect(
+                to: target.endpoint,
+                credential: .password(TestSFTPServer.password),
+                hostKeys: .acceptAnything,
+                proxyCommand: "/usr/bin/nc 127.0.0.1 \(target.port)"
+            )
+            #expect(try await provider.readData("/piped.txt") == Data("through nc".utf8))
+            await provider.disconnect()
+        }
+    }
+
+    @Test func aFailingProxyCommandSaysWhatItPrinted() async throws {
+        await #expect(throws: SFTPConnectError.proxyCommandFailed(command: "echo 'no route to db' >&2; exit 1", reason: "no route to db")) {
+            _ = try await SFTPFileProvider.connect(
+                to: SFTPEndpoint(host: "db.internal", username: "me"),
+                credential: .password("pw"),
+                hostKeys: .acceptAnything,
+                proxyCommand: "echo 'no route to db' >&2; exit 1"
+            )
         }
     }
 

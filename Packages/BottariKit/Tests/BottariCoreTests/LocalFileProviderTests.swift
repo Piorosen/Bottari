@@ -258,4 +258,66 @@ import Testing
         #expect(!privacy.isGuarded("/Users/me"))
         #expect(!privacy.isGuarded("/Volumes"))
     }
+
+    @Test func changesPermissionsAndMakesLinks() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let script = dir.appending("run.sh")
+        try await provider.write(script, data: Data("echo hi".utf8))
+        try await provider.setPermissions(0o750, at: script)
+        #expect(try await provider.stat(script).permissions == 0o750)
+
+        try await provider.makeSymbolicLink(at: dir.appending("run"), to: "run.sh")
+        let link = try await provider.stat(dir.appending("run"))
+        #expect(link.isSymbolicLink)
+        #expect(try await provider.readData(dir.appending("run")) == Data("echo hi".utf8))
+    }
+
+    @Test func searchFindsNamesBelowAFolderNearestFirst() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        try await provider.makeDirectory(dir.appending("logs"))
+        try await provider.makeDirectory(dir.appending("logs/old"))
+        try await provider.write(dir.appending("Report.LOG"), data: Data())
+        try await provider.write(dir.appending("logs/app.log"), data: Data())
+        try await provider.write(dir.appending("logs/old/app.log.1"), data: Data())
+        try await provider.write(dir.appending("notes.txt"), data: Data())
+
+        func names(_ query: String, limit: Int = 100) async throws -> [String] {
+            var found: [String] = []
+            for try await item in provider.search(query, in: dir, limit: limit) {
+                found.append(String(item.path.string.dropFirst(dir.string.count + 1)))
+            }
+            return found
+        }
+        #expect(try await names("log") == ["logs", "Report.LOG", "logs/app.log", "logs/old/app.log.1"])
+        #expect(try await names("*.log") == ["Report.LOG", "logs/app.log"])
+        #expect(try await names("log", limit: 2) == ["logs", "Report.LOG"])
+        #expect(try await names("nothing").isEmpty)
+    }
+
+    @Test func searchStaysOutOfPrivacyGuardedFoldersUnlessStartedInOne() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let guarded = LocalFileProvider(home: dir, privacy: PrivacyGuard(home: dir))
+        try await guarded.makeDirectory(dir.appending("Desktop"))
+        try await guarded.write(dir.appending("Desktop/plan.txt"), data: Data())
+        try await guarded.write(dir.appending("plan.md"), data: Data())
+
+        func names(from folder: RemotePath) async throws -> [String] {
+            var found: [String] = []
+            for try await item in guarded.search("plan", in: folder, limit: 10) { found.append(item.name) }
+            return found
+        }
+        #expect(try await names(from: dir) == ["plan.md"])
+        #expect(try await names(from: dir.appending("Desktop")) == ["plan.txt"])
+    }
+
+    @Test func searchPatternsAndSubstrings() {
+        #expect(FileSearch.matches("App.Log", query: "app"))
+        #expect(FileSearch.matches("backup-2024.tar.gz", query: "*.tar.gz"))
+        #expect(!FileSearch.matches("backup.tar.gz.part", query: "*.tar.gz"))
+        #expect(FileSearch.matches("a1.txt", query: "a?.TXT"))
+        #expect(!FileSearch.matches("anything", query: "  "))
+    }
 }

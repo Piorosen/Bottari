@@ -1,0 +1,8 @@
+[submodule "Packages/swift-nio-ssh"]
+	path = Packages/swift-nio-ssh
+	url = https://github.com/Piorosen/swift-nio-ssh.git
+	branch = main
+[submodule "Packages/Citadel"]
+	path = Packages/Citadel
+	url = https://github.com/Piorosen/Citadel.git
+	branch = main

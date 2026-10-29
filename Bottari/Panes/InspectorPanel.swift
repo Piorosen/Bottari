@@ -24,7 +24,7 @@ struct InspectorPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                SectionLabel("미리보기")
+                SectionLabel(String(localized: "미리보기"))
                 previewBox
                 if let item {
                     details(item)
@@ -72,7 +72,7 @@ struct InspectorPanel: View {
             case .message(let text):
                 placeholder(text)
             case .none:
-                placeholder(selected.isEmpty ? "선택한 항목 없음" : nil)
+                placeholder(selected.isEmpty ? String(localized: "선택한 항목 없음") : nil)
             }
         }
         .frame(height: 230)
@@ -110,7 +110,7 @@ struct InspectorPanel: View {
             let limit: Int64 = 16 * 1024
             let range: Range<Int64>? = provider.capabilities.contains(.rangeRead) || provider.isLocal ? 0..<min(max(size, 1), limit) : nil
             guard range != nil || size <= 256 * 1024 else {
-                preview = .message("파일이 커서 미리보기 생략")
+                preview = .message(String(localized: "파일이 커서 미리보기 생략"))
                 return
             }
             do {
@@ -119,7 +119,7 @@ struct InspectorPanel: View {
                 let text = String(decoding: data.prefix(Int(limit)), as: UTF8.self)
                 preview = .text(text.split(separator: "\n", omittingEmptySubsequences: false).prefix(40).joined(separator: "\n"))
             } catch {
-                if !Task.isCancelled { preview = .message("미리 볼 수 없음") }
+                if !Task.isCancelled { preview = .message(String(localized: "미리 볼 수 없음")) }
             }
         case .image:
             if provider.isLocal {
@@ -127,7 +127,7 @@ struct InspectorPanel: View {
                 return
             }
             guard size <= 5_000_000 else {
-                preview = .message("파일이 커서 미리보기 생략")
+                preview = .message(String(localized: "파일이 커서 미리보기 생략"))
                 return
             }
             preview = .loading
@@ -136,7 +136,7 @@ struct InspectorPanel: View {
                 guard !Task.isCancelled else { return }
                 preview = Self.thumbnail(CGImageSourceCreateWithData(data as CFData, nil)).map(Preview.image) ?? .none
             } catch {
-                if !Task.isCancelled { preview = .message("미리 볼 수 없음") }
+                if !Task.isCancelled { preview = .message(String(localized: "미리 볼 수 없음")) }
             }
         case .video, .other:
             preview = .none
@@ -168,10 +168,10 @@ struct InspectorPanel: View {
                     .textSelection(.enabled)
             }
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
-                row("크기", item.isDirectory ? "폴더" : item.formattedSize)
-                row("수정", item.formattedModified)
-                if let permissions = item.permissionString { row("권한", permissions, mono: true) }
-                if let owner = item.owner { row("소유자", owner) }
+                row(String(localized: "크기"), item.isDirectory ? String(localized: "폴더") : item.formattedSize)
+                row(String(localized: "수정"), item.formattedModified)
+                if let permissions = item.permissionString { row(String(localized: "권한"), permissions, mono: true) }
+                if let owner = item.owner { row(String(localized: "소유자"), owner) }
             }
         }
     }
@@ -211,7 +211,7 @@ struct InspectorPanel: View {
             Button {
                 workspace.addToBundle(from: side, items: items)
             } label: {
-                Label(bundled ? "보따리에 담김" : "보따리에 담기", glyph: "bt.bundle", size: 15)
+                Label(bundled ? String(localized: "보따리에 담김") : String(localized: "보따리에 담기"), glyph: "bt.bundle", size: 15)
             }
             .buttonStyle(PanelButtonStyle())
             .disabled(bundled)
@@ -219,12 +219,12 @@ struct InspectorPanel: View {
     }
 
     private func primaryTitle(_ item: FileItem) -> String {
-        if item.isDirectory { return "열기" }
+        if item.isDirectory { return String(localized: "열기") }
         return switch FileKind(item) {
-        case .text: "편집"
-        case .image: "이미지 보기"
-        case .video: "재생"
-        case .other: "빠른 미리보기"
+        case .text: String(localized: "편집")
+        case .image: String(localized: "이미지 보기")
+        case .video: String(localized: "재생")
+        case .other: String(localized: "빠른 미리보기")
         }
     }
 
@@ -241,7 +241,7 @@ struct InspectorPanel: View {
     private var routeNote: String? {
         switch TransferQueue.route(.copy, from: pane.provider, to: other.provider) {
         case .viaMac: "\(placeName(pane)) → Mac → \(placeName(other))"
-        case .withinLocation: pane.provider.isLocal ? nil : "서버 안에서 복사"
+        case .withinLocation: pane.provider.isLocal ? nil : String(localized: "서버 안에서 복사")
         case .upload, .download, .local: nil
         }
     }

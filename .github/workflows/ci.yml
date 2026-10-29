@@ -1,0 +1,67 @@
+# Package tests and an app build on every push to main and every pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: BottariKit tests
+    # Swift 6.2 needs Xcode 26.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Packages/swift-nio-ssh: Bottari's fork, with SSH agent forwarding.
+          submodules: recursive
+      - name: Xcode version
+        run: xcodebuild -version && swift --version
+      - uses: actions/cache@v4
+        with:
+          path: Packages/BottariKit/.build
+          key: spm-test-${{ runner.os }}-${{ hashFiles('Packages/BottariKit/Package.resolved') }}
+          restore-keys: spm-test-${{ runner.os }}-
+      # The suite also runs sshd, ssh-agent and ssh-keygen from macOS itself.
+      - name: swift test
+        run: swift test --package-path Packages/BottariKit
+
+  build:
+    name: App build and snapshots
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Packages/swift-nio-ssh: Bottari's fork, with SSH agent forwarding.
+          submodules: recursive
+      - uses: actions/cache@v4
+        with:
+          path: .build/xcode/SourcePackages
+          key: spm-app-${{ runner.os }}-${{ hashFiles('Packages/BottariKit/Package.resolved', 'Bottari.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-app-${{ runner.os }}-
+      - name: Build (Debug, ad-hoc signed)
+        run: |
+          xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Debug \
+            -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
+            -skipPackagePluginValidation -skipMacroValidation -quiet build
+      # Debug builds draw each screen with sample data and check themselves;
+      # any FAIL line fails the job. The pictures are kept for review.
+      - name: Render snapshots
+        run: |
+          open -n -W .build/xcode/Build/Products/Debug/Bottari.app --args -renderSnapshots "$RUNNER_TEMP/snapshots"
+          cat "$RUNNER_TEMP"/snapshots/*-check.txt
+          ! grep -h '^FAIL' "$RUNNER_TEMP"/snapshots/*-check.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapshots
+          path: ${{ runner.temp }}/snapshots
+          if-no-files-found: ignore

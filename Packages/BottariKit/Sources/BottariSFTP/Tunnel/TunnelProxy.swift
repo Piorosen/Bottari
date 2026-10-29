@@ -100,7 +100,7 @@ public final class TunnelProxy: Sendable {
 extension SFTPFileProvider {
     /// Starts SOCKS5 (and optionally HTTP) proxies through this server.
     public func startProxy(socksPort: Int, httpPort: Int?, pac: @escaping @Sendable () -> String) async throws -> TunnelProxy {
-        try await TunnelProxy.start(on: connection.client, socksPort: socksPort, httpPort: httpPort, pac: pac)
+        try await TunnelProxy.start(on: link.live().client, socksPort: socksPort, httpPort: httpPort, pac: pac)
     }
 }
 

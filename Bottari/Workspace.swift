@@ -49,6 +49,8 @@ final class Workspace {
     var passwordRequest: PasswordRequest?
     /// The pane that should take keyboard focus next, e.g. after ⇥.
     var focusRequest: PaneSide?
+    /// The pane that should open its search field (⌘F).
+    var searchRequest: PaneSide?
     /// Opens viewer windows; the main window sets it, since only views can open windows.
     @ObservationIgnored var viewerOpener: ViewerOpener?
 
@@ -104,11 +106,11 @@ final class Workspace {
     func request(_ request: TransferRequest) {
         guard !request.items.isEmpty else { return }
         if let site = request.destinationSite, site.readOnly {
-            refusal = "‘\(site.name)’ 서버는 읽기 전용입니다. 파일을 쓰려면 연결 관리에서 읽기 전용을 끄십시오."
+            refusal = String(localized: "‘\(site.name)’ 서버는 읽기 전용입니다. 파일을 쓰려면 연결 관리에서 읽기 전용을 끄십시오.")
             return
         }
         if request.kind == .move, let site = request.sourceSite, site.readOnly {
-            refusal = "‘\(site.name)’ 서버는 읽기 전용이므로 원본을 삭제할 수 없습니다. 이동 대신 복사하십시오."
+            refusal = String(localized: "‘\(site.name)’ 서버는 읽기 전용이므로 원본을 삭제할 수 없습니다. 이동 대신 복사하십시오.")
             return
         }
         if request.destinationSite?.confirmsWrites == true || (request.kind == .move && request.sourceSite?.confirmsWrites == true) {
@@ -128,8 +130,8 @@ final class Workspace {
         AppServices.transfers.enqueue(
             request.kind,
             request.items,
-            from: TransferEndpoint(request.source),
-            to: TransferEndpoint(request.destination),
+            from: TransferEndpoint(request.source, place: TransferRecords.place(for: request.source, site: request.sourceSite)),
+            to: TransferEndpoint(request.destination, place: TransferRecords.place(for: request.destination, site: request.destinationSite)),
             into: request.folder,
             policy: TransferSettings.conflictPolicy
         )
@@ -189,7 +191,7 @@ final class Workspace {
                 } else if let failed {
                     failed(error)
                 } else {
-                    refusal = "\(site.name)에 연결할 수 없습니다: \(error.localizedDescription)"
+                    refusal = String(localized: "\(site.name)에 연결할 수 없습니다: \(error.localizedDescription)")
                 }
             }
         }
@@ -299,7 +301,7 @@ final class Workspace {
     /// Refuses with an explanation when the pane shows a read-only site.
     private func allowsChanges(in pane: PaneModel) -> Bool {
         guard let site = pane.site, site.readOnly else { return true }
-        refusal = "‘\(site.name)’ 서버는 읽기 전용입니다. 변경하려면 연결 관리에서 읽기 전용을 끄십시오."
+        refusal = String(localized: "‘\(site.name)’ 서버는 읽기 전용입니다. 변경하려면 연결 관리에서 읽기 전용을 끄십시오.")
         return false
     }
 

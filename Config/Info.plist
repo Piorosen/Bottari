@@ -7,5 +7,11 @@
 	<string>$(BOTTARI_UPDATE_FEED_URL)</string>
 	<key>SUPublicEDKey</key>
 	<string>$(BOTTARI_SPARKLE_PUBLIC_KEY)</string>
+	<!-- The Google Cloud OAuth client (Desktop app) that Google Drive sites use
+	     unless they name their own. Empty: each site needs its own client. -->
+	<key>BottariGoogleClientID</key>
+	<string>$(BOTTARI_GOOGLE_CLIENT_ID)</string>
+	<key>BottariGoogleClientSecret</key>
+	<string>$(BOTTARI_GOOGLE_CLIENT_SECRET)</string>
 </dict>
 </plist>

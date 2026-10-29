@@ -87,16 +87,19 @@ struct FileGlyph: View {
     var size: CGFloat = 15
 
     var body: some View {
-        if ThemeStore.shared.current.list.finderIcons {
-            FileIcon.image(for: item, isLocal: isLocal)
-                .resizable()
-                .frame(width: size + 1, height: size + 1)
-        } else {
-            Image(systemName: item.glyph)
-                .font(.system(size: size * 0.85))
-                .foregroundStyle(item.isDirectory ? AnyShapeStyle(Color.themeAccent) : AnyShapeStyle(.secondary))
-                .frame(width: size + 2, height: size)
+        Group {
+            if ThemeStore.shared.current.list.finderIcons {
+                FileIcon.image(for: item, isLocal: isLocal)
+                    .resizable()
+                    .frame(width: size + 1, height: size + 1)
+            } else {
+                Image(systemName: item.glyph)
+                    .font(.system(size: size * 0.85))
+                    .foregroundStyle(item.isDirectory ? AnyShapeStyle(Color.themeAccent) : AnyShapeStyle(.secondary))
+                    .frame(width: size + 2, height: size)
+            }
         }
+        .accessibilityLabel(item.isSymbolicLink ? String(localized: "링크") : item.isDirectory ? String(localized: "폴더") : String(localized: "파일"))
     }
 }
 

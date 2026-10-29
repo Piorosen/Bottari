@@ -23,8 +23,10 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
     let screen: SavedSite.RemoteScreen
     let host: String
     let username: String
-    private(set) var status = "연결 중…"
+    private(set) var status = String(localized: "연결 중…")
     private(set) var isConnected = false
+    /// The connection ended or never got going, so "다시 연결" is the way on.
+    private(set) var hasStopped = false
     private(set) var framebufferView: VNCCAFramebufferView?
     var credentialRequest: CredentialRequest?
     /// Fit the remote screen into the window, or show it pixel for pixel.
@@ -45,21 +47,22 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
         username = provider?.endpoint.username ?? site.endpoint.username
     }
 
-    var kindName: String { screen.kind == .vnc ? "VNC" : "화면 공유" }
+    var kindName: String { screen.kind == .vnc ? "VNC" : String(localized: "화면 공유") }
 
     func connect() async {
         disconnect()
+        hasStopped = false
         do {
             var host = self.host
             var port = screen.port
             if screen.throughTunnel, let provider {
-                status = "SSH 터널 여는 중…"
+                status = String(localized: "SSH 터널 여는 중…")
                 let forward = try await provider.forward(toHost: "localhost", port: screen.port)
                 self.forward = forward
                 host = "127.0.0.1"
                 port = forward.localPort
             }
-            status = "\(kindName)에 연결 중…"
+            status = String(localized: "\(kindName)에 연결 중…")
             let settings = VNCConnection.Settings(
                 isDebugLoggingEnabled: false,
                 hostname: host,
@@ -77,7 +80,8 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             self.connection = connection
             connection.connect()
         } catch {
-            status = "터널을 열 수 없습니다: \(error.localizedDescription)"
+            status = String(localized: "터널을 열 수 없습니다: \(error.localizedDescription)")
+            hasStopped = true
         }
     }
 
@@ -110,8 +114,15 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             guard !items.isEmpty else { return }
             let desktop = provider.home.appending("Desktop")
             let folder = (try? await provider.list(provider.home))?.contains { $0.name == "Desktop" && $0.isDirectory } == true ? desktop : provider.home
-            AppServices.transfers.enqueue(.copy, items, from: TransferEndpoint(local), to: TransferEndpoint(provider, name: site.name), into: folder, policy: TransferSettings.conflictPolicy)
-            status = "\(items.count)개 항목을 \(folder.string)에 업로드 중"
+            AppServices.transfers.enqueue(
+                .copy,
+                items,
+                from: TransferEndpoint(local, place: TransferRecords.place(for: local, site: nil)),
+                to: TransferEndpoint(provider, name: site.name, place: TransferRecords.place(for: provider, site: site)),
+                into: folder,
+                policy: TransferSettings.conflictPolicy
+            )
+            status = String(localized: "\(items.count)개 항목을 \(folder.string)에 업로드 중")
         }
     }
 
@@ -124,16 +135,17 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             MainActor.assumeIsolated {
                 switch status {
                 case .connecting:
-                    self.status = "\(self.kindName)에 연결 중…"
+                    self.status = String(localized: "\(self.kindName)에 연결 중…")
                 case .connected:
                     self.isConnected = true
-                    self.status = "연결됨"
+                    self.status = String(localized: "연결됨")
                 case .disconnecting:
-                    self.status = "연결 해제 중…"
+                    self.status = String(localized: "연결 해제 중…")
                 case .disconnected:
                     self.isConnected = false
                     self.framebufferView = nil
-                    self.status = error.map { "연결 끊김: \($0)" } ?? "연결 해제됨"
+                    self.status = error.map { String(localized: "연결 끊김: \($0)") } ?? String(localized: "연결 해제됨")
+                    self.hasStopped = true
                     let forward = self.forward
                     self.forward = nil
                     Task { await forward?.close() }
@@ -255,7 +267,7 @@ struct ScreenView: View {
     }
 
     private var stopped: Bool {
-        !model.isConnected && (model.status.hasPrefix("연결 끊김") || model.status.hasPrefix("연결 해제됨") || model.status.hasPrefix("터널을"))
+        !model.isConnected && model.hasStopped
     }
 
     private var screen: some View {
@@ -305,14 +317,14 @@ struct ScreenView: View {
     private var route: String {
         let jumps = model.site.proxyJump
         return [
-            model.screen.throughTunnel ? "\(model.kindName) (SSH 터널)" : "\(model.kindName) 직접 연결",
+            model.screen.throughTunnel ? String(localized: "\(model.kindName) (SSH 터널)") : String(localized: "\(model.kindName) 직접 연결"),
             "\(model.host):\(String(model.screen.port))",
-        ].joined(separator: " · ") + (jumps.isEmpty ? "" : " · \(jumps.joined(separator: " → ")) 경유")
+        ].joined(separator: " · ") + (jumps.isEmpty ? "" : String(localized: " · \(jumps.joined(separator: " → ")) 경유"))
     }
 
     private var toolbar: some View {
         HStack(spacing: 10) {
-            BackButton(title: "파일로 돌아가기") { NSApp.keyWindow?.performClose(nil) }
+            BackButton(title: String(localized: "파일로 돌아가기")) { NSApp.keyWindow?.performClose(nil) }
                 .buttonStyle(PanelButtonStyle())
                 .fixedSize()
             VStack(alignment: .leading, spacing: 1) {
@@ -339,7 +351,7 @@ struct ScreenView: View {
             }
             .fixedSize()
             .onChange(of: model.forwardsShortcuts) { Task { await model.connect() } }
-            Button(model.isConnected ? "연결 해제" : "다시 연결") {
+            Button(model.isConnected ? String(localized: "연결 해제") : String(localized: "다시 연결")) {
                 if model.isConnected { model.disconnect() } else { Task { await model.connect() } }
             }
             .buttonStyle(PanelButtonStyle(destructive: model.isConnected))
@@ -370,28 +382,28 @@ struct ScreenView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("연결 상태").font(.ui(.body, weight: .semibold))
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                    row("상태", model.isConnected ? "연결됨" : model.status)
-                    row("종류", model.screen.kind == .vnc ? "VNC (RFB)" : "macOS 화면 공유")
-                    row("주소", "\(model.host):\(String(model.screen.port))")
+                    row(String(localized: "상태"), model.isConnected ? String(localized: "연결됨") : model.status)
+                    row(String(localized: "종류"), model.screen.kind == .vnc ? "VNC (RFB)" : String(localized: "macOS 화면 공유"))
+                    row(String(localized: "주소"), "\(model.host):\(String(model.screen.port))")
                     if let size = model.framebufferView?.framebufferSize {
-                        row("원격 해상도", "\(Int(size.width)) × \(Int(size.height))")
+                        row(String(localized: "원격 해상도"), "\(Int(size.width)) × \(Int(size.height))")
                     }
-                    row("암호화", model.screen.throughTunnel ? "SSH 터널" : "없음 (직접 연결)")
+                    row(String(localized: "암호화"), model.screen.throughTunnel ? String(localized: "SSH 터널") : String(localized: "없음 (직접 연결)"))
                     if !model.site.proxyJump.isEmpty {
-                        row("경유", model.site.proxyJump.joined(separator: " → "))
+                        row(String(localized: "경유"), model.site.proxyJump.joined(separator: " → "))
                     }
-                    row("표시", model.scalesToFit ? "화면 맞춤" : "1:1")
-                    row("입력", model.viewOnly ? "보기 전용" : model.forwardsShortcuts ? "마우스 · 키보드 · ⌘ 단축키" : "마우스 · 키보드")
+                    row(String(localized: "표시"), model.scalesToFit ? String(localized: "화면 맞춤") : "1:1")
+                    row(String(localized: "입력"), model.viewOnly ? String(localized: "보기 전용") : model.forwardsShortcuts ? String(localized: "마우스 · 키보드 · ⌘ 단축키") : String(localized: "마우스 · 키보드"))
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .card()
             VStack(alignment: .leading, spacing: 6) {
-                Text(model.screen.throughTunnel ? "SSH 터널 사용 중" : "직접 연결 중").font(.ui(.callout, weight: .semibold))
+                Text(model.screen.throughTunnel ? String(localized: "SSH 터널 사용 중") : String(localized: "직접 연결 중")).font(.ui(.callout, weight: .semibold))
                 Text(model.screen.throughTunnel
-                     ? "VNC 자체 암호화가 약해 저장된 SSH 연결 안으로 화면을 전송합니다. 서버 방화벽에서 \(String(model.screen.port)) 포트를 열 필요가 없습니다."
-                     : "화면이 암호화되지 않은 채 전송될 수 있습니다. 연결 관리에서 ‘SSH 터널로 연결’을 켜십시오.")
+                     ? String(localized: "VNC 자체 암호화가 약해 저장된 SSH 연결 안으로 화면을 전송합니다. 서버 방화벽에서 \(String(model.screen.port)) 포트를 열 필요가 없습니다.")
+                     : String(localized: "화면이 암호화되지 않은 채 전송될 수 있습니다. 연결 관리에서 ‘SSH 터널로 연결’을 켜십시오."))
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -451,7 +463,7 @@ private struct CredentialSheet: View {
 
     var body: some View {
         Form {
-            Section(request.needsUsername ? "macOS 계정으로 로그인" : "VNC 비밀번호") {
+            Section(request.needsUsername ? String(localized: "macOS 계정으로 로그인") : String(localized: "VNC 비밀번호")) {
                 if request.needsUsername {
                     TextField("사용자", text: $username, prompt: Text(defaultUsername))
                 }

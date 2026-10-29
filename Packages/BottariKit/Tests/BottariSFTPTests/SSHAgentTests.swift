@@ -12,10 +12,12 @@ final class TestAgent {
 
     let socket: String
     private let process: Process
+    private let ended: DispatchSemaphore
 
-    private init(socket: String, process: Process) {
+    private init(socket: String, process: Process, ended: DispatchSemaphore) {
         self.socket = socket
         self.process = process
+        self.ended = ended
     }
 
     static func start() throws -> TestAgent {
@@ -27,15 +29,15 @@ final class TestAgent {
         process.arguments = ["-D", "-a", socket]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        try process.run()
+        let ended = try process.start()
         for _ in 0..<100 where !FileManager.default.fileExists(atPath: socket) {
             usleep(20_000)
         }
         guard FileManager.default.fileExists(atPath: socket) else {
-            process.terminate()
+            process.stop(waitingOn: ended)
             throw Failure(reason: "ssh-agent did not create its socket")
         }
-        return TestAgent(socket: socket, process: process)
+        return TestAgent(socket: socket, process: process, ended: ended)
     }
 
     func add(_ key: Curve25519.Signing.PrivateKey, comment: String) throws {
@@ -49,8 +51,7 @@ final class TestAgent {
         add.environment = ["SSH_AUTH_SOCK": socket]
         add.standardOutput = FileHandle.nullDevice
         add.standardError = FileHandle.nullDevice
-        try add.run()
-        add.waitUntilExit()
+        try add.runToEnd()
         guard add.terminationStatus == 0 else { throw Failure(reason: "ssh-add exited with \(add.terminationStatus)") }
     }
 
@@ -68,15 +69,13 @@ final class TestAgent {
             process.environment = ["SSH_AUTH_SOCK": socket]
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
-            try process.run()
-            process.waitUntilExit()
+            try process.runToEnd()
             guard process.terminationStatus == 0 else { throw Failure(reason: "\(tool) exited with \(process.terminationStatus)") }
         }
     }
 
     func stop() {
-        process.terminate()
-        process.waitUntilExit()
+        process.stop(waitingOn: ended)
         try? FileManager.default.removeItem(atPath: socket)
     }
 }
@@ -111,14 +110,34 @@ final class TestAgent {
             let key = Curve25519.Signing.PrivateKey()
             try agent.add(key, comment: "signer")
             let client = try #require(SSHAgentClient(socket: agent.socket))
-            let agentKey = try #require(AgentEd25519PrivateKey(agent: client, identity: try client.identities()[0]))
+            let agentKey = client.key(Ed25519Kind.self, try client.identities()[0])
             let message = Data("session id + userauth request".utf8)
 
             let signature = try agentKey.signature(for: message)
 
-            #expect(agentKey.rawPublicKey == key.publicKey.rawRepresentation)
+            #expect(agentKey.publicKey.rawRepresentation == Data([0, 0, 0, 32]) + key.publicKey.rawRepresentation)
             #expect(key.publicKey.isValidSignature(signature.rawRepresentation, for: message))
             #expect(agentKey.publicKey.isValidSignature(signature, for: message))
+            #expect(!agentKey.publicKey.isValidSignature(signature, for: Data("something else".utf8)))
+        }
+    }
+
+    @Test(arguments: ["rsa", "ecdsa"])
+    func agentRSAAndECDSASignaturesVerify(type: String) async throws {
+        try await withAgent { agent in
+            try agent.addNewKey(ofType: type)
+            let client = try #require(SSHAgentClient(socket: agent.socket))
+            let identity = try client.identities()[0]
+            let message = Data("session id + userauth request".utf8)
+            if type == "rsa" {
+                let sha2 = client.key(RSASHA512Kind.self, identity, flags: RSASHA512Kind.agentFlags)
+                #expect(sha2.publicKey.isValidSignature(try sha2.signature(for: message), for: message))
+                let sha1 = client.key(RSASHA1Kind.self, identity, flags: RSASHA1Kind.agentFlags)
+                #expect(sha1.publicKey.isValidSignature(try sha1.signature(for: message), for: message))
+            } else {
+                let key = client.key(ECDSAP256Kind.self, identity)
+                #expect(key.publicKey.isValidSignature(try key.signature(for: message), for: message))
+            }
         }
     }
 
@@ -225,13 +244,27 @@ final class TestAgent {
         }
     }
 
-    @Test func agentWithOnlyUnsupportedKeysSaysSo() async throws {
+    @Test func everyKindOfAgentKeyIsOfferedAndRSATwice() async throws {
         try await withAgent { agent in
             try agent.addNewKey(ofType: "ecdsa")
-            #expect(throws: SFTPConnectError.agentHasNoUsableKeys) {
-                _ = try SFTPCredential.agent(socket: agent.socket).authenticationAttempts(username: "me")
-            }
+            try agent.addNewKey(ofType: "rsa")
+            try agent.add(Curve25519.Signing.PrivateKey(), comment: "ed")
+            let attempts = try SFTPCredential.agent(socket: agent.socket).authenticationAttempts(username: "me")
+            #expect(attempts.count == 4)
         }
+    }
+
+    @Test func certificatesAndSecurityKeysAreNotOffered() throws {
+        let client = try #require(SSHAgentClient(socket: "/tmp/bt-no-such-agent.sock"))
+        func identity(_ type: String) -> SSHAgentClient.Identity {
+            var blob = Data()
+            blob.appendSSHString(Data(type.utf8))
+            blob.appendSSHString(Data(repeating: 1, count: 32))
+            return SSHAgentClient.Identity(blob: blob, comment: "")
+        }
+        let identities = ["sk-ssh-ed25519@openssh.com", "ssh-ed25519-cert-v01@openssh.com", "ssh-dss"].map(identity)
+        #expect(client.offers(for: identities, username: "me").isEmpty)
+        #expect(client.offers(for: [identity("ssh-ed25519")], username: "me").count == 1)
     }
 
     @Test func missingSocketMeansNoAgent() {

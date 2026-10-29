@@ -24,7 +24,7 @@ public final class GoogleAuthorization: AccessTokenSource, @unchecked Sendable {
     /// Restores a sign-in saved with `archived`.
     public convenience init(archived: Data) throws {
         guard let state = try NSKeyedUnarchiver.unarchivedObject(ofClass: OIDAuthState.self, from: archived) else {
-            throw GoogleSignInError("저장된 Google 로그인 정보를 읽을 수 없습니다. 다시 로그인하십시오.")
+            throw GoogleSignInError(String(localized: "저장된 Google 로그인 정보를 읽을 수 없습니다. 다시 로그인하십시오."))
         }
         self.init(state: state)
     }
@@ -71,7 +71,7 @@ public final class GoogleAuthorization: AccessTokenSource, @unchecked Sendable {
                 if let state {
                     continuation.resume(returning: GoogleAuthorization(state: state))
                 } else {
-                    continuation.resume(throwing: error ?? GoogleSignInError("Google 로그인을 완료할 수 없습니다"))
+                    continuation.resume(throwing: error ?? GoogleSignInError(String(localized: "Google 로그인을 완료할 수 없습니다")))
                 }
             }
         }
@@ -84,7 +84,7 @@ public final class GoogleAuthorization: AccessTokenSource, @unchecked Sendable {
                 if let token {
                     continuation.resume(returning: token)
                 } else {
-                    continuation.resume(throwing: error ?? GoogleSignInError("Google 토큰을 갱신할 수 없습니다. 다시 로그인하십시오."))
+                    continuation.resume(throwing: error ?? GoogleSignInError(String(localized: "Google 토큰을 갱신할 수 없습니다. 다시 로그인하십시오.")))
                 }
             }
         }

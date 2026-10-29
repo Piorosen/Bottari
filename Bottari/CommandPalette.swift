@@ -154,29 +154,29 @@ struct CommandPalette: View {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("/") || trimmed.hasPrefix("~") {
             let path = trimmed.hasPrefix("~") ? pane.provider.home.appending(String(trimmed.dropFirst())) : RemotePath(trimmed)
-            list.append(PaletteCommand(id: "path", title: "이 폴더로 이동: \(path.string)", subtitle: pane.provider.displayName, symbol: "arrow.right.circle", keywords: trimmed) {
+            list.append(PaletteCommand(id: "path", title: String(localized: "이 폴더로 이동: \(path.string)"), subtitle: pane.provider.displayName, symbol: "arrow.right.circle", keywords: trimmed) {
                 Task { await pane.open(path) }
             })
         }
 
         for site in AppServices.sites.sites {
-            list.append(PaletteCommand(id: "site-\(site.id)", title: "\(site.name) 열기", subtitle: site.summary, symbol: site.symbol, keywords: "연결 connect \(site.tag?.label ?? "")") {
+            list.append(PaletteCommand(id: "site-\(site.id)", title: String(localized: "\(site.name) 열기"), subtitle: site.summary, symbol: site.symbol, keywords: String(localized: "연결 connect \(site.tag?.label ?? "")")) {
                 workspace.open(site)
             })
         }
         let home = RemotePath(NSHomeDirectory())
-        for (name, folder) in [("홈", ""), ("데스크탑", "Desktop"), ("문서", "Documents"), ("다운로드", "Downloads")] {
-            list.append(PaletteCommand(id: "mac-\(name)", title: name, subtitle: "이 Mac", symbol: "folder", keywords: "mac \(folder.lowercased())") {
+        for (name, folder) in [(String(localized: "홈"), ""), (MacFolder.desktop, "Desktop"), (MacFolder.documents, "Documents"), (MacFolder.downloads, "Downloads")] {
+            list.append(PaletteCommand(id: "mac-\(name)", title: name, subtitle: String(localized: "이 Mac"), symbol: "folder", keywords: "mac \(folder.lowercased())") {
                 workspace.openOnMac(home.appending(folder))
             })
         }
         if let iCloud = LocalFileProvider.iCloudDrive {
-            list.append(PaletteCommand(id: "icloud", title: "iCloud Drive", subtitle: "이 Mac", symbol: "bt.cloud", keywords: "icloud") {
+            list.append(PaletteCommand(id: "icloud", title: "iCloud Drive", subtitle: String(localized: "이 Mac"), symbol: "bt.cloud", keywords: "icloud") {
                 workspace.openOnMac(iCloud)
             })
         }
         for favorite in Favorites.shared.items {
-            list.append(PaletteCommand(id: "favorite-\(favorite.id)", title: favorite.name, subtitle: favorite.path.string, symbol: "bt.star", keywords: "즐겨찾기 favorite") {
+            list.append(PaletteCommand(id: "favorite-\(favorite.id)", title: favorite.name, subtitle: favorite.path.string, symbol: "bt.star", keywords: String(localized: "즐겨찾기 favorite")) {
                 workspace.open(favorite)
             })
         }
@@ -184,53 +184,53 @@ struct CommandPalette: View {
         let selection = pane.selectedItems
         let other = workspace.pane(side.other).provider.displayName
         list += [
-            PaletteCommand(id: "new-folder", title: "새 폴더", subtitle: keys(.newFolder), symbol: "folder.badge.plus", keywords: "new folder mkdir") {
+            PaletteCommand(id: "new-folder", title: String(localized: "새 폴더"), subtitle: keys(.newFolder), symbol: "folder.badge.plus", keywords: "new folder mkdir") {
                 workspace.makeFolder(in: side)
             },
-            PaletteCommand(id: "copy-other", title: "선택 항목을 \(other)에 복사", subtitle: "\(selection.count)개 선택 · \(keys(.copyToOther))", symbol: "arrow.right.doc.on.clipboard", keywords: "copy 복사 전송") {
+            PaletteCommand(id: "copy-other", title: String(localized: "선택 항목을 \(other)에 복사"), subtitle: String(localized: "\(selection.count)개 선택 · \(keys(.copyToOther))"), symbol: "arrow.right.doc.on.clipboard", keywords: String(localized: "copy 복사 전송")) {
                 workspace.send(selection, from: side, kind: .copy)
             },
-            PaletteCommand(id: "move-other", title: "선택 항목을 \(other)(으)로 이동", subtitle: "\(selection.count)개 선택 · \(keys(.moveToOther))", symbol: "arrow.right", keywords: "move 이동 전송") {
+            PaletteCommand(id: "move-other", title: String(localized: "선택 항목을 \(other)(으)로 이동"), subtitle: String(localized: "\(selection.count)개 선택 · \(keys(.moveToOther))"), symbol: "arrow.right", keywords: String(localized: "move 이동 전송")) {
                 workspace.send(selection, from: side, kind: .move)
             },
-            PaletteCommand(id: "bundle", title: "선택 항목을 보따리에 담기", subtitle: keys(.bundle), symbol: "bt.bundle", keywords: "bundle 보따리") {
+            PaletteCommand(id: "bundle", title: String(localized: "선택 항목을 보따리에 담기"), subtitle: keys(.bundle), symbol: "bt.bundle", keywords: String(localized: "bundle 보따리")) {
                 workspace.addToBundle(from: side)
             },
-            PaletteCommand(id: "bundle-send", title: "보따리를 현재 패인으로 보내기", subtitle: "\(BottariBundle.shared.entries.count)개", symbol: "bt.bundle", keywords: "bundle 보따리 send") {
+            PaletteCommand(id: "bundle-send", title: String(localized: "보따리를 현재 패인으로 보내기"), subtitle: String(localized: "\(BottariBundle.shared.entries.count)개"), symbol: "bt.bundle", keywords: String(localized: "bundle 보따리 send")) {
                 BottariBundle.shared.send(to: side, in: workspace)
             },
-            PaletteCommand(id: "reload", title: "새로고침", subtitle: "⌘R", symbol: "arrow.clockwise", keywords: "reload refresh") {
+            PaletteCommand(id: "reload", title: String(localized: "새로고침"), subtitle: "⌘R", symbol: "arrow.clockwise", keywords: "reload refresh") {
                 Task { await pane.reload() }
             },
-            PaletteCommand(id: "hidden", title: pane.showsHiddenFiles ? "숨김 파일 감추기" : "숨김 파일 보기", symbol: "eye", keywords: "hidden dotfiles") {
+            PaletteCommand(id: "hidden", title: pane.showsHiddenFiles ? String(localized: "숨김 파일 감추기") : String(localized: "숨김 파일 보기"), symbol: "eye", keywords: "hidden dotfiles") {
                 pane.showsHiddenFiles.toggle()
             },
-            PaletteCommand(id: "transfers", title: "전송 센터 열기", symbol: "bt.transfer", keywords: "transfers queue 전송") {
+            PaletteCommand(id: "transfers", title: String(localized: "전송 센터 열기"), symbol: "bt.transfer", keywords: String(localized: "transfers queue 전송")) {
                 openWindow(id: "transfers")
             },
-            PaletteCommand(id: "inspector", title: workspace.showsInspector ? "미리보기 닫기" : "미리보기 열기", symbol: "bt.inspector", keywords: "inspector preview 미리보기") {
+            PaletteCommand(id: "inspector", title: workspace.showsInspector ? String(localized: "미리보기 닫기") : String(localized: "미리보기 열기"), symbol: "bt.inspector", keywords: String(localized: "inspector preview 미리보기")) {
                 workspace.showsInspector.toggle()
             },
-            PaletteCommand(id: "tunnels", title: "터널 관리", symbol: "bt.tunnel", keywords: "tunnel vpn proxy socks 터널") {
+            PaletteCommand(id: "tunnels", title: String(localized: "터널 관리"), symbol: "bt.tunnel", keywords: String(localized: "tunnel vpn proxy socks 터널")) {
                 openWindow(id: "tunnels")
             },
-            PaletteCommand(id: "settings", title: "설정", subtitle: "⌘,", symbol: "bt.settings", keywords: "settings preferences theme 테마 단축키 icloud") {
+            PaletteCommand(id: "settings", title: String(localized: "설정"), subtitle: "⌘,", symbol: "bt.settings", keywords: String(localized: "settings preferences theme 테마 단축키 icloud")) {
                 openSettings()
             },
         ]
         if pane.provider is SFTPFileProvider {
-            list.append(PaletteCommand(id: "terminal", title: "SSH 터미널 열기", subtitle: "⌃`", symbol: "bt.terminal", keywords: "ssh terminal shell 터미널") {
+            list.append(PaletteCommand(id: "terminal", title: String(localized: "SSH 터미널 열기"), subtitle: "⌃`", symbol: "bt.terminal", keywords: String(localized: "ssh terminal shell 터미널")) {
                 workspace.openTerminal(in: side)
             })
             if pane.site?.remoteScreen != nil {
-                list.append(PaletteCommand(id: "screen", title: "원격 화면 열기", symbol: "bt.screen", keywords: "vnc screen remote 원격") {
+                list.append(PaletteCommand(id: "screen", title: String(localized: "원격 화면 열기"), symbol: "bt.screen", keywords: String(localized: "vnc screen remote 원격")) {
                     workspace.openScreen(in: side)
                 })
             }
         }
         for profile in TunnelStore.shared.profiles {
             let active = TunnelStore.shared.state(profile.id).isActive
-            list.append(PaletteCommand(id: "tunnel-\(profile.id)", title: "터널 \(profile.name) \(active ? "끄기" : "켜기")", subtitle: profile.mode.title, symbol: "point.3.filled.connected.trianglepath.dotted", keywords: "tunnel vpn 터널") {
+            list.append(PaletteCommand(id: "tunnel-\(profile.id)", title: String(localized: "터널 \(profile.name) \(active ? String(localized: "끄기") : String(localized: "켜기"))"), subtitle: profile.mode.title, symbol: "point.3.filled.connected.trianglepath.dotted", keywords: String(localized: "tunnel vpn 터널")) {
                 TunnelStore.shared.toggle(profile.id)
             })
         }

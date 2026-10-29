@@ -47,12 +47,12 @@ final class GalleryModel {
         loading?.cancel()
         image = thumbnails[item.path]
         pixelSize = nil
-        status = provider.isLocal ? nil : "원본 다운로드 중…"
+        status = provider.isLocal ? nil : String(localized: "원본 다운로드 중…")
         let total = item.size.map { ByteFormat.string($0) }
         loading = Task {
             do {
                 let url = try await AppServices.fileCache.localURL(for: item, from: provider) { received in
-                    let text = "원본 다운로드 중 · \(ByteFormat.string(received))" + (total.map { " / \($0)" } ?? "")
+                    let text = String(localized: "원본 다운로드 중 · \(ByteFormat.string(received))") + (total.map { " / \($0)" } ?? "")
                     Task { @MainActor in
                         if self.current == item, self.status != nil { self.status = text }
                     }
@@ -60,7 +60,7 @@ final class GalleryModel {
                 let decoded = await Task.detached { Self.decode(url) }.value
                 guard !Task.isCancelled, current == item else { return }
                 guard let decoded else {
-                    status = "이미지를 열 수 없음"
+                    status = String(localized: "이미지를 열 수 없음")
                     return
                 }
                 image = NSImage(cgImage: decoded, size: .zero)
@@ -203,7 +203,7 @@ private struct GalleryView: View {
         .onKeyPress(.rightArrow) { model.step(1); return .handled }
         .onKeyPress(.space) { close(); return .handled }
         .onKeyPress(.escape) { close(); return .handled }
-        .navigationTitle(model.current?.name ?? "이미지")
+        .navigationTitle(model.current?.name ?? String(localized: "이미지"))
     }
 
     private var placeName: String {
@@ -212,7 +212,7 @@ private struct GalleryView: View {
 
     private var toolbar: some View {
         HStack(spacing: 10) {
-            BackButton(title: "목록으로", action: close)
+            BackButton(title: String(localized: "목록으로"), action: close)
                 .buttonStyle(PanelButtonStyle())
                 .fixedSize()
             if let tag = model.site?.tag {
@@ -318,18 +318,18 @@ private struct GalleryView: View {
                 }
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                     if let pixels = model.pixelSize {
-                        row("해상도", "\(Int(pixels.width)) × \(Int(pixels.height))")
+                        row(String(localized: "해상도"), "\(Int(pixels.width)) × \(Int(pixels.height))")
                     }
-                    row("수정일", item.formattedModified)
+                    row(String(localized: "수정일"), item.formattedModified)
                     if let permissions = item.permissionString {
-                        row("권한", [permissions, item.owner].compactMap { $0 }.joined(separator: " "))
+                        row(String(localized: "권한"), [permissions, item.owner].compactMap { $0 }.joined(separator: " "))
                     }
-                    row("경로", item.path.string)
+                    row(String(localized: "경로"), item.path.string)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    SectionLabel("불러오기 상태")
-                    loadRow("썸네일", "\(model.thumbnails.count) / \(model.items.count)장", done: model.thumbnails[item.path] != nil)
-                    loadRow("원본", model.provider.isLocal ? "이 Mac의 파일" : model.status == nil && model.image != nil ? "다운로드됨 · \(item.formattedSize)" : "다운로드 중", done: model.status == nil && model.image != nil)
+                    SectionLabel(String(localized: "불러오기 상태"))
+                    loadRow(String(localized: "썸네일"), String(localized: "\(model.thumbnails.count) / \(model.items.count)장"), done: model.thumbnails[item.path] != nil)
+                    loadRow(String(localized: "원본"), model.provider.isLocal ? String(localized: "이 Mac의 파일") : model.status == nil && model.image != nil ? String(localized: "다운로드됨 · \(item.formattedSize)") : String(localized: "다운로드 중"), done: model.status == nil && model.image != nil)
                     if !model.provider.isLocal {
                         Text("서버에서 파일이 변경되면 자동으로 다시 다운로드합니다.")
                             .font(.ui(.caption))
