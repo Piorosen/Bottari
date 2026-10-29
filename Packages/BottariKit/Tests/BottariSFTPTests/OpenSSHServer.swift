@@ -76,6 +76,7 @@ final class OpenSSHServer {
     let port: Int
     private let process: Process
     private let ended: DispatchSemaphore
+    private var stopped = false
 
     var endpoint: SFTPEndpoint {
         SFTPEndpoint(host: "127.0.0.1", port: port, username: NSUserName())
@@ -146,7 +147,10 @@ final class OpenSSHServer {
         (try? String(contentsOf: folder.appending(path: "sshd.log"), encoding: .utf8)) ?? ""
     }
 
+    /// Stops sshd; calling it again does nothing.
     func stop() {
+        guard !stopped else { return }
+        stopped = true
         process.stop(waitingOn: ended)
         try? FileManager.default.removeItem(at: folder)
     }

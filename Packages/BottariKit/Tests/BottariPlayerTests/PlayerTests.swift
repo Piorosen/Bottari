@@ -41,13 +41,29 @@ func makeMovie(at url: URL, seconds: Int = 2) async throws {
         try await body(provider, try await provider.stat(RemotePath(url.path)), data)
     }
 
-    func readAll(_ stream: ProviderStream, chunk: Int = 1000) -> Data {
+    /// Runs `work` on a thread of its own. mpv calls the stream from its own
+    /// threads; blocking a Swift concurrency thread instead can starve the
+    /// task that feeds the stream, and on a machine with few cores hang.
+    func onOwnThread<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            Thread { continuation.resume(returning: work()) }.start()
+        }
+    }
+
+    func read(_ stream: ProviderStream, _ count: Int) async -> (result: Int, bytes: Data) {
+        await onOwnThread {
+            var buffer = [UInt8](repeating: 0, count: count)
+            let result = buffer.withUnsafeMutableBytes { Int(stream.read(into: $0.baseAddress!, count: count)) }
+            return (result, Data(buffer.prefix(max(0, result))))
+        }
+    }
+
+    func readAll(_ stream: ProviderStream, chunk: Int = 1000) async -> Data {
         var out = Data()
-        var buffer = [UInt8](repeating: 0, count: chunk)
         while true {
-            let count = buffer.withUnsafeMutableBytes { stream.read(into: $0.baseAddress!, count: chunk) }
+            let (count, bytes) = await read(stream, chunk)
             guard count > 0 else { break }
-            out.append(contentsOf: buffer[0..<Int(count)])
+            out.append(bytes)
         }
         return out
     }
@@ -56,17 +72,14 @@ func makeMovie(at url: URL, seconds: Int = 2) async throws {
         try await withFile(300_000) { provider, item, data in
             let stream = ProviderStream(provider: provider, path: item.path, size: item.size)
             #expect(stream.seek(to: 0) == 0)
-            #expect(readAll(stream) == data)
+            #expect(await readAll(stream) == data)
             // Back to the start: reading begins again there.
             #expect(stream.seek(to: 100) == 100)
-            var buffer = [UInt8](repeating: 0, count: 10)
-            _ = buffer.withUnsafeMutableBytes { stream.read(into: $0.baseAddress!, count: 10) }
-            #expect(Data(buffer) == data.subdata(in: 100..<110))
+            #expect(await read(stream, 10).bytes == data.subdata(in: 100..<110))
             try await Task.sleep(for: .milliseconds(100))
             // Forward within the buffered bytes: no new read.
             #expect(stream.seek(to: 50_000) == 50_000)
-            _ = buffer.withUnsafeMutableBytes { stream.read(into: $0.baseAddress!, count: 10) }
-            #expect(Data(buffer) == data.subdata(in: 50_000..<50_010))
+            #expect(await read(stream, 10).bytes == data.subdata(in: 50_000..<50_010))
             #expect(stream.startOffsets == [0, 100])
         }
     }
@@ -75,13 +88,11 @@ func makeMovie(at url: URL, seconds: Int = 2) async throws {
         try await withFile(2_000_000) { provider, item, data in
             let stream = ProviderStream(provider: provider, path: item.path, size: item.size, aheadLimit: 300_000)
             _ = stream.seek(to: 0)
-            var buffer = [UInt8](repeating: 0, count: 10)
-            _ = buffer.withUnsafeMutableBytes { stream.read(into: $0.baseAddress!, count: 10) }
+            _ = await read(stream, 10)
             try await Task.sleep(for: .milliseconds(200))
             // Jumping past the buffered window starts a new read there.
             #expect(stream.seek(to: 1_500_000) == 1_500_000)
-            _ = buffer.withUnsafeMutableBytes { stream.read(into: $0.baseAddress!, count: 10) }
-            #expect(Data(buffer) == data.subdata(in: 1_500_000..<1_500_010))
+            #expect(await read(stream, 10).bytes == data.subdata(in: 1_500_000..<1_500_010))
             #expect(stream.startOffsets == [0, 1_500_000])
         }
     }
@@ -93,9 +104,7 @@ func makeMovie(at url: URL, seconds: Int = 2) async throws {
             try? await Task.sleep(for: .milliseconds(100))
             blocked.cancel()
         }
-        var buffer = [UInt8](repeating: 0, count: 4)
-        let count = await Task.detached { buffer.withUnsafeMutableBytes { blocked.read(into: $0.baseAddress!, count: 4) } }.value
-        #expect(count == -1)
+        #expect(await read(blocked, 4).result == -1)
     }
 }
 
