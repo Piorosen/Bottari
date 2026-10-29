@@ -18,6 +18,7 @@ enum AppServices {
         let queue = TransferQueue()
         queue.maxConcurrentTransfers = TransferSettings.maxConcurrentTransfers
         queue.verifiesChecksums = TransferSettings.verifiesChecksums
+        queue.directRoute = TransferSettings.directBetweenServers ? TransferSettings.directRoute : nil
         queue.onJobsChanged = {
             connections.closeUnused()
             NotificationCenter.default.post(name: .transfersChanged, object: nil)

@@ -151,6 +151,12 @@ enum SnapshotRenderer {
         let done = queue.enqueue(.copy, await item("src/Bottari.app.zip"), from: TransferEndpoint(mac), to: TransferEndpoint(nas), into: folder("dst-nas"))
         queue.enqueue(.copy, await item("src/site"), from: TransferEndpoint(prod), to: TransferEndpoint(dev), into: folder("dst-server"))
         queue.enqueue(.copy, await item("src/clash/index.html"), from: TransferEndpoint(prod), to: TransferEndpoint(mac), into: folder("dst-mac"))
+        // prod-web sends to home-nas itself; the stand-in copy takes its time.
+        queue.directRoute = DirectRoute(
+            canSend: { from, to in from.displayName == "prod-web" && to.displayName == "home-nas" },
+            send: { _, _, _, _ in try await Task.sleep(for: .seconds(60)) }
+        )
+        queue.enqueue(.copy, await item("src/logs/app.log"), from: TransferEndpoint(prod), to: TransferEndpoint(nas), into: folder("dst-nas"))
         try? await Task.sleep(for: .milliseconds(1500))
         _ = done
         AppServices.transferRecords.showForPreview([
@@ -175,6 +181,7 @@ enum SnapshotRenderer {
             )
         }
         queue.jobs.forEach(queue.cancel)
+        queue.directRoute = nil
     }
 
     /// The image viewer on a folder of generated pictures.

@@ -28,7 +28,9 @@ public final class TransferJob: Identifiable {
     public let destination: TransferEndpoint
     public let items: [FileItem]
     public let destinationFolder: RemotePath
-    public let route: TransferRoute
+    /// How the bytes travel. A direct job whose source cannot reach the
+    /// destination goes through the Mac from then on.
+    public internal(set) var route: TransferRoute
 
     public internal(set) var state: State = .queued
     public internal(set) var totalBytes: Int64 = 0

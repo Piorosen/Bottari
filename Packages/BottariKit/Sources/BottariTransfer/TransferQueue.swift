@@ -21,6 +21,9 @@ public final class TransferQueue {
     /// paused or ended. Saving `jobs.compactMap(\.record)` then lets them carry
     /// on after a restart.
     @ObservationIgnored public var onCheckpoint: (() -> Void)?
+    /// How to send from one server straight to another; nil sends everything
+    /// between servers through the Mac. Applies to jobs started afterwards.
+    @ObservationIgnored public var directRoute: DirectRoute?
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
     public init() {}
@@ -50,7 +53,7 @@ public final class TransferQueue {
             source: source,
             destination: destination,
             folder: folder,
-            route: Self.route(kind, from: source.provider, to: destination.provider),
+            route: route(kind, from: source.provider, to: destination.provider),
             policy: policy
         )
         job.verifiesChecksums = verifiesChecksums
@@ -82,7 +85,7 @@ public final class TransferQueue {
             source: source,
             destination: destination,
             folder: record.folder,
-            route: Self.route(record.kind, from: source.provider, to: destination.provider),
+            route: route(record.kind, from: source.provider, to: destination.provider),
             policy: record.policy
         )
         job.verifiesChecksums = record.verifiesChecksums
@@ -96,6 +99,13 @@ public final class TransferQueue {
         Task { [self] in await prepare(job) }
         onCheckpoint?()
         return job
+    }
+
+    /// The route a new job takes, straight between servers where `directRoute` allows.
+    private func route(_ kind: TransferKind, from source: any FileProvider, to destination: any FileProvider) -> TransferRoute {
+        let route = Self.route(kind, from: source, to: destination)
+        guard route == .viaMac, let directRoute, directRoute.canSend(source, destination) else { return route }
+        return .direct
     }
 
     public static func route(_ kind: TransferKind, from source: any FileProvider, to destination: any FileProvider) -> TransferRoute {
@@ -227,7 +237,9 @@ public final class TransferQueue {
 
     /// Works out what `item` needs at `destination`: one rename or copy, a file to
     /// stream, or a folder to create (or merge into) and look through.
-    private func plan(_ given: FileItem, to destination: RemotePath, in job: TransferJob, pickedByUser: Bool = false) async {
+    /// `throughMac` streams the item whatever the job's route, e.g. a renamed
+    /// copy, which a direct route cannot make.
+    private func plan(_ given: FileItem, to destination: RemotePath, in job: TransferJob, pickedByUser: Bool = false, throughMac: Bool = false) async {
         var item = given
         var destination = destination
         if item.kind == .other {
@@ -264,6 +276,7 @@ public final class TransferQueue {
         }
         let wholeItem: WorkItem.Action = switch job.route {
         case .withinLocation: job.kind == .move ? .rename : .providerCopy
+        case .direct where !throughMac: .direct
         default: .stream
         }
 
@@ -299,7 +312,7 @@ public final class TransferQueue {
                 return
             }
             // Folders merge, like FileZilla; clashes inside are settled file by file.
-            await planContents(of: item, into: destination, in: job)
+            await planContents(of: item, into: destination, in: job, throughMac: throughMac)
         } else if wholeItem != .stream {
             add(WorkItem(source: item, destination: destination, action: wholeItem), in: job)
         } else {
@@ -311,11 +324,11 @@ public final class TransferQueue {
             }
             remember(FileItem(path: destination, kind: .directory), in: job)
             job.listings[destination] = [:]
-            await planContents(of: item, into: destination, in: job)
+            await planContents(of: item, into: destination, in: job, throughMac: throughMac)
         }
     }
 
-    private func planContents(of folder: FileItem, into destination: RemotePath, in job: TransferJob) async {
+    private func planContents(of folder: FileItem, into destination: RemotePath, in job: TransferJob, throughMac: Bool = false) async {
         let children: [FileItem]
         do {
             children = try await job.source.provider.list(folder.path)
@@ -331,7 +344,7 @@ public final class TransferQueue {
                 job.skippedFiles += 1
                 continue
             }
-            await plan(child, to: destination.appending(child.name), in: job)
+            await plan(child, to: destination.appending(child.name), in: job, throughMac: throughMac)
         }
     }
 
@@ -446,6 +459,14 @@ public final class TransferQueue {
             let destination = job.destination.provider
             var resumedFrom: Int64 = 0
             var verified = false
+            if work.action == .direct, job.route != .direct || directRoute == nil || work.destination.name != work.source.name {
+                // The job fell back to the Mac or the direct route was turned off
+                // (the job says so from now on), or this is a renamed copy, which
+                // tar on the server cannot make: stream it instead.
+                if directRoute == nil { job.route = .viaMac }
+                await plan(work.source, to: work.destination, in: job, throughMac: true)
+                return .planned
+            }
             switch work.action {
             case .stream:
                 resumedFrom = await resumableOffset(for: work, in: job)
@@ -488,11 +509,35 @@ public final class TransferQueue {
                 } else {
                     try await source.copy(work.source.path, to: work.destination)
                 }
+            case .direct:
+                guard let directRoute, let folder = work.destination.parent else { break }
+                do {
+                    try await directRoute.send(work.source, source, destination, folder)
+                } catch let unavailable as DirectRouteUnavailable {
+                    // The source cannot reach the destination: the Mac carries
+                    // this item and everything after it.
+                    Log.transfer.error("\(job.logName): 서버 간 직접 전송 불가, Mac 경유로 전환: \(unavailable.reason)")
+                    job.route = .viaMac
+                    await plan(work.source, to: work.destination, in: job, throughMac: true)
+                    return .planned
+                }
+                if !work.source.isDirectory, job.verifiesChecksums, source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) {
+                    let sentPath = work.source.path
+                    let receivedPath = work.destination
+                    async let sent = source.checksum(sentPath)
+                    async let received = destination.checksum(receivedPath)
+                    let (expected, actual) = try await (sent, received)
+                    guard expected == actual else {
+                        work.settled = .overwrite
+                        return .failed(String(localized: "체크섬이 일치하지 않습니다 (원본 \(expected.prefix(12))…, 대상 \(actual.prefix(12))…)"), work)
+                    }
+                    verified = true
+                }
             case .scan:
                 break
             }
             remember(FileItem(path: work.destination, kind: work.source.kind, size: work.source.size, modified: work.source.modified), in: job)
-            if job.kind == .move, work.action == .stream {
+            if job.kind == .move, work.action == .stream || work.action == .direct {
                 do {
                     try await source.delete(work.source.path)
                 } catch {

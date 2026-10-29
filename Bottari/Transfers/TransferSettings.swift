@@ -1,3 +1,5 @@
+import BottariCore
+import BottariSFTP
 import BottariTransfer
 import Foundation
 
@@ -6,6 +8,7 @@ enum TransferSettings {
     static let maxConcurrentKey = "transfers.maxConcurrent"
     static let conflictPolicyKey = "transfers.conflictPolicy"
     static let verifiesChecksumsKey = "transfers.verifiesChecksums"
+    static let directBetweenServersKey = "transfers.directBetweenServers"
 
     static var maxConcurrentTransfers: Int {
         let stored = UserDefaults.standard.integer(forKey: maxConcurrentKey)
@@ -19,6 +22,31 @@ enum TransferSettings {
     static var conflictPolicy: ConflictPolicy {
         UserDefaults.standard.string(forKey: conflictPolicyKey).flatMap(ConflictPolicy.init) ?? .ask
     }
+
+    /// Off unless the user turns it on: the source server borrows the login to
+    /// the destination while it sends, so it should be a server the user trusts.
+    static var directBetweenServers: Bool {
+        UserDefaults.standard.bool(forKey: directBetweenServersKey)
+    }
+
+    /// One SFTP server sending straight to another, with the destination's
+    /// login forwarded as an agent; see `SFTPFileProvider.send(_:directlyTo:into:)`.
+    static let directRoute = DirectRoute(
+        canSend: { from, to in
+            guard let from = from as? SFTPFileProvider, let to = to as? SFTPFileProvider else { return false }
+            return from.canSend(directlyTo: to)
+        },
+        send: { item, from, to, folder in
+            guard let from = from as? SFTPFileProvider, let to = to as? SFTPFileProvider else {
+                throw DirectRouteUnavailable(reason: String(localized: "SFTP 서버끼리만 직접 보낼 수 있습니다"))
+            }
+            do {
+                try await from.send([item], directlyTo: to, into: folder)
+            } catch DirectCopyError.unreachable(let reason) {
+                throw DirectRouteUnavailable(reason: reason)
+            }
+        }
+    )
 }
 
 extension ConflictPolicy {

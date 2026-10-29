@@ -141,6 +141,16 @@
         }
       }
     },
+    "%@ → %@ (서버 간 직접)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ → %@ (server to server)"
+          }
+        }
+      }
+    },
     "%@ 경유": {
       "localizations": {
         "en": {
@@ -267,6 +277,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No %@ items"
+          }
+        }
+      }
+    },
+    "%@$ tar -cf - … | ssh %@ tar -xpf -\n  %@\n  → %@\nMac을 거치지 않음, 대상 로그인은 에이전트 포워딩": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@$ tar -cf - … | ssh %@ tar -xpf -\n  %@\n  → %@\nNever passes through the Mac; the destination login is forwarded as an agent"
           }
         }
       }
@@ -1437,6 +1457,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "S3 sent an unexpected response"
+          }
+        }
+      }
+    },
+    "SFTP 서버끼리만 직접 보낼 수 있습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only SFTP servers can send to each other directly"
           }
         }
       }
@@ -4669,6 +4699,36 @@
         }
       }
     },
+    "서버 간 직접 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server to server · %@"
+          }
+        }
+      }
+    },
+    "서버 간 직접 전송": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server-to-server transfers"
+          }
+        }
+      }
+    },
+    "서버 간 직접 전송에 실패했습니다: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server-to-server transfer failed: %@"
+          }
+        }
+      }
+    },
     "서버 내 복사": {
       "localizations": {
         "en": {
@@ -4715,6 +4775,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reopen Server Version"
+          }
+        }
+      }
+    },
+    "서버 사이": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Between servers"
           }
         }
       }
@@ -5919,6 +5989,16 @@
         }
       }
     },
+    "연결 추가": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Connection"
+          }
+        }
+      }
+    },
     "연결 테스트": {
       "localizations": {
         "en": {
@@ -6387,6 +6467,46 @@
         }
       }
     },
+    "원본 서버가 SSH로 대상 서버에 바로 보냄. 대상 로그인은 에이전트 포워딩으로 빌려 줌": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The source server sends straight to the destination over SSH, borrowing the destination login through agent forwarding"
+          }
+        }
+      }
+    },
+    "원본 서버가 대상 서버로 바로 보냅니다. 그동안 대상 서버 로그인(에이전트나 키)을 원본 서버가 빌려 쓰므로, 믿을 수 있는 서버끼리만 켜십시오. 새 전송부터 적용": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The source server sends straight to the destination. Meanwhile it borrows the destination login (agent or key), so turn this on only between servers you trust. Applies to new transfers"
+          }
+        }
+      }
+    },
+    "원본 서버가 대상 서버에 바로 보냄": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The source server sends straight to the destination"
+          }
+        }
+      }
+    },
+    "원본 서버에서 대상 서버에 연결할 수 없습니다: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The source server can’t reach the destination: %@"
+          }
+        }
+      }
+    },
     "원본을 찾을 수 없습니다: %@": {
       "localizations": {
         "en": {
@@ -6503,6 +6623,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Files on this Mac"
+          }
+        }
+      }
+    },
+    "이 두 서버 사이에는 쓸 수 없음: 원본에서 명령을 실행할 수 없거나, 대상 로그인이 비밀번호이거나, 원본에서 대상에 닿지 않음": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not available between these two: the source can’t run commands, the destination logs in with a password, or the source can’t reach it"
           }
         }
       }
@@ -7413,6 +7543,16 @@
         }
       }
     },
+    "전송 센터 아래의 ‘서버 간 직접 전송’을 켜면 새 전송부터 사용": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on ‘Server-to-server transfers’ at the bottom of the Transfer Center to use it for new transfers"
+          }
+        }
+      }
+    },
     "전송 센터 열기": {
       "localizations": {
         "en": {
@@ -7549,6 +7689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit"
+          }
+        }
+      }
+    },
+    "종료 코드 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "exit code %@"
           }
         }
       }
@@ -8369,6 +8519,16 @@
         }
       }
     },
+    "터널 %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tunnels %lld"
+          }
+        }
+      }
+    },
     "터널 (SSH VPN)": {
       "localizations": {
         "en": {
@@ -8415,6 +8575,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tunnel scope"
+          }
+        }
+      }
+    },
+    "터널 선택": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a Tunnel"
           }
         }
       }

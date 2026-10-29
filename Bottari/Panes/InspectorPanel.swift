@@ -240,9 +240,12 @@ struct InspectorPanel: View {
     /// between two servers, or without leaving the server.
     private var routeNote: String? {
         switch TransferQueue.route(.copy, from: pane.provider, to: other.provider) {
-        case .viaMac: "\(placeName(pane)) → Mac → \(placeName(other))"
+        case .viaMac:
+            AppServices.transfers.directRoute?.canSend(pane.provider, other.provider) == true
+                ? String(localized: "\(placeName(pane)) → \(placeName(other)) (서버 간 직접)")
+                : "\(placeName(pane)) → Mac → \(placeName(other))"
         case .withinLocation: pane.provider.isLocal ? nil : String(localized: "서버 안에서 복사")
-        case .upload, .download, .local: nil
+        case .upload, .download, .local, .direct: nil
         }
     }
 

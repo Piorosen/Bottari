@@ -117,8 +117,36 @@ public enum TransferRoute: Sendable {
     case download
     /// Between two remote locations, streamed through the Mac.
     case viaMac
+    /// From one server straight to another; the bytes never reach the Mac.
+    case direct
     /// Between folders on the Mac, streamed.
     case local
+}
+
+/// How items go from one place straight to another, for the queue to use
+/// when both ends allow it. The app supplies it, knowing the kinds of place.
+public struct DirectRoute: Sendable {
+    public let canSend: @Sendable (_ from: any FileProvider, _ to: any FileProvider) -> Bool
+    /// Copies `item` into `folder`, under its own name. Throws
+    /// `DirectRouteUnavailable` when the two places cannot reach each other.
+    public let send: @Sendable (_ item: FileItem, _ from: any FileProvider, _ to: any FileProvider, _ folder: RemotePath) async throws -> Void
+
+    public init(
+        canSend: @escaping @Sendable (_ from: any FileProvider, _ to: any FileProvider) -> Bool,
+        send: @escaping @Sendable (_ item: FileItem, _ from: any FileProvider, _ to: any FileProvider, _ folder: RemotePath) async throws -> Void
+    ) {
+        self.canSend = canSend
+        self.send = send
+    }
+}
+
+/// The source could not reach the destination; the Mac carries the job instead.
+public struct DirectRouteUnavailable: Error {
+    public let reason: String
+
+    public init(reason: String) {
+        self.reason = reason
+    }
 }
 
 /// A file that already exists where an incoming one is going.
@@ -140,6 +168,8 @@ public struct TransferFailure: Identifiable, Sendable {
 struct WorkItem: Sendable {
     enum Action: Sendable {
         case stream, rename, providerCopy
+        /// Through `TransferQueue.directRoute`, whole.
+        case direct
         /// Plan `source` again, e.g. retrying a folder that could not be listed.
         case scan
     }

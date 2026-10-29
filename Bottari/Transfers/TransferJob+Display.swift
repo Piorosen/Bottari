@@ -18,6 +18,7 @@ extension TransferJob {
         case .upload: String(localized: "업로드 · \(verb)")
         case .download: String(localized: "다운로드 · \(verb)")
         case .viaMac: String(localized: "Mac 경유 · \(verb)")
+        case .direct: String(localized: "서버 간 직접 · \(verb)")
         case .local: String(localized: "Mac 안에서 \(verb)")
         }
     }
@@ -27,7 +28,7 @@ extension TransferJob {
         switch route {
         case .withinLocation, .local:
             [RouteStop(name: source.name)]
-        case .upload, .download:
+        case .upload, .download, .direct:
             [RouteStop(name: source.name), RouteStop(name: destination.name)]
         case .viaMac:
             [RouteStop(name: source.name), RouteStop(name: "Mac", passingThrough: true), RouteStop(name: destination.name)]

@@ -13,6 +13,7 @@ struct TransferCenter: View {
     @AppStorage(TransferSettings.maxConcurrentKey) private var maxConcurrent = 3
     @AppStorage(TransferSettings.conflictPolicyKey) private var policy: ConflictPolicy = .ask
     @AppStorage(TransferSettings.verifiesChecksumsKey) private var verifiesChecksums = false
+    @AppStorage(TransferSettings.directBetweenServersKey) private var directBetweenServers = false
 
     private var queue: TransferQueue { AppServices.transfers }
     private var records: TransferRecords { AppServices.transferRecords }
@@ -106,6 +107,7 @@ struct TransferCenter: View {
         .themed()
         .onChange(of: maxConcurrent) { queue.maxConcurrentTransfers = maxConcurrent }
         .onChange(of: verifiesChecksums) { queue.verifiesChecksums = verifiesChecksums }
+        .onChange(of: directBetweenServers) { queue.directRoute = directBetweenServers ? TransferSettings.directRoute : nil }
     }
 
     private func speed(_ label: String, _ bytesPerSecond: Double) -> some View {
@@ -182,6 +184,14 @@ struct TransferCenter: View {
                     .controlSize(.small)
                     .font(.ui(.callout))
                     .help("양쪽의 SHA-256 비교 (명령을 실행할 수 있는 서버만)")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                SectionLabel(String(localized: "서버 사이"))
+                Toggle("서버 간 직접 전송", isOn: $directBetweenServers)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.ui(.callout))
+                    .help(String(localized: "원본 서버가 대상 서버로 바로 보냅니다. 그동안 대상 서버 로그인(에이전트나 키)을 원본 서버가 빌려 쓰므로, 믿을 수 있는 서버끼리만 켜십시오. 새 전송부터 적용"))
             }
             Spacer()
         }
@@ -356,6 +366,7 @@ struct TransferRow: View {
 private struct TransferDetail: View {
     let job: TransferJob
     private var queue: TransferQueue { AppServices.transfers }
+    @AppStorage(TransferSettings.directBetweenServersKey) private var directBetweenServers = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -384,8 +395,23 @@ private struct TransferDetail: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(String(localized: "경로"))
-                routeCard(title: String(localized: "서버 간 직접"), detail: String(localized: "서버 간 SSH 에이전트 포워딩이 필요해 아직 지원하지 않음"), chosen: false, available: false)
-                routeCard(title: job.route == .viaMac ? String(localized: "Mac 경유") : job.routeTitle, detail: job.routeExplanation, chosen: true, available: true)
+                if job.route == .direct || job.route == .viaMac {
+                    routeCard(
+                        title: String(localized: "서버 간 직접"),
+                        detail: job.route == .direct
+                            ? String(localized: "원본 서버가 SSH로 대상 서버에 바로 보냄. 대상 로그인은 에이전트 포워딩으로 빌려 줌")
+                            : directBetweenServers
+                                ? String(localized: "이 두 서버 사이에는 쓸 수 없음: 원본에서 명령을 실행할 수 없거나, 대상 로그인이 비밀번호이거나, 원본에서 대상에 닿지 않음")
+                                : String(localized: "전송 센터 아래의 ‘서버 간 직접 전송’을 켜면 새 전송부터 사용"),
+                        chosen: job.route == .direct,
+                        available: job.route == .direct
+                    )
+                    if job.route == .viaMac {
+                        routeCard(title: String(localized: "Mac 경유"), detail: job.routeExplanation, chosen: true, available: true)
+                    }
+                } else {
+                    routeCard(title: job.routeTitle, detail: job.routeExplanation, chosen: true, available: true)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -484,6 +510,8 @@ private struct TransferDetail: View {
             return job.kind == .move ? "rename \(from)\n  → \(to)" : String(localized: "cp -a \(from)\n  → \(to)\n다운로드 없이 서버에서 복사")
         case .local:
             return "read  \(from)\n  ↳ write \(to)"
+        case .direct:
+            return String(localized: "\(job.source.name)$ tar -cf - … | ssh \(job.destination.name) tar -xpf -\n  \(from)\n  → \(to)\nMac을 거치지 않음, 대상 로그인은 에이전트 포워딩")
         default:
             let reader = job.source.provider.isLocal ? "read " : "\(job.source.provider.kindLabel) read "
             let writer = job.destination.provider.isLocal ? "write" : "\(job.destination.provider.kindLabel) write"
@@ -543,6 +571,7 @@ extension TransferJob {
         case .upload: String(localized: "업로드 · \(names)")
         case .download: String(localized: "다운로드 · \(names)")
         case .viaMac: String(localized: "Mac 경유 · \(names)")
+        case .direct: String(localized: "서버 간 직접 · \(names)")
         case .local: String(localized: "Mac 안에서 · \(names)")
         }
     }
@@ -553,6 +582,7 @@ extension TransferJob {
         case .upload: String(localized: "업로드")
         case .download: String(localized: "다운로드")
         case .viaMac: String(localized: "Mac 경유")
+        case .direct: String(localized: "서버 간 직접")
         case .local: String(localized: "Mac 안에서")
         }
     }
@@ -560,6 +590,7 @@ extension TransferJob {
     var routeExplanation: String {
         switch route {
         case .viaMac: String(localized: "Mac이 중계하며 Mac의 대역폭 사용")
+        case .direct: String(localized: "원본 서버가 대상 서버에 바로 보냄")
         case .withinLocation: String(localized: "다운로드 없이 서버에서 직접 처리")
         case .upload: String(localized: "Mac에서 읽어 바로 업로드")
         case .download: String(localized: "서버에서 받아 Mac에 저장")
