@@ -22,6 +22,13 @@ public enum HostKeyTrust: Sendable {
         }
     }
 
+    /// The key this trust expects from `endpoint` as a known_hosts line, or nil
+    /// when it accepts anything or has not seen the server.
+    func knownHostsLine(for endpoint: SFTPEndpoint) -> String? {
+        guard case .knownHosts(let store) = self, let key = store.trustedKey(for: endpoint) else { return nil }
+        return "\(endpoint.hostKeyID) \(key)"
+    }
+
     /// The host key mismatch recorded during the last connection attempt, if any.
     /// NIO wraps validator failures, so the connection error alone does not say why.
     func rejection(for endpoint: SFTPEndpoint) -> SFTPConnectError? {

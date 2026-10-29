@@ -15,6 +15,8 @@ public struct SFTPFileProvider: FileProvider {
     /// (chroot jails, many NAS boxes) may not.
     public let canRunCommands: Bool
     let link: SFTPLink
+    /// How another server can send files straight here, if it can.
+    let directReach: DirectReach?
 
     /// Bytes asked for per read request. Servers may answer with less.
     static let chunkSize: UInt32 = 128 * 1024
@@ -61,7 +63,8 @@ public struct SFTPFileProvider: FileProvider {
                 endpoint: endpoint,
                 jumps: hops.map(\.endpoint),
                 canRunCommands: await probeCommands(on: connection),
-                link: SFTPLink(connection, reopen: reopen)
+                link: SFTPLink(connection, reopen: reopen),
+                directReach: proxyCommand == nil ? DirectReach(endpoint: endpoint, credential: credential, hops: hops, hostKeys: hostKeys) : nil
             )
         } catch {
             await connection.close()

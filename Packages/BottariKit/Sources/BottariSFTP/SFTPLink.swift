@@ -54,6 +54,12 @@ final class SFTPLink: Sendable {
         }
     }
 
+    /// A connection of its own to the same server, e.g. to forward an agent
+    /// without other work seeing it. The caller closes it.
+    func openAnother() async throws -> SFTPConnection {
+        try await reopen()
+    }
+
     /// Runs `action` whenever the connection drops or is closed.
     func whenDisconnected(_ action: @escaping @Sendable () -> Void) {
         state.withLock { $0.listeners.append(action) }

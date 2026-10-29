@@ -134,8 +134,106 @@ struct OpenSSHTests {
         }
     }
 
-    private func withServer(authorizing keys: [String], _ body: (OpenSSHServer) async throws -> Void) async throws {
-        let server = try await OpenSSHServer.start(authorizing: keys)
+    // MARK: Agent forwarding
+
+    @Test func aCommandCanUseTheForwardedAgent() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let login = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let forwardedFile = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 256)
+        let forwardedRSA = try OpenSSH.makeKey(in: folder, type: "rsa", bits: 2048)
+        let agent = try OpenSSHAgent(adding: [forwardedRSA.path])
+        defer { agent.stop() }
+        try await withServer(authorizing: [login.publicKey], extraConfig: ["AllowAgentForwarding yes"]) { server in
+            let connection = try await SFTPConnection.open(to: server.endpoint, credential: .privateKey(login.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await connection.close() } }
+
+            // Keys Bottari read from a file, signed for by Bottari itself.
+            let listed = try await connection.run("ssh-add -L", forwarding: .keys([try PrivateKeyFile(forwardedFile.privateKey, passphrase: nil)]))
+            #expect(listed.exitStatus == 0, "\(listed.errors)")
+            #expect(listed.output.contains(forwardedFile.publicKey.split(separator: " ")[1]))
+
+            // The Mac's agent, relayed.
+            let relayed = try await connection.run("ssh-add -L", forwarding: .socket(agent.socket))
+            #expect(relayed.exitStatus == 0, "\(relayed.errors)")
+            #expect(relayed.output.contains(forwardedRSA.publicKey.split(separator: " ")[1]))
+
+            // Without forwarding the session sees no agent.
+            let none = try await connection.run("ssh-add -L; echo \"status $?\"", forwarding: .keys([]))
+            #expect(none.output.contains("The agent has no identities") || none.output.contains("status 1"))
+        }
+    }
+
+    // MARK: Server to server
+
+    @Test(arguments: [false, true])
+    func oneServerSendsStraightToAnother(throughTheMacsAgent: Bool) async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sourceLogin = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let destinationLogin = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 256)
+        let agent = try OpenSSHAgent(adding: [destinationLogin.path])
+        defer { agent.stop() }
+        let tree = RemotePath(folder.path)
+        try FileManager.default.createDirectory(atPath: tree.appending("from/site/img").string, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: tree.appending("to").string, withIntermediateDirectories: true)
+        try "<h1>hi</h1>".write(toFile: tree.appending("from/site/index.html").string, atomically: true, encoding: .utf8)
+        try Data(repeating: 7, count: 300_000).write(to: URL(fileURLWithPath: tree.appending("from/site/img/big.bin").string))
+        try "notes".write(toFile: tree.appending("from/notes 1.txt").string, atomically: true, encoding: .utf8)
+
+        let source = try await OpenSSHServer.start(authorizing: [sourceLogin.publicKey])
+        defer { source.stop() }
+        let destination = try await OpenSSHServer.start(authorizing: [destinationLogin.publicKey])
+        defer { destination.stop() }
+        let knownHosts = KnownHosts(fileURL: nil)
+        let from = try await SFTPFileProvider.connect(to: source.endpoint, credential: .privateKey(sourceLogin.privateKey), hostKeys: .knownHosts(knownHosts))
+        let to = try await SFTPFileProvider.connect(
+            to: destination.endpoint,
+            credential: throughTheMacsAgent ? .agent(socket: agent.socket) : .privateKey(destinationLogin.privateKey),
+            hostKeys: .knownHosts(knownHosts)
+        )
+        #expect(from.canSend(directlyTo: to))
+
+        let items = try await from.list(tree.appending("from"))
+        try await from.send(items, directlyTo: to, into: tree.appending("to"))
+
+        #expect(try String(contentsOfFile: tree.appending("to/site/index.html").string, encoding: .utf8) == "<h1>hi</h1>")
+        #expect(try Data(contentsOf: URL(fileURLWithPath: tree.appending("to/site/img/big.bin").string)) == Data(repeating: 7, count: 300_000))
+        #expect(try String(contentsOfFile: tree.appending("to/notes 1.txt").string, encoding: .utf8) == "notes")
+
+        // With the destination gone, the source says it cannot get there.
+        destination.stop()
+        await #expect {
+            try await from.send(items, directlyTo: to, into: tree.appending("to"))
+        } throws: { error in
+            if case DirectCopyError.unreachable = error { return true }
+            return false
+        }
+        await from.disconnect()
+        await to.disconnect()
+    }
+
+    @Test func passwordLoginsCannotBeLentToAnotherServer() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let login = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        try await withServer(authorizing: [login.publicKey]) { server in
+            let keyed = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(login.privateKey), hostKeys: .acceptAnything)
+            let withPassword = try await SFTPFileProvider.connect(
+                to: server.endpoint,
+                credential: .fallback(.privateKey(login.privateKey), then: .password("unused")),
+                hostKeys: .acceptAnything
+            )
+            #expect(DirectReach(endpoint: server.endpoint, credential: .password("pw"), hops: [], hostKeys: .acceptAnything) == nil)
+            // The same server is never a destination for itself.
+            #expect(!keyed.canSend(directlyTo: withPassword))
+            await keyed.disconnect()
+            await withPassword.disconnect()
+        }
+    }
+
+    private func withServer(authorizing keys: [String], extraConfig: [String] = [], _ body: (OpenSSHServer) async throws -> Void) async throws {
+        let server = try await OpenSSHServer.start(authorizing: keys, extraConfig: extraConfig)
         defer { server.stop() }
         do {
             try await body(server)
