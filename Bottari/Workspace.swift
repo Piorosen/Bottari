@@ -52,6 +52,8 @@ final class Workspace {
     var focusRequest: PaneSide?
     /// The pane that should open its search field (⌘F).
     var searchRequest: PaneSide?
+    /// The pane whose server is having its remote screen turned on.
+    var screenSetup: PaneSide?
     /// Opens viewer windows; the main window sets it, since only views can open windows.
     @ObservationIgnored var viewerOpener: ViewerOpener?
     /// The main window used last, for requests from elsewhere (Settings) to land in.
@@ -284,10 +286,15 @@ final class Workspace {
         openViewer("terminal", for: FileItem(path: pane.path, kind: .directory), in: pane)
     }
 
-    /// The site's VNC or Screen Sharing session.
+    /// The site's VNC or Screen Sharing session, or, for a site that has none
+    /// yet, the pane's offer to turn one on.
     func openScreen(in side: PaneSide) {
         let pane = pane(side)
-        guard pane.provider is SFTPFileProvider, pane.site?.remoteScreen != nil else { return }
+        guard pane.provider is SFTPFileProvider, let site = pane.site else { return }
+        guard site.remoteScreen != nil else {
+            screenSetup = side
+            return
+        }
         openViewer("screen", for: FileItem(path: pane.path, kind: .directory), in: pane)
     }
 

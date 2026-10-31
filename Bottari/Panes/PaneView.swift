@@ -266,14 +266,35 @@ struct PaneView: View {
         .disabled(model.connectingSite != nil)
     }
 
+    private var settingUpScreen: Binding<Bool> {
+        Binding {
+            workspace.screenSetup == side
+        } set: { shown in
+            if !shown, workspace.screenSetup == side { workspace.screenSetup = nil }
+        }
+    }
+
+    @ViewBuilder private var screenSetup: some View {
+        if let provider = model.provider as? SFTPFileProvider, let site = model.site {
+            ScreenSetupView(provider: provider, site: site) { screen in
+                workspace.screenSetup = nil
+                guard let screen, var site = model.site else { return }
+                site.remoteScreen = screen
+                model.library.update(site)
+                workspace.openScreen(in: side)
+            }
+        }
+    }
+
     private var tools: some View {
         HStack(spacing: 6) {
             if model.provider is SFTPFileProvider {
                 Button { workspace.openTerminal(in: side) } label: { Glyph("bt.terminal", size: 15) }
                     .iconHelp(String(localized: "SSH 터미널 (⌃`)"))
-                if model.site?.remoteScreen != nil {
+                if model.site != nil {
                     Button { workspace.openScreen(in: side) } label: { Glyph("bt.screen", size: 15) }
-                        .iconHelp(String(localized: "원격 화면"))
+                        .iconHelp(model.site?.remoteScreen == nil ? String(localized: "원격 화면 켜기 (VNC, 화면 공유)") : String(localized: "원격 화면"))
+                        .popover(isPresented: settingUpScreen, arrowEdge: .bottom) { screenSetup }
                 }
             }
             Button { model.searchQuery == nil ? model.beginSearch() : model.endSearch() } label: {
@@ -472,8 +493,10 @@ struct PaneView: View {
             if model.provider is SFTPFileProvider {
                 Divider()
                 Button("여기서 터미널 열기") { workspace.openTerminal(in: side) }
-                if model.site?.remoteScreen != nil {
-                    Button("원격 화면 열기") { workspace.openScreen(in: side) }
+                if model.site != nil {
+                    Button(model.site?.remoteScreen == nil ? String(localized: "원격 화면 켜기…") : String(localized: "원격 화면 열기")) {
+                        workspace.openScreen(in: side)
+                    }
                 }
             }
             Divider()

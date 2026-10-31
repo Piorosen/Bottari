@@ -228,8 +228,8 @@ struct CommandPalette: View {
             list.append(PaletteCommand(id: "terminal", title: String(localized: "SSH 터미널 열기"), subtitle: "⌃`", symbol: "bt.terminal", keywords: String(localized: "ssh terminal shell 터미널")) {
                 workspace.openTerminal(in: side)
             })
-            if pane.site?.remoteScreen != nil {
-                list.append(PaletteCommand(id: "screen", title: String(localized: "원격 화면 열기"), symbol: "bt.screen", keywords: String(localized: "vnc screen remote 원격")) {
+            if let site = pane.site {
+                list.append(PaletteCommand(id: "screen", title: site.remoteScreen == nil ? String(localized: "원격 화면 켜기…") : String(localized: "원격 화면 열기"), symbol: "bt.screen", keywords: String(localized: "vnc screen remote 원격")) {
                     workspace.openScreen(in: side)
                 })
             }

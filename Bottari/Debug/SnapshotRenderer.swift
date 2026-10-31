@@ -120,6 +120,7 @@ enum SnapshotRenderer {
         await renderEditor(into: directory)
         await renderPlayer(into: directory)
         await checkScreen(into: directory)
+        await renderScreenSetup(into: directory)
         await renderTunnels(into: directory, library: library)
         await renderSidebar(into: directory, folder: folder)
         await renderMain(into: directory, library: library)
@@ -335,6 +336,18 @@ enum SnapshotRenderer {
         await render(ScreenView(model: model).themed(), size: CGSize(width: 1400, height: 820), appearance: .aqua,
                      to: directory.appending(path: "screen-light.png"))
         model.disconnect()
+    }
+
+    /// Turning a remote screen on, once with nothing answering on a Linux
+    /// server and once with a Mac whose Screen Sharing is on.
+    private static func renderScreenSetup(into directory: URL) async {
+        let site = SavedSite(name: "gpu-box", endpoint: SFTPEndpoint(host: "10.0.4.20", username: "me"), authentication: .agent(socket: nil))
+        await render(ScreenSetupView(site: site, isMac: { false }, check: { _ in .silent }) { _ in }.themed(),
+                     size: CGSize(width: 400, height: 330), appearance: .aqua,
+                     to: directory.appending(path: "screen-setup-light.png"))
+        await render(ScreenSetupView(site: site, isMac: { true }, check: { _ in .answering }) { _ in }.themed(),
+                     size: CGSize(width: 400, height: 330), appearance: .darkAqua,
+                     to: directory.appending(path: "screen-setup-dark.png"))
     }
 
     /// The tunnel window with three sample tunnels.

@@ -53,7 +53,7 @@
 ### 원격
 
 - SSH 터미널(SwiftTerm). 스니펫, 여러 서버에 동시 입력
-- VNC와 macOS 화면 공유(RoyalVNCKit). SSH 터널을 거쳐 연결
+- VNC와 macOS 화면 공유(RoyalVNCKit). SSH 터널을 거쳐 연결. 서버 패인의 화면 버튼으로 그 자리에서 켜며, 켜기 전에 서버의 화면 포트가 응답하는지와 SSH 포워딩이 막혀 있지 않은지 확인한다
 - SSH를 거치는 SOCKS/HTTP 프록시 터널
 
 ### 설정 (⌘,)

@@ -1681,6 +1681,16 @@
         }
       }
     },
+    "SSH 연결을 거쳐 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open through the SSH connection"
+          }
+        }
+      }
+    },
     "SSH 터널": {
       "localizations": {
         "en": {
@@ -2443,6 +2453,16 @@
         }
       }
     },
+    "‘%@’의 화면을 Bottari 창에서 보고 조작합니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See and control the screen of “%@” in a Bottari window."
+          }
+        }
+      }
+    },
     "“%@” 터널 · %@ 경유": {
       "localizations": {
         "en": {
@@ -2909,6 +2929,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change Permissions…"
+          }
+        }
+      }
+    },
+    "그 Mac의 시스템 설정 › 일반 › 공유에서 화면 공유를 켜야 합니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Screen Sharing in that Mac’s System Settings › General › Sharing."
           }
         }
       }
@@ -5229,6 +5259,16 @@
         }
       }
     },
+    "서버에서 VNC 서버를 먼저 켜야 합니다. 예: x11vnc -localhost -display :0 -forever, 또는 TigerVNC의 vncserver -localhost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a VNC server on the server first, e.g. x11vnc -localhost -display :0 -forever, or TigerVNC’s vncserver -localhost"
+          }
+        }
+      }
+    },
     "서버에서 받아 Mac에 저장": {
       "localizations": {
         "en": {
@@ -5279,12 +5319,32 @@
         }
       }
     },
+    "서버에서 확인하는 중": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking on the server"
+          }
+        }
+      }
+    },
     "서버와의 연결이 끊어졌습니다": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The connection to the server was lost"
+          }
+        }
+      }
+    },
+    "서버의 방화벽을 열지 않아도 되고, 화면 내용이 암호화된 SSH 안으로만 오갑니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No firewall ports to open, and the screen only travels inside encrypted SSH."
           }
         }
       }
@@ -6787,6 +6847,36 @@
         }
       }
     },
+    "원격 화면 켜기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On Remote Screen"
+          }
+        }
+      }
+    },
+    "원격 화면 켜기 (VNC, 화면 공유)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on remote screen (VNC, Screen Sharing)"
+          }
+        }
+      }
+    },
+    "원격 화면 켜기…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On Remote Screen…"
+          }
+        }
+      }
+    },
     "원격 화면을 열 수 없습니다": {
       "localizations": {
         "en": {
@@ -7047,6 +7137,16 @@
         }
       }
     },
+    "이 서버는 SSH를 거친 포트 연결을 막아 두었습니다(sshd_config의 AllowTcpForwarding). 서버 설정을 바꾸거나, 아래 ‘SSH 연결을 거쳐 열기’를 끄고 화면 포트에 직접 연결하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This server doesn’t allow connections to its ports through SSH (AllowTcpForwarding in sshd_config). Change that setting, or turn off “Open through the SSH connection” below to connect to the screen port directly."
+          }
+        }
+      }
+    },
     "이 연결로 터미널과 원격 화면도 열 수 있음": {
       "localizations": {
         "en": {
@@ -7073,6 +7173,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close This Window"
+          }
+        }
+      }
+    },
+    "이 포트에서 응답이 없습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing answers on this port"
           }
         }
       }
@@ -8717,6 +8827,16 @@
         }
       }
     },
+    "켜고 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn On and Open"
+          }
+        }
+      }
+    },
     "켜기": {
       "localizations": {
         "en": {
@@ -9887,6 +10007,16 @@
         }
       }
     },
+    "화면 서버가 응답합니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A screen server answers"
+          }
+        }
+      }
+    },
     "화면 포트": {
       "localizations": {
         "en": {
@@ -9933,6 +10063,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Needs an answer"
+          }
+        }
+      }
+    },
+    "확인할 수 없습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t check"
           }
         }
       }

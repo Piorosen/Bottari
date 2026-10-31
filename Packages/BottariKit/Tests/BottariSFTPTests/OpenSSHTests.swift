@@ -1,5 +1,7 @@
 import BottariCore
 import Foundation
+import NIOCore
+import NIOPosix
 import Testing
 @testable import BottariSFTP
 
@@ -228,6 +230,32 @@ struct OpenSSHTests {
             // Without forwarding the session sees no agent.
             let none = try await connection.run("ssh-add -L; echo \"status $?\"", forwarding: .keys([]))
             #expect(none.output.contains("The agent has no identities") || none.output.contains("status 1"))
+        }
+    }
+
+    // MARK: Checking a port before a remote screen
+
+    @Test func tellsAnsweringFromSilentFromForwardingTurnedOff() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let login = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let listening = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton).bind(host: "127.0.0.1", port: 0).get()
+        defer { listening.close(promise: nil) }
+        let closed = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton).bind(host: "127.0.0.1", port: 0).get()
+        let closedPort = closed.localAddress!.port!
+        try await closed.close()
+
+        try await withServer(authorizing: [login.publicKey], extraConfig: ["AllowTcpForwarding yes"]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(login.privateKey), hostKeys: .acceptAnything)
+            #expect(await provider.checkPort(host: "127.0.0.1", port: listening.localAddress!.port!) == .answering)
+            #expect(await provider.checkPort(host: "127.0.0.1", port: closedPort) == .silent)
+            #expect(await provider.checkPort(host: "127.0.0.1", port: 0) == .silent)
+            await provider.disconnect()
+        }
+        try await withServer(authorizing: [login.publicKey], extraConfig: ["AllowTcpForwarding no"]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(login.privateKey), hostKeys: .acceptAnything)
+            #expect(await provider.checkPort(host: "127.0.0.1", port: listening.localAddress!.port!) == .forwardingDisabled)
+            await provider.disconnect()
         }
     }
 

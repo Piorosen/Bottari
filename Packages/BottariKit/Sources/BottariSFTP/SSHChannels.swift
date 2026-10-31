@@ -156,6 +156,48 @@ extension SFTPFileProvider {
         return "for d in \(candidates); do if [ -d \"$d\" ]; then printf '%s\\n' \"$d\"; exit 0; fi; done; exit 0"
     }
 
+    /// What the server says when asked to connect to `host:port` as it sees
+    /// it, e.g. its own VNC port at localhost.
+    public enum PortCheck: Sendable, Equatable {
+        case answering
+        /// Nothing listens there, or no answer came within five seconds.
+        case silent
+        /// The server does not forward connections at all (AllowTcpForwarding no).
+        case forwardingDisabled
+    }
+
+    public func checkPort(host: String, port: Int) async -> PortCheck {
+        guard (1...65535).contains(port), let client = try? await link.live().client else { return .silent }
+        let box = UncheckedSendable(client)
+        return await withTaskGroup(of: PortCheck.self) { group in
+            group.addTask {
+                do {
+                    let channel = try await box.value.createDirectTCPIPChannel(
+                        using: .init(targetHost: host, targetPort: port, originatorAddress: try SocketAddress(ipAddress: "127.0.0.1", port: 0))
+                    ) { $0.eventLoop.makeSucceededVoidFuture() }
+                    try? await channel.close()
+                    return .answering
+                } catch {
+                    return Self.isForwardingDisabled(error) ? .forwardingDisabled : .silent
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(5))
+                return .silent
+            }
+            let answer = await group.next() ?? .silent
+            group.cancelAll()
+            return answer
+        }
+    }
+
+    /// A refused channel carries the server's reason; 1 is "administratively
+    /// prohibited", where 2 would be a failed connect.
+    static func isForwardingDisabled(_ error: any Error) -> Bool {
+        guard let error = error as? NIOSSHError, error.type == .channelSetupRejected else { return false }
+        return String(describing: error).contains("Reason: 1 ")
+    }
+
     /// Listens on a free port of 127.0.0.1 and carries each connection through
     /// SSH to `host:port` as the server sees it, like `ssh -L`.
     public func forward(toHost host: String, port: Int) async throws -> PortForward {
