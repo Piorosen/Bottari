@@ -901,6 +901,16 @@
         }
       }
     },
+    "Bottari: %@ 폴더를 셸에서 찾지 못해 홈 폴더에서 시작합니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari: %@ wasn’t found from the shell, so the terminal starts in your home folder."
+          }
+        }
+      }
+    },
     "Bottari만": {
       "localizations": {
         "en": {

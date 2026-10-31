@@ -76,6 +76,26 @@ final class TerminalModel {
         type(Data((command + "\n").utf8))
     }
 
+    /// `cd` to a folder picked from the SFTP listing, by its path for the
+    /// shell (which differs on a NAS; see `SFTPFileProvider.shellPath`).
+    func changeDirectory(to folder: RemotePath) {
+        Task {
+            let target = await provider.shellPath(for: folder) ?? folder.string
+            run("cd -- \(SFTPFileProvider.quote(target))")
+        }
+    }
+
+    /// Types the path of a file picked from the SFTP listing, as the shell knows it.
+    func typePath(of item: FileItem) {
+        Task {
+            var path = item.path.string
+            if let parent = item.path.parent, let folder = await provider.shellPath(for: parent) {
+                path = (folder.hasSuffix("/") ? folder : folder + "/") + item.name
+            }
+            type(Data((SFTPFileProvider.quote(path) + " ").utf8))
+        }
+    }
+
     /// The terminal view reports a size as it lays out, including the
     /// nonsense of a view not sized yet (zero or less); only real ones count.
     func resize(columns: Int, rows: Int) {
@@ -373,7 +393,7 @@ private struct FolderCard: View {
                             if item.isDirectory {
                                 go(item.path)
                             } else {
-                                model.type(Data((SFTPFileProvider.quote(item.path.string) + " ").utf8))
+                                model.typePath(of: item)
                             }
                         }
                     }
@@ -397,7 +417,7 @@ private struct FolderCard: View {
 
     private func go(_ folder: RemotePath) {
         path = folder
-        if follows { model.run("cd -- \(SFTPFileProvider.quote(folder.string))") }
+        if follows { model.changeDirectory(to: folder) }
     }
 
     private func row(symbol: String, name: String, size: String?, folder: Bool = false, action: @escaping () -> Void) -> some View {

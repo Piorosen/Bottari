@@ -164,6 +164,28 @@ struct OpenSSHTests {
         }
     }
 
+    @Test func aFolderAsSFTPShowsItIsFoundForTheShell() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        // A NAS: SFTP shows "/my share/it's", the shell finds it under a volume.
+        let volume = folder.appending(path: "vol1")
+        try FileManager.default.createDirectory(at: volume.appending(path: "my share/it's"), withIntermediateDirectories: true)
+        let bases = [folder.path + "/vol[0-9]*"]
+        try await withServer(authorizing: [key.publicKey]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+            let onVolume = try await provider.run(SFTPFileProvider.shellPathScript(for: "/my share/it's", bases: bases))
+            #expect(onVolume == volume.path + "/my share/it's\n")
+            // A path the shell sees as it is stays as it is.
+            let direct = try await provider.run(SFTPFileProvider.shellPathScript(for: RemotePath(volume.path), bases: bases))
+            #expect(direct == volume.path + "\n")
+            // Nowhere at all: nothing.
+            let missing = try await provider.run(SFTPFileProvider.shellPathScript(for: "/nowhere", bases: bases))
+            #expect(missing.isEmpty)
+        }
+    }
+
     @Test func listingsDoNotLeaveHandlesOpen() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

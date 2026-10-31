@@ -32,7 +32,9 @@ public final class TerminalSession: Sendable {
         min(max(value, 1), 10_000)
     }
 
-    init(link: SFTPLink, columns: Int, rows: Int, folder: RemotePath?) {
+    /// `locate` finds where `folder`, as SFTP shows it, is for the shell;
+    /// nil if it cannot tell (the server runs no commands) or found nothing.
+    init(link: SFTPLink, columns: Int, rows: Int, folder: RemotePath?, canLocate: Bool, locate: @escaping @Sendable (RemotePath) async -> String?) {
         let (events, output) = AsyncStream.makeStream(of: Event.self)
         let (inputs, input) = AsyncStream.makeStream(of: Input.self)
         self.events = events
@@ -48,14 +50,26 @@ public final class TerminalSession: Sendable {
                 terminalModes: SSHTerminalModes([:])
             )
             do {
+                // Where the shell should start: the folder's path for the shell,
+                // which on a NAS is not the one SFTP shows.
+                var start: String?
+                if let folder {
+                    if let found = await locate(folder) {
+                        start = found
+                    } else if canLocate {
+                        output.yield(.output(Data((String(localized: "Bottari: \(folder.string) 폴더를 셸에서 찾지 못해 홈 폴더에서 시작합니다.") + "\r\n").utf8)))
+                    } else {
+                        start = folder.string
+                    }
+                }
                 // Citadel's client and PTY handles are not marked Sendable; they only
                 // send through NIO channels, which are.
                 let client = UncheckedSendable(try await link.live().client)
                 try await client.value.withPTY(request) { inbound, outbound in
                     let inbound = UncheckedSendable(inbound)
                     let outbound = UncheckedSendable(outbound)
-                    if let folder {
-                        try await outbound.value.write(ByteBuffer(string: "cd -- \(SFTPFileProvider.quote(folder.string)) && clear\n"))
+                    if let start {
+                        try await outbound.value.write(ByteBuffer(string: "cd -- \(SFTPFileProvider.quote(start)) && clear\n"))
                     }
                     // Keystrokes and size changes go out one by one, in order.
                     try await withThrowingTaskGroup(of: Void.self) { group in
@@ -115,7 +129,31 @@ public final class TerminalSession: Sendable {
 extension SFTPFileProvider {
     /// A shell on the server, starting in `folder`.
     public func openTerminal(columns: Int, rows: Int, in folder: RemotePath? = nil) -> TerminalSession {
-        TerminalSession(link: link, columns: columns, rows: rows, folder: folder)
+        TerminalSession(link: link, columns: columns, rows: rows, folder: folder, canLocate: canRunCommands) { [self] in
+            await shellPath(for: $0)
+        }
+    }
+
+    /// Where `path`, as SFTP shows it, is for a shell on the server. The two
+    /// differ where SFTP is confined: Synology and QNAP show their shared
+    /// folders at the root over SFTP (`/dcloud`), while the shell sees the
+    /// disk (`/volume1/dcloud`, `/share/dcloud`). Nil when the server runs no
+    /// commands, or no folder of that name turns up.
+    public func shellPath(for path: RemotePath) async -> String? {
+        guard canRunCommands, let output = try? await run(Self.shellPathScript(for: path)) else { return nil }
+        let found = output.trimmingCharacters(in: .newlines)
+        return found.isEmpty ? nil : found
+    }
+
+    /// Where shared folders live on NAS systems whose SFTP shows them at the root.
+    static let shellPathBases = ["/volume[0-9]*", "/volumeUSB[0-9]*/usbshare*", "/share", "/share/CACHEDEV*_DATA", "/share/MD0_DATA"]
+
+    /// Prints the first of `path` and `path` under each base that is a folder.
+    /// The bases are globs left for the shell to expand; the path is quoted.
+    static func shellPathScript(for path: RemotePath, bases: [String] = shellPathBases) -> String {
+        let quoted = quote(path.string)
+        let candidates = ([quoted] + bases.map { $0 + quoted }).joined(separator: " ")
+        return "for d in \(candidates); do if [ -d \"$d\" ]; then printf '%s\\n' \"$d\"; exit 0; fi; done; exit 0"
     }
 
     /// Listens on a free port of 127.0.0.1 and carries each connection through
