@@ -152,14 +152,35 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         } else {
             authentication = .agent(socket: nil)
         }
+        var proxyJump = host.proxyJump
+        var proxyCommand = host.proxyCommand
+        // The App Store edition cannot run commands, but `ssh -W %h:%p jump`
+        // only goes through a jump host, which Bottari can do itself.
+        if FolderAccess.isSandboxed, proxyJump.isEmpty, let command = proxyCommand, let jump = Self.jumpHost(inProxyCommand: command) {
+            proxyJump = [jump]
+            proxyCommand = nil
+        }
         self.init(
             name: host.alias,
             endpoint: SFTPEndpoint(host: host.hostName, port: host.port, username: host.user ?? defaultUser),
             authentication: authentication,
-            proxyJump: host.proxyJump,
-            proxyCommand: host.proxyCommand,
+            proxyJump: proxyJump,
+            proxyCommand: proxyCommand,
             sshConfigAlias: host.alias
         )
+    }
+
+    /// The host of a ProxyCommand that is nothing but `ssh -W %h:%p host`
+    /// (with -q, -T or -x at most), the old way of writing ProxyJump.
+    static func jumpHost(inProxyCommand command: String) -> String? {
+        var words = command.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let program = words.first, program == "ssh" || program.hasSuffix("/ssh") else { return nil }
+        words.removeFirst()
+        guard let relay = words.firstIndex(of: "-W"), words.indices.contains(relay + 1), words[relay + 1] == "%h:%p" else { return nil }
+        words.removeSubrange(relay...relay + 1)
+        words.removeAll { ["-q", "-T", "-x"].contains($0) }
+        guard words.count == 1, let host = words.first, !host.hasPrefix("-"), !host.contains("%") else { return nil }
+        return host
     }
 
     /// Where to open the site: its start folder, with `~` meaning the login folder `home`.
@@ -307,7 +328,7 @@ extension SavedSite {
         case .agent(let socket):
             keys = Self.agentCredential(socket: socket, sshDirectory: sshDirectory, readFile: readFile)
         case .keyFile(let path):
-            guard let text = readFile((path as NSString).expandingTildeInPath) else {
+            guard let text = readFile(UserHome.expand(path)) else {
                 throw SiteConnectError.keyFileUnreadable(path: path)
             }
             // An unreadable passphrase is asked for again, like a missing one.

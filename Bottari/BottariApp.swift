@@ -1,4 +1,5 @@
 import AppKit
+import BottariCore
 import SwiftUI
 
 @main
@@ -6,6 +7,8 @@ struct BottariApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
     init() {
+        // Folders allowed in an earlier run (App Store edition), before any pane lists one.
+        FolderAccess.shared.restore()
         BundledFonts.register()
         TableRowLook.hideSeparators()
     }

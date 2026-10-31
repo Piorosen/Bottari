@@ -50,7 +50,7 @@ public final class KnownHosts: @unchecked Sendable {
 
     /// `ssh`'s own lists: the user's and the system-wide one.
     public static let openSSHDefaultFiles = [
-        URL(fileURLWithPath: NSHomeDirectory()).appending(path: ".ssh/known_hosts"),
+        URL(fileURLWithPath: UserHome.path).appending(path: ".ssh/known_hosts"),
         URL(fileURLWithPath: "/etc/ssh/ssh_known_hosts"),
     ]
 

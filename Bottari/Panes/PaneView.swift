@@ -49,6 +49,19 @@ struct PaneView: View {
                     if model.shownItems.isEmpty && !model.isSearching {
                         ContentUnavailableView("찾은 항목 없음", systemImage: "magnifyingglass")
                     }
+                } else if let folder = model.lockedFolder {
+                    FolderAccessPrompt(folder: folder) { allowed in
+                        Task {
+                            if FolderAccess.shared.covers(folder) {
+                                await model.reload()
+                            } else {
+                                await model.open(RemotePath(allowed.path))
+                            }
+                        }
+                    } openDownloads: {
+                        Task { await model.open(RemotePath(UserHome.path).appending("Downloads")) }
+                    }
+                    .transition(.opacity)
                 } else if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
                     ContentUnavailableView("빈 폴더", systemImage: "folder", description: Text("다른 패인이나 Finder에서 파일을 끌어다 놓으면 여기로 복사됩니다."))
                         .transition(.opacity)

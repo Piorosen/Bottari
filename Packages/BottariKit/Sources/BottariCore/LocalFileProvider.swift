@@ -12,7 +12,7 @@ public struct LocalFileProvider: FileProvider {
 
     public var locationID: String { Self.locationID }
 
-    public init(displayName: String = String(localized: "이 Mac"), home: RemotePath = RemotePath(NSHomeDirectory()), privacy: PrivacyGuard = PrivacyGuard()) {
+    public init(displayName: String = String(localized: "이 Mac"), home: RemotePath = RemotePath(UserHome.path), privacy: PrivacyGuard = PrivacyGuard()) {
         self.displayName = displayName
         self.home = home
         self.privacy = privacy
@@ -264,8 +264,13 @@ public struct LocalFileProvider: FileProvider {
     }
 
     public static var iCloudDrive: RemotePath? {
-        let path = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
-        return FileManager.default.fileExists(atPath: path) ? RemotePath(path) : nil
+        let path = RemotePath(UserHome.path).appending("Library/Mobile Documents/com~apple~CloudDocs")
+        // In the sandbox the folder cannot be looked at until the user allows
+        // it; being signed in to iCloud is the best sign it is there.
+        if !FolderAccess.shared.covers(path) {
+            return FileManager.default.ubiquityIdentityToken != nil ? path : nil
+        }
+        return FileManager.default.fileExists(atPath: path.string) ? path : nil
     }
 
     /// Reading the link itself is fine; only its target is guarded.

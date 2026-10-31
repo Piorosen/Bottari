@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- The Mac App Store edition (target "Bottari App Store"), which runs in the
+     App Sandbox. The edition from GitHub is not sandboxed and has none of these. -->
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Servers, S3, Google Drive. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Local ends of tunnels and port forwards, and Google's sign-in redirect. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<!-- Folders and files the user picks or drops, kept across launches. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+</dict>
+</plist>

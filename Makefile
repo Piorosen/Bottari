@@ -15,7 +15,7 @@ ifneq ($(DEV_TEAM),)
 SIGNING := CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM=$(DEV_TEAM)
 endif
 
-.PHONY: build test run open clean release package snapshots
+.PHONY: build test run open clean release package snapshots appstore appstore-upload
 
 # Build the app (Debug) without opening Xcode.
 build:
@@ -45,6 +45,14 @@ release:
 # The same steps without signing, to try the pipeline.
 package:
 	scripts/release.sh --unsigned
+
+# The Mac App Store edition, signed for the store (see Config/appstore.env.example).
+appstore:
+	scripts/appstore.sh
+
+# The same, uploaded to App Store Connect.
+appstore-upload:
+	scripts/appstore.sh --upload
 
 clean:
 	rm -rf .build Packages/BottariKit/.build "$(DERIVED)"

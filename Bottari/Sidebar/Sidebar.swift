@@ -69,7 +69,7 @@ struct Sidebar: View {
                         }
                     }
                     group(String(localized: "이 Mac")) {
-                        let home = RemotePath(NSHomeDirectory())
+                        let home = RemotePath(UserHome.path)
                         SidebarRow(symbol: "bt.mac", title: Self.computerName, isCurrent: activePane.isLocal && activePane.path == home) {
                             EmptyView()
                         } action: {

@@ -35,7 +35,8 @@ struct DirectReach: Sendable {
                 keys.append(key)
                 return true
             case .agent(let path, let fallbackKeys):
-                if let path = path ?? ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"], FileManager.default.fileExists(atPath: path) {
+                // The App Sandbox never lets the app reach an agent's socket.
+                if !FolderAccess.isSandboxed, let path = path ?? ProcessInfo.processInfo.environment["SSH_AUTH_SOCK"], FileManager.default.fileExists(atPath: path) {
                     guard socket == nil || socket == path else { return false }
                     socket = path
                     return true

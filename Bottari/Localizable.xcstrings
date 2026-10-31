@@ -321,6 +321,16 @@
         }
       }
     },
+    "%@/에 저장됨": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved in %@/"
+          }
+        }
+      }
+    },
     "%@:%lld 연결 실패 · %@": {
       "localizations": {
         "en": {
@@ -821,6 +831,116 @@
         }
       }
     },
+    "App Store 판 Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 한 번 허용하면 다음에도 기억합니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari from the App Store runs in the macOS sandbox, so it can open only the folders you allow. It remembers what you allow."
+          }
+        }
+      }
+    },
+    "App Store 판 Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더와 ~/.ssh의 설정, 키도 함께 쓸 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari from the App Store runs in the macOS sandbox, so it can open only the folders you allow. Allow your home folder and it can use every folder in it, along with the settings and keys in ~/.ssh."
+          }
+        }
+      }
+    },
+    "App Store 판에서는 Mac 전체 터널(sshuttle)을 쓸 수 없습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition can’t run whole-Mac tunnels (sshuttle)."
+          }
+        }
+      }
+    },
+    "App Store 판은 SSH 에이전트에 연결할 수 없어, ~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition can’t reach SSH agents, so it logs in with id_ed25519, id_ecdsa or id_rsa from ~/.ssh (without a passphrase). Allow ~/.ssh in Settings › Folder Access"
+          }
+        }
+      }
+    },
+    "App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition can sync only after you allow the iCloud Drive folder."
+          }
+        }
+      }
+    },
+    "App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다. 위의 ‘iCloud Drive 허용…’을 누르십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition can sync only after you allow the iCloud Drive folder. Click “Allow iCloud Drive…” above."
+          }
+        }
+      }
+    },
+    "App Store 판은 macOS 샌드박스 때문에 명령을 실행할 수 없습니다. 지우고 점프 호스트를 쓰십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition can’t run commands because of the macOS sandbox. Clear this and use a jump host."
+          }
+        }
+      }
+    },
+    "App Store 판은 macOS 샌드박스 안에서 실행되어 ProxyCommand를 쓸 수 없습니다. 연결 관리에서 점프 호스트(ProxyJump)로 바꾸십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition runs in the macOS sandbox and can’t use ProxyCommand. Use a jump host (ProxyJump) in the connection manager instead."
+          }
+        }
+      }
+    },
+    "App Store 판은 macOS 샌드박스 안에서 실행되어 SSH 에이전트(1Password 등)에 연결할 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용해 키 파일을 읽게 하거나, 연결 관리에서 키 파일을 선택하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition runs in the macOS sandbox and can’t reach SSH agents (such as 1Password). Allow your home folder or ~/.ssh in Settings › Folder Access so Bottari can read your key files, or choose a key file in the connection manager."
+          }
+        }
+      }
+    },
+    "App Store 판은 macOS 샌드박스 안에서 실행되어, 여기 있는 폴더와 다운로드 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더를 쓸 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The App Store edition runs in the macOS sandbox and can open only the folders listed here and Downloads. Allow your home folder to use every folder in it."
+          }
+        }
+      }
+    },
+    "App Store에서 업데이트됩니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates come from the App Store."
+          }
+        }
+      }
+    },
     "Apple 서버의 앱 전용 저장소. Apple Developer 계정과 앱 서명이 필요해 아직 지원하지 않음": {
       "localizations": {
         "en": {
@@ -907,6 +1027,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bottari: %@ wasn’t found from the shell, so the terminal starts in your home folder."
+          }
+        }
+      }
+    },
+    "Bottari가 쓸 폴더를 고르십시오. 고른 폴더와 그 안의 모든 것을 열 수 있게 되고, 다음에 실행할 때도 기억합니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a folder for Bottari to use. It will be able to open that folder and everything in it, and will remember it next time."
           }
         }
       }
@@ -1641,6 +1771,16 @@
         }
       }
     },
+    "SSH 설정과 키": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH Settings and Keys"
+          }
+        }
+      }
+    },
     "SSH 에이전트": {
       "localizations": {
         "en": {
@@ -1955,6 +2095,16 @@
         }
       }
     },
+    "iCloud Drive 허용…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow iCloud Drive…"
+          }
+        }
+      }
+    },
     "iCloud Drive가 꺼져 있습니다. 시스템 설정 › Apple 계정 › iCloud에서 iCloud Drive를 켜십시오.": {
       "localizations": {
         "en": {
@@ -2265,6 +2415,26 @@
         }
       }
     },
+    "~/.ssh 기본 키": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default keys in ~/.ssh"
+          }
+        }
+      }
+    },
+    "~/.ssh 허용…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow ~/.ssh…"
+          }
+        }
+      }
+    },
     "~/.ssh/config의 새 호스트 %lld개": {
       "localizations": {
         "en": {
@@ -2303,12 +2473,32 @@
         }
       }
     },
-    "~/Library/Application Support/Bottari/themes/에 저장됨": {
+    "~/.ssh를 아직 읽을 수 없습니다": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saved in ~/Library/Application Support/Bottari/themes/"
+            "value": "Bottari can’t read ~/.ssh yet"
+          }
+        }
+      }
+    },
+    "~/.ssh를 읽을 수 있습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari can read ~/.ssh"
+          }
+        }
+      }
+    },
+    "~/.ssh의 config, known_hosts, 개인 키를 읽으려면 홈 폴더나 ~/.ssh 폴더를 허용하십시오. App Store 판에서는 SSH 에이전트(1Password 등)와 ProxyCommand를 쓸 수 없어, 키 파일로 로그인하고 점프 호스트로 거쳐 갑니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To read config, known_hosts and private keys in ~/.ssh, allow your home folder or ~/.ssh. The App Store edition can’t use SSH agents (such as 1Password) or ProxyCommand, so it logs in with key files and goes through jump hosts."
           }
         }
       }
@@ -2389,6 +2579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The connection behind the favorite “%@” was deleted. Right-click it in the sidebar to remove it."
+          }
+        }
+      }
+    },
+    "‘%@’ 폴더를 열려면 허용이 필요합니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari needs your permission to open “%@”"
           }
         }
       }
@@ -3191,6 +3391,16 @@
         }
       }
     },
+    "다른 폴더 허용…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Another Folder…"
+          }
+        }
+      }
+    },
     "다시 시도": {
       "localizations": {
         "en": {
@@ -3247,6 +3457,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Downloading"
+          }
+        }
+      }
+    },
+    "다운로드 폴더 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Downloads"
           }
         }
       }
@@ -5839,6 +6059,26 @@
         }
       }
     },
+    "쓸 앱마다 프록시를 직접 설정": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the proxy in each app that uses it"
+          }
+        }
+      }
+    },
+    "아직 허용한 폴더가 없습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No folders allowed yet."
+          }
+        }
+      }
+    },
     "알 수 없는 위치입니다: %@": {
       "localizations": {
         "en": {
@@ -7193,6 +7433,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Name to find under this folder (patterns such as *.log work too)"
+          }
+        }
+      }
+    },
+    "이 폴더 허용…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow This Folder…"
           }
         }
       }
@@ -9627,12 +9877,32 @@
         }
       }
     },
+    "폴더 접근": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder Access"
+          }
+        }
+      }
+    },
     "폴더 클릭 시 cd 실행, 셸의 현재 위치 따라가기": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Clicking a folder runs cd; follows the shell’s current folder"
+          }
+        }
+      }
+    },
+    "폴더 허용": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Folder"
           }
         }
       }
@@ -9947,6 +10217,36 @@
         }
       }
     },
+    "허용": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow"
+          }
+        }
+      }
+    },
+    "허용 취소": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke"
+          }
+        }
+      }
+    },
+    "허용한 폴더": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allowed Folders"
+          }
+        }
+      }
+    },
     "현재 폴더": {
       "localizations": {
         "en": {
@@ -9983,6 +10283,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home %@"
+          }
+        }
+      }
+    },
+    "홈 폴더 허용…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Home Folder…"
           }
         }
       }

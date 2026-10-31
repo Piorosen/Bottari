@@ -164,7 +164,7 @@ struct CommandPalette: View {
                 workspace.open(site)
             })
         }
-        let home = RemotePath(NSHomeDirectory())
+        let home = RemotePath(UserHome.path)
         for (name, folder) in [(String(localized: "홈"), ""), (MacFolder.desktop, "Desktop"), (MacFolder.documents, "Documents"), (MacFolder.downloads, "Downloads")] {
             list.append(PaletteCommand(id: "mac-\(name)", title: name, subtitle: String(localized: "이 Mac"), symbol: "folder", keywords: "mac \(folder.lowercased())") {
                 workspace.openOnMac(home.appending(folder))

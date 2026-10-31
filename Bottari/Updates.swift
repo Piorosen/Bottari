@@ -1,10 +1,19 @@
 import Observation
+#if !APP_STORE
 import Sparkle
+#endif
 
 /// Sparkle, for builds that know where updates come from and the key they are
-/// signed with: the releases made by `scripts/release.sh`. Others never check.
+/// signed with: the releases made by `scripts/release.sh`. Others never check,
+/// and the App Store edition has no Sparkle at all: the App Store updates it.
 @Observable
 final class Updates {
+    #if APP_STORE
+    static let shared = Updates()
+    let isAvailable = false
+    var automaticallyChecks = false
+    func checkForUpdates() {}
+    #else
     static let shared = Updates()
 
     @ObservationIgnored private let controller: SPUStandardUpdaterController?
@@ -28,4 +37,5 @@ final class Updates {
     func checkForUpdates() {
         controller?.checkForUpdates(nil)
     }
+    #endif
 }

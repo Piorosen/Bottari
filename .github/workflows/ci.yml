@@ -66,6 +66,12 @@ jobs:
           xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Release \
             -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
             -skipPackagePluginValidation -skipMacroValidation -quiet build
+      # The App Store edition: App Sandbox, no Sparkle.
+      - name: Build App Store edition (Release, ad-hoc signed)
+        run: |
+          xcodebuild -project Bottari.xcodeproj -scheme "Bottari App Store" -configuration Release \
+            -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
+            -skipPackagePluginValidation -skipMacroValidation -quiet build
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -129,7 +129,12 @@ swift scripts/glyphs.swift Bottari/Assets.xcassets/Glyphs
 
 ## 배포
 
-App Store에는 올리지 않는다. 앱 샌드박스 없이 Developer ID로 서명하고 공증한 DMG로 배포하며, 업데이트는 Sparkle로 받는다.
+같은 코드에서 두 가지 판을 만든다.
+
+- **GitHub 판** (타깃 `Bottari`): 앱 샌드박스 없이 Developer ID로 서명하고 공증한 DMG. 업데이트는 Sparkle로 받는다. 모든 기능이 들어 있다.
+- **App Store 판** (타깃 `Bottari App Store`, `APP_STORE` 플래그): 앱 샌드박스 안에서 실행되고 Sparkle이 없다. 아래 [App Store 판](#app-store-판)을 본다.
+
+### GitHub 판
 
 처음 한 번:
 
@@ -147,6 +152,33 @@ gh release create v0.1.0 .build/release/Bottari-0.1.0.dmg .build/release/Bottari
 ```
 
 앱은 `https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml`에서 업데이트를 확인한다. 공개 키가 없는 빌드(Debug, `make package`)는 업데이트를 확인하지 않는다. `make package`는 서명 없이 같은 과정을 실행해 파이프라인만 점검한다.
+
+### App Store 판
+
+샌드박스 때문에 GitHub 판과 다르게 동작하는 부분:
+
+- 이 Mac의 폴더는 사용자가 허용한 것만 연다. 처음에는 패인이 홈 폴더 대신 "허용" 안내를 보여 주고, 허용한 폴더는 보안 범위 북마크로 다음 실행에도 기억한다(설정 › 폴더 접근). 다운로드 폴더는 처음부터 열린다.
+- `~/.ssh`(config, known_hosts, 키)는 홈 폴더나 `~/.ssh`를 허용해야 읽는다.
+- SSH 에이전트(ssh-agent, 1Password)에는 연결할 수 없다. 샌드박스는 허용한 폴더 안의 소켓도 막는다. 에이전트 대신 `~/.ssh`의 기본 키나 고른 키 파일로 로그인한다.
+- ProxyCommand는 실행하지 않는다. `~/.ssh/config`의 `ssh -W %h:%p 호스트`는 가져올 때 점프 호스트로 바꾼다.
+- 터널의 "Mac 전체(sshuttle)"와 시스템 프록시 자동 적용은 없다. 앱별 SOCKS/HTTP 프록시와 "Bottari만"은 그대로 쓴다.
+- iCloud Drive 패인과 설정 동기화는 iCloud Drive 폴더를 허용해야 쓴다.
+- 데이터(연결 목록, 설정, 키체인 항목)는 앱 컨테이너에 따로 저장되어 GitHub 판과 공유하지 않는다.
+
+처음 한 번:
+
+1. App Store Connect › 사용자 및 액세스 › 통합 › 키에서 API 키(앱 관리 또는 관리자 역할)를 만들고, `.p8` 파일을 `~/.appstoreconnect/private_keys/`에 둔다.
+2. App Store Connect에서 앱을 만든다. 번들 ID는 `io.github.piorosen.bottari.appstore`(다르게 하려면 `BUNDLE_ID`).
+3. `cp Config/appstore.env.example Config/appstore.env` 후 `TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`를 채운다. 이 파일은 커밋하지 않는다.
+
+올릴 때마다:
+
+```sh
+make appstore          # .build/appstore/에 서명된 .pkg 생성 (인증서와 프로필은 Xcode가 API 키로 만든다)
+make appstore-upload   # 같은 빌드를 App Store Connect에 올린다
+```
+
+빌드 번호는 올릴 때의 시각(`YYYYMMDDhhmm`)이다. 버전은 `MARKETING_VERSION`을 따른다.
 
 ## 구조
 
@@ -169,8 +201,8 @@ Packages/BottariKit/    앱과 분리한 핵심 로직
   BottariPlayer         libmpv(MPVKit) 스트리밍
   BottariRemote         SwiftTerm, RoyalVNCKit
   BottariCloud          S3(SigV4), Google Drive(AppAuth)
-Config/                 Info.plist 추가 키, 릴리스 설정 예시
-scripts/                release.sh, sparkle-keys.sh, app-icon.swift, glyphs.swift
+Config/                 Info.plist 추가 키, App Store 판 권한(AppStore.entitlements), 릴리스 설정 예시
+scripts/                release.sh, appstore.sh, sparkle-keys.sh, app-icon.swift, glyphs.swift
 docs/                   README 이미지
 ```
 

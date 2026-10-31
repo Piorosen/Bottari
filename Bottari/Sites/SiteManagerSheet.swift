@@ -441,7 +441,7 @@ private enum AuthKind: CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .agent: String(localized: "SSH 에이전트")
+        case .agent: FolderAccess.isSandboxed ? String(localized: "~/.ssh 기본 키") : String(localized: "SSH 에이전트")
         case .keyFile: String(localized: "키 파일")
         case .password: String(localized: "비밀번호")
         }
@@ -449,7 +449,9 @@ private enum AuthKind: CaseIterable, Identifiable {
 
     var hint: String {
         switch self {
-        case .agent: String(localized: "ssh-agent 또는 1Password 에이전트의 키 사용, 맞는 키가 없으면 ~/.ssh의 id_ed25519, id_ecdsa, id_rsa 시도")
+        case .agent: FolderAccess.isSandboxed
+            ? String(localized: "App Store 판은 SSH 에이전트에 연결할 수 없어, ~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함")
+            : String(localized: "ssh-agent 또는 1Password 에이전트의 키 사용, 맞는 키가 없으면 ~/.ssh의 id_ed25519, id_ecdsa, id_rsa 시도")
         case .keyFile: String(localized: "OpenSSH 형식 개인 키(Ed25519, RSA). 키 암호는 키체인에 저장됨")
         case .password: String(localized: "키체인에 저장됨")
         }
@@ -694,7 +696,9 @@ private struct SiteForm: View {
             }
             switch site.authentication {
             case .agent:
-                TextField("에이전트 소켓", text: agentSocket, prompt: Text(verbatim: "$SSH_AUTH_SOCK")).designField(mono: true)
+                if !FolderAccess.isSandboxed {
+                    TextField("에이전트 소켓", text: agentSocket, prompt: Text(verbatim: "$SSH_AUTH_SOCK")).designField(mono: true)
+                }
             case .keyFile:
                 HStack {
                     TextField("키 파일", text: keyPath, prompt: Text("~/.ssh/id_ed25519")).designField(mono: true)
@@ -715,8 +719,11 @@ private struct SiteForm: View {
             JumpHostField(site: $site, candidates: jumpHostNames)
                 .id(site.id)
         }
-        if site.proxyJump.isEmpty {
-            LabeledField(String(localized: "프록시 명령 (ProxyCommand)"), hint: String(localized: "표준 입출력으로 SSH를 전달하는 명령. %h 호스트, %p 포트, %r 사용자로 바뀜")) {
+        // The App Store edition cannot run one; it shows one only to say so.
+        if site.proxyJump.isEmpty, !FolderAccess.isSandboxed || site.proxyCommand != nil {
+            LabeledField(String(localized: "프록시 명령 (ProxyCommand)"), hint: FolderAccess.isSandboxed
+                ? String(localized: "App Store 판은 macOS 샌드박스 때문에 명령을 실행할 수 없습니다. 지우고 점프 호스트를 쓰십시오.")
+                : String(localized: "표준 입출력으로 SSH를 전달하는 명령. %h 호스트, %p 포트, %r 사용자로 바뀜")) {
                 TextField("프록시 명령", text: proxyCommand, prompt: Text(verbatim: "cloudflared access ssh --hostname %h")).designField(mono: true)
             }
         }
@@ -860,9 +867,10 @@ private struct SiteForm: View {
         let panel = NSOpenPanel()
         panel.title = String(localized: "개인 키 선택")
         panel.showsHiddenFiles = true
-        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".ssh")
+        panel.directoryURL = URL(fileURLWithPath: UserHome.path).appending(path: ".ssh")
         if panel.runModal() == .OK, let url = panel.url {
-            site.authentication = .keyFile(path: (url.path as NSString).abbreviatingWithTildeInPath)
+            FolderAccess.shared.remember(url)
+            site.authentication = .keyFile(path: UserHome.abbreviate(url.path))
         }
     }
 }

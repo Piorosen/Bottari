@@ -7,7 +7,7 @@ import Foundation
 public struct PrivacyGuard: Sendable {
     public let guardedFolders: [RemotePath]
 
-    public init(home: RemotePath = RemotePath(NSHomeDirectory())) {
+    public init(home: RemotePath = RemotePath(UserHome.path)) {
         guardedFolders = ["Desktop", "Documents", "Downloads", "Library/CloudStorage", "Library/Mobile Documents"]
             .map { home.appending($0) }
     }

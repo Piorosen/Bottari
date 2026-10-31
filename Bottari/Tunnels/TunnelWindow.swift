@@ -165,7 +165,7 @@ extension TunnelProfile.Mode {
     var caveat: String {
         switch self {
         case .bottariOnly: String(localized: "다른 앱은 직접 연결")
-        case .proxy: String(localized: "시스템 프록시 자동 적용 시 관리자 인증 필요")
+        case .proxy: TunnelProfile.canApplySystemProxy ? String(localized: "시스템 프록시 자동 적용 시 관리자 인증 필요") : String(localized: "쓸 앱마다 프록시를 직접 설정")
         case .wholeMac: String(localized: "sshuttle, sudo, 서버의 Python 3 필요 (UDP 제외)")
         }
     }
@@ -227,7 +227,7 @@ private struct TunnelDetail: View {
                     }
                     LabeledField(String(localized: "터널 범위")) {
                         HStack(alignment: .top, spacing: 10) {
-                            ForEach(TunnelProfile.Mode.allCases, id: \.self) { mode in
+                            ForEach(TunnelProfile.Mode.available, id: \.self) { mode in
                                 modeCard(mode)
                             }
                         }
@@ -376,7 +376,7 @@ private struct TunnelDetail: View {
             }
             HStack(alignment: .top, spacing: 10) {
                 SwitchRow(title: String(localized: "HTTP 프록시도 열기"), detail: String(localized: "SOCKS 미지원 앱용 (HTTP CONNECT)"), isOn: $profile.httpEnabled)
-                if profile.httpEnabled {
+                if profile.httpEnabled, TunnelProfile.canApplySystemProxy {
                     SwitchRow(title: String(localized: "시스템 프록시에 자동 적용"), detail: String(localized: "터널을 끄면 원래 설정으로 복원, 관리자 인증 필요"), isOn: $profile.appliesSystemProxy)
                 }
             }
@@ -529,7 +529,7 @@ private struct TunnelDetail: View {
         let via = profile.siteID.flatMap(AppServices.sites.site)?.name ?? String(localized: "서버")
         let path = switch profile.mode {
         case .bottariOnly: String(localized: "Bottari의 연결만 해당, 다른 앱은 직접 연결")
-        case .proxy: profile.appliesSystemProxy ? String(localized: "시스템 프록시 적용됨, Safari와 Chrome은 별도 설정 불필요") : String(localized: "프록시를 설정한 앱만 해당")
+        case .proxy: profile.appliesSystemProxy && TunnelProfile.canApplySystemProxy ? String(localized: "시스템 프록시 적용됨, Safari와 Chrome은 별도 설정 불필요") : String(localized: "프록시를 설정한 앱만 해당")
         case .wholeMac: String(localized: "Mac의 모든 TCP 연결 해당") + (profile.remoteDNS ? String(localized: ", DNS도 서버에서 조회") : "")
         }
         return String(localized: "\(via) 경유 · \(path)") + (state.isActive ? "" : String(localized: " (터널이 꺼져 있어 현재는 직접 연결)"))

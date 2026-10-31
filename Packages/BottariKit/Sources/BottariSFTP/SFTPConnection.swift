@@ -173,6 +173,8 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "지원하지 않는 키 형식입니다: \(type)")
         case .unreadableKey:
             String(localized: "키를 읽을 수 없습니다. 키 형식이나 암호를 확인하십시오.")
+        case .agentUnavailable where FolderAccess.isSandboxed:
+            String(localized: "App Store 판은 macOS 샌드박스 안에서 실행되어 SSH 에이전트(1Password 등)에 연결할 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용해 키 파일을 읽게 하거나, 연결 관리에서 키 파일을 선택하십시오.")
         case .agentUnavailable:
             String(localized: "SSH 에이전트에 연결할 수 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_ecdsa, id_rsa)도 없습니다. ssh-agent 또는 1Password 에이전트가 실행 중인지 확인하거나 연결 관리에서 키 파일을 선택하십시오.")
         case .agentHasNoKeys:

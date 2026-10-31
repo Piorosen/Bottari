@@ -31,7 +31,7 @@ final class ProxyCommand: Sendable {
             case "r": out += endpoint.username
             case "n": out += alias
             case "u": out += NSUserName()
-            case "d": out += NSHomeDirectory()
+            case "d": out += UserHome.path
             case "%": out += "%"
             default: out += "%\(token)"
             }
@@ -63,6 +63,11 @@ final class ProxyCommand: Sendable {
         group: any EventLoopGroup,
         prepare: @escaping @Sendable (any Channel) -> EventLoopFuture<Void>
     ) async throws -> (channel: any Channel, process: ProxyCommand) {
+        // A command started from the App Sandbox stays in it, cut off from
+        // ~/.ssh, Homebrew and the agent, and App Review does not allow it.
+        if FolderAccess.isSandboxed {
+            throw SFTPConnectError.proxyCommandFailed(command: command, reason: String(localized: "App Store 판은 macOS 샌드박스 안에서 실행되어 ProxyCommand를 쓸 수 없습니다. 연결 관리에서 점프 호스트(ProxyJump)로 바꾸십시오."))
+        }
         var toCommand: [Int32] = [-1, -1]
         var fromCommand: [Int32] = [-1, -1]
         var errorPipe: [Int32] = [-1, -1]
@@ -149,7 +154,7 @@ final class ProxyCommand: Sendable {
     /// in added to PATH: an app started from the Dock gets only the system's.
     private static func environment() -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
-        let home = NSHomeDirectory()
+        let home = UserHome.path
         let extra = ["/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/bin"]
         let current = (environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin").split(separator: ":").map(String.init)
         environment["PATH"] = (current + extra.filter { !current.contains($0) }).joined(separator: ":")

@@ -1,3 +1,4 @@
+import BottariCore
 import Foundation
 
 /// Reads OpenSSH client configuration (`~/.ssh/config`) the way `ssh` does for
@@ -92,7 +93,7 @@ public struct SSHConfig: Sendable {
     public init(
         text: String,
         directory: String,
-        home: String = NSHomeDirectory(),
+        home: String = UserHome.path,
         localUser: String = NSUserName(),
         readFile: (String) -> String? = { try? String(contentsOfFile: $0, encoding: .utf8) },
         localAddresses: @escaping @Sendable () -> [String] = SSHConfig.interfaceAddresses
@@ -114,7 +115,7 @@ public struct SSHConfig: Sendable {
     }
 
     /// Loads `~/.ssh/config`, or an empty configuration if there is none.
-    public static func load(home: String = NSHomeDirectory()) -> SSHConfig {
+    public static func load(home: String = UserHome.path) -> SSHConfig {
         let directory = (home as NSString).appendingPathComponent(".ssh")
         let text = (try? String(contentsOfFile: (directory as NSString).appendingPathComponent("config"), encoding: .utf8)) ?? ""
         return SSHConfig(text: text, directory: directory, home: home)

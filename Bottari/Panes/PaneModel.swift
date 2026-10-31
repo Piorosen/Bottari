@@ -13,6 +13,9 @@ final class PaneModel {
     private(set) var items: [FileItem] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    /// The folder shown, if it is one of this Mac's that the App Sandbox keeps
+    /// Bottari out of until the user allows it (App Store edition).
+    private(set) var lockedFolder: RemotePath?
     /// The saved site being connected to from the pane's menu.
     private(set) var connectingSite: SavedSite?
     var selection: Set<FileItem.ID> = []
@@ -186,6 +189,7 @@ final class PaneModel {
         swap(&forwardStack, &other.forwardStack)
         swap(&selection, &other.selection)
         swap(&errorMessage, &other.errorMessage)
+        swap(&lockedFolder, &other.lockedFolder)
         swap(&showsHiddenFiles, &other.showsHiddenFiles)
         swap(&viewMode, &other.viewMode)
     }
@@ -627,9 +631,23 @@ final class PaneModel {
                 selection = keepingSelection ? selection.intersection(listing.map(\.id)) : []
             }
             errorMessage = nil
+            lockedFolder = nil
             return true
         } catch {
             guard generation == loadGeneration else { return false }
+            // The sandbox, not the folder, says no: go there and ask for it.
+            if isLocal, case ProviderError.permissionDenied = error, !FolderAccess.shared.covers(destination) {
+                if destination != path {
+                    endSearch()
+                    cancelPreviewDownload()
+                }
+                path = destination
+                items = []
+                selection = []
+                errorMessage = nil
+                lockedFolder = destination
+                return true
+            }
             errorMessage = error.localizedDescription
             return false
         }

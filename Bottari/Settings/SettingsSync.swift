@@ -238,6 +238,10 @@ final class SettingsSync {
             errors = [String(localized: "iCloud Drive가 꺼져 있습니다. 시스템 설정 › Apple 계정 › iCloud에서 iCloud Drive를 켜십시오.")]
             return
         }
+        guard FolderAccess.shared.covers(RemotePath(folder.path)) else {
+            errors = [String(localized: "App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다. 위의 ‘iCloud Drive 허용…’을 누르십시오.")]
+            return
+        }
         guard !isSyncing else {
             syncAgain = true
             return

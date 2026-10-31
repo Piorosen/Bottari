@@ -1,4 +1,5 @@
 import AppKit
+import BottariCore
 import BottariSFTP
 import BottariTransfer
 import SwiftUI
@@ -12,7 +13,7 @@ struct SettingsView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsSection.allCases, id: \.self) { item in
+                ForEach(SettingsSection.shown, id: \.self) { item in
                     Button {
                         section = item
                     } label: {
@@ -37,6 +38,7 @@ struct SettingsView: View {
                 case .sync: SyncSettings(sync: .shared)
                 case .transfers: GeneralSettings()
                 case .connections: ConnectionSettings()
+                case .access: FolderAccessSettings()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -49,7 +51,12 @@ struct SettingsView: View {
 }
 
 enum SettingsSection: CaseIterable {
-    case look, keys, sync, transfers, connections
+    case look, keys, sync, transfers, connections, access
+
+    /// Folder access matters only in the App Sandbox.
+    static var shown: [SettingsSection] {
+        allCases.filter { $0 != .access || FolderAccess.isSandboxed }
+    }
 
     var title: String {
         switch self {
@@ -58,6 +65,7 @@ enum SettingsSection: CaseIterable {
         case .sync: String(localized: "iCloud 동기화")
         case .transfers: String(localized: "전송")
         case .connections: String(localized: "연결")
+        case .access: String(localized: "폴더 접근")
         }
     }
 
@@ -68,6 +76,7 @@ enum SettingsSection: CaseIterable {
         case .sync: "icloud"
         case .transfers: "arrow.up.arrow.down"
         case .connections: "server.rack"
+        case .access: "lock.open"
         }
     }
 }
@@ -75,6 +84,78 @@ enum SettingsSection: CaseIterable {
 extension Notification.Name {
     /// Opens a folder on the Mac in the main window's active pane; the object is its path.
     static let openOnMac = Notification.Name("BottariOpenOnMac")
+}
+
+/// The folders the App Sandbox lets Bottari into because the user allowed
+/// them (App Store edition).
+private struct FolderAccessSettings: View {
+    @State private var folders = FolderAccess.shared.paths
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsGroup(
+                    String(localized: "허용한 폴더"),
+                    footer: String(localized: "App Store 판은 macOS 샌드박스 안에서 실행되어, 여기 있는 폴더와 다운로드 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더를 쓸 수 있습니다.")
+                ) {
+                    if folders.isEmpty {
+                        Text("아직 허용한 폴더가 없습니다.")
+                            .font(.ui(.callout))
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(folders, id: \.self) { folder in
+                        HStack {
+                            Image(systemName: "folder")
+                                .foregroundStyle(.secondary)
+                            Text(UserHome.abbreviate(folder.string))
+                                .font(.themeMono(.body))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button("허용 취소") {
+                                FolderAccess.shared.forget(folder)
+                                folders = FolderAccess.shared.paths
+                            }
+                            .buttonStyle(PanelButtonStyle())
+                            .fixedSize()
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Button("홈 폴더 허용…") { allow(RemotePath(UserHome.path)) }
+                            .buttonStyle(PanelButtonStyle(prominent: true))
+                        Button("다른 폴더 허용…") { allow(RemotePath("/")) }
+                            .buttonStyle(PanelButtonStyle())
+                    }
+                    .fixedSize()
+                }
+                SettingsGroup(
+                    String(localized: "SSH 설정과 키"),
+                    footer: String(localized: "~/.ssh의 config, known_hosts, 개인 키를 읽으려면 홈 폴더나 ~/.ssh 폴더를 허용하십시오. App Store 판에서는 SSH 에이전트(1Password 등)와 ProxyCommand를 쓸 수 없어, 키 파일로 로그인하고 점프 호스트로 거쳐 갑니다.")
+                ) {
+                    HStack {
+                        Text(FolderAccess.shared.covers(RemotePath(UserHome.path).appending(".ssh"))
+                            ? String(localized: "~/.ssh를 읽을 수 있습니다")
+                            : String(localized: "~/.ssh를 아직 읽을 수 없습니다"))
+                            .font(.ui(.body, weight: .medium))
+                        Spacer()
+                        Button("~/.ssh 허용…") {
+                            FolderAccessPanel.ask(startingAt: RemotePath(UserHome.path).appending(".ssh"), showingHiddenFiles: true)
+                            folders = FolderAccess.shared.paths
+                        }
+                        .buttonStyle(PanelButtonStyle())
+                        .fixedSize()
+                    }
+                }
+            }
+            .padding(.bottom, 12)
+        }
+        .scrollIndicators(.never)
+    }
+
+    private func allow(_ start: RemotePath) {
+        FolderAccessPanel.ask(startingAt: start)
+        folders = FolderAccess.shared.paths
+    }
 }
 
 /// A titled group of settings in a card.
@@ -182,7 +263,9 @@ struct GeneralSettings: View {
                             Spacer()
                             Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").font(.themeMono(.body))
                         }
-                        Text("이 빌드는 업데이트를 확인하지 않습니다. 서명된 릴리스(scripts/release.sh)에서만 지원됩니다.")
+                        Text(AppEdition.isAppStore
+                            ? String(localized: "App Store에서 업데이트됩니다.")
+                            : String(localized: "이 빌드는 업데이트를 확인하지 않습니다. 서명된 릴리스(scripts/release.sh)에서만 지원됩니다."))
                             .font(.ui(.caption))
                             .foregroundStyle(.secondary)
                     }
@@ -337,7 +420,7 @@ struct AppearanceSettings: View {
     }
 
     private var themeFiles: some View {
-        SettingsGroup(String(localized: "테마 파일"), footer: String(localized: "~/Library/Application Support/Bottari/themes/에 저장됨")) {
+        SettingsGroup(String(localized: "테마 파일"), footer: String(localized: "\(UserHome.abbreviate(ThemeStore.shared.folder.path))/에 저장됨")) {
             HStack {
                 Button("가져오기…", action: importTheme).buttonStyle(PanelButtonStyle()).fixedSize()
                 Button("내보내기…", action: exportTheme).buttonStyle(PanelButtonStyle()).fixedSize()
@@ -809,6 +892,20 @@ struct SyncSettings: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.ui(.caption))
                     .foregroundStyle(.orange)
+            }
+            if let iCloud = LocalFileProvider.iCloudDrive, !FolderAccess.shared.covers(iCloud) {
+                HStack {
+                    Text("App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다.")
+                        .font(.ui(.caption))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("iCloud Drive 허용…") {
+                        FolderAccessPanel.ask(startingAt: iCloud)
+                        sync.syncNow()
+                    }
+                    .buttonStyle(PanelButtonStyle())
+                    .fixedSize()
+                }
             }
         }
         .padding(16)

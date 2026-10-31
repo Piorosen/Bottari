@@ -14,7 +14,16 @@ struct TunnelProfile: Codable, Identifiable, Hashable {
         case proxy
         /// sshuttle diverts every TCP connection to matching ranges.
         case wholeMac
+
+        /// sshuttle needs sudo and Terminal, out of reach from the App Sandbox.
+        static var available: [Mode] {
+            FolderAccess.isSandboxed ? [.bottariOnly, .proxy] : allCases
+        }
     }
+
+    /// Changing the Mac's proxy settings takes an administrator prompt, which
+    /// the App Sandbox does not allow.
+    static var canApplySystemProxy: Bool { !FolderAccess.isSandboxed }
 
     var id = UUID()
     var name = String(localized: "새 터널")
@@ -166,6 +175,10 @@ final class TunnelStore {
         runtimes[id] = runtime
         states[id] = .connecting
         log(id, String(localized: "\(site.name)에 연결 중"))
+        if profile.mode == .wholeMac, !TunnelProfile.Mode.available.contains(.wholeMac) {
+            states[id] = .failed(String(localized: "App Store 판에서는 Mac 전체 터널(sshuttle)을 쓸 수 없습니다."))
+            return
+        }
         if profile.mode == .wholeMac {
             startSshuttle(profile, site: site)
             return
@@ -227,7 +240,7 @@ final class TunnelStore {
         var summary = "SOCKS5 :\(proxy.socksPort)"
         if let http = proxy.httpPort { summary += " · HTTP :\(http)" }
         log(id, String(localized: "프록시 시작: \(summary)"))
-        if profile.appliesSystemProxy, profile.httpEnabled {
+        if profile.appliesSystemProxy, profile.httpEnabled, TunnelProfile.canApplySystemProxy {
             if systemProxies[id] == profile.pacURL {
                 summary += String(localized: " · 시스템 프록시에 PAC 적용")
             } else {

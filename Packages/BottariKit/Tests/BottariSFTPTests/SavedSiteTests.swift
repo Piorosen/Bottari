@@ -28,6 +28,17 @@ import Testing
         path == "/Users/me/.ssh/id_ed25519"
     }
 
+    @Test func readsTheJumpHostOutOfAnSSHWRelay() {
+        #expect(SavedSite.jumpHost(inProxyCommand: "ssh -W %h:%p bastion") == "bastion")
+        #expect(SavedSite.jumpHost(inProxyCommand: "/usr/bin/ssh -q -W %h:%p deploy@bastion.example.com") == "deploy@bastion.example.com")
+        #expect(SavedSite.jumpHost(inProxyCommand: "ssh bastion -W %h:%p") == "bastion")
+        // Anything more than a plain relay needs the command itself.
+        #expect(SavedSite.jumpHost(inProxyCommand: "ssh -i ~/.ssh/other -W %h:%p bastion") == nil)
+        #expect(SavedSite.jumpHost(inProxyCommand: "ssh -W %h:%p %r@bastion") == nil)
+        #expect(SavedSite.jumpHost(inProxyCommand: "nc -X 5 -x proxy:1080 %h %p") == nil)
+        #expect(SavedSite.jumpHost(inProxyCommand: "cloudflared access ssh --hostname %h") == nil)
+    }
+
     @Test func importPicksAuthenticationLikeSsh() {
         let (sites, added) = SiteStore.importing(config, into: [], defaultUser: "me", fileExists: fileExists)
 
