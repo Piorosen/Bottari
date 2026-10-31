@@ -51,6 +51,10 @@ final class SiteLibrary {
         let result = SiteStore.importing(sshConfig, into: sites)
         sites = result.sites
         recentlyImported = Set(result.added.map(\.id))
+        // From this Mac's own ~/.ssh/config, so its commands are this Mac's too.
+        for site in result.added {
+            if let command = site.proxyCommand { Self.allowProxyCommand(command, for: site.id) }
+        }
         importableHosts = []
         persist()
         return result.added
@@ -79,9 +83,14 @@ final class SiteLibrary {
         persist()
     }
 
-    /// The list as another Mac left it. Secrets stay in this Mac's Keychain.
+    /// The list as another Mac left it. Secrets stay in this Mac's Keychain,
+    /// except those of sites the other Mac deleted.
     func replaceAll(with sites: [SavedSite]) {
         guard sites != self.sites else { return }
+        let kept = Set(sites.map(\.id))
+        for gone in self.sites where !kept.contains(gone.id) {
+            forgetSecrets(of: gone)
+        }
         self.sites = sites
         recentlyImported = []
         persist()
@@ -92,11 +101,15 @@ final class SiteLibrary {
         guard let site = site(id) else { return }
         sites.removeAll { $0.id == id }
         recentlyImported.remove(id)
+        forgetSecrets(of: site)
+        persist()
+        reloadSSHConfig()
+    }
+
+    private func forgetSecrets(of site: SavedSite) {
         for key in [site.passwordKey, site.passphraseKey, site.screenPasswordKey, site.screenUsernameKey, site.s3SecretKey, site.googleSignInKey, site.googleClientSecretKey] {
             try? secrets.setSecret(nil, for: key)
         }
-        persist()
-        reloadSSHConfig()
     }
 
     /// Opens whatever the site is: an SFTP server, an S3 bucket or a Google Drive.
@@ -165,6 +178,7 @@ final class SiteLibrary {
         let secret = clientSecret?.isEmpty == false ? clientSecret : ownClient ? storedSecret : GoogleClient.builtIn?.secret
         let authorization = try await GoogleAuthorization.signIn(clientID: clientID, clientSecret: secret, presentingWindow: window)
         try secrets.setSecret(authorization.archived.base64EncodedString(), for: site.googleSignInKey)
+        googleSignIns += 1
         if let clientSecret, !clientSecret.isEmpty {
             try? secrets.setSecret(clientSecret, for: site.googleClientSecretKey)
         }
@@ -174,14 +188,24 @@ final class SiteLibrary {
         update(signedIn)
     }
 
+    /// Forgets this Mac's sign-in. The account name stays: it is synced to
+    /// the other Macs, which keep their own sign-ins.
     func signOutOfGoogle(_ site: SavedSite) {
-        guard case .googleDrive(var settings) = site.kind else { return }
+        guard case .googleDrive = site.kind else { return }
         try? secrets.setSecret(nil, for: site.googleSignInKey)
-        settings.account = ""
-        var signedOut = site
-        signedOut.kind = .googleDrive(settings)
-        update(signedOut)
+        googleSignIns += 1
     }
+
+    /// Whether this Mac holds a Google sign-in for the site. The account
+    /// name alone does not say so: it arrives from other Macs through sync,
+    /// the sign-in does not.
+    func isSignedInToGoogle(_ site: SavedSite) -> Bool {
+        _ = googleSignIns
+        return ((try? secrets.secret(for: site.googleSignInKey)) ?? nil)?.isEmpty == false
+    }
+
+    /// Bumped by signing in or out, which the Keychain cannot tell views about.
+    private var googleSignIns = 0
 
     /// A running Bottari-only tunnel that covers the site's host adds its
     /// server as the first jump, unless `takingDetours` is false (the tunnel's own connection).
@@ -190,6 +214,7 @@ final class SiteLibrary {
         let sshConfig = sshConfig
         let stored = secrets
         let detour = takingDetours ? TunnelStore.shared.detour(for: site) : nil
+        try confirmProxyCommands(on: [site] + (detour.map { [$0] } ?? []))
         // Key files and the Keychain are read off the main thread: the Keychain
         // may stop to ask the user for permission.
         var plan = try await Task.detached {
@@ -221,6 +246,45 @@ final class SiteLibrary {
             }.value
         }
         return provider
+    }
+
+    // MARK: - ProxyCommands from elsewhere
+
+    /// ProxyCommands run as shell commands on this Mac, and sites arrive
+    /// from other Macs through iCloud. A command runs only once it was typed
+    /// or allowed here; this list stays on this Mac.
+    private static let allowedProxyCommandsKey = "sites.allowedProxyCommands"
+
+    static func allowProxyCommand(_ command: String, for site: SavedSite.ID) {
+        var allowed = UserDefaults.standard.dictionary(forKey: allowedProxyCommandsKey) as? [String: String] ?? [:]
+        allowed[site.uuidString] = command
+        UserDefaults.standard.set(allowed, forKey: allowedProxyCommandsKey)
+    }
+
+    private static func isAllowed(_ command: String, for site: SavedSite.ID) -> Bool {
+        (UserDefaults.standard.dictionary(forKey: allowedProxyCommandsKey) as? [String: String])?[site.uuidString] == command
+    }
+
+    /// Asks before running a ProxyCommand this Mac has not seen, for `sites`
+    /// and the saved jump hosts they go through.
+    private func confirmProxyCommands(on start: [SavedSite]) throws {
+        var queue = start
+        var seen = Set<SavedSite.ID>()
+        while let next = queue.popLast() {
+            guard seen.insert(next.id).inserted else { continue }
+            queue += next.proxyJump.compactMap { name in sites.first { $0.name == name } }
+            guard let command = next.proxyCommand?.trimmingCharacters(in: .whitespaces), !command.isEmpty,
+                  !Self.isAllowed(command, for: next.id) else { continue }
+            let alert = NSAlert()
+            alert.messageText = String(localized: "‘\(next.name)’에 연결하려면 이 Mac에서 명령을 실행합니다")
+            alert.informativeText = String(localized: "이 ProxyCommand는 이 Mac에서 입력한 것이 아닙니다(다른 Mac에서 동기화됨). 아는 명령일 때만 허락하십시오.") + "\n\n" + command
+            alert.addButton(withTitle: String(localized: "취소"))
+            alert.addButton(withTitle: String(localized: "허락하고 연결"))
+            guard alert.runModal() == .alertSecondButtonReturn else {
+                throw CloudConnectError(String(localized: "ProxyCommand 실행을 허락하지 않아 연결하지 않았습니다."))
+            }
+            Self.allowProxyCommand(command, for: next.id)
+        }
     }
 
     private func persist() {

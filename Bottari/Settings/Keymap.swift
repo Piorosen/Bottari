@@ -229,9 +229,14 @@ final class Keymap {
         saved = AppDelegate.isRenderingSnapshots ? Saved() : UserDefaults.standard.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) } ?? Saved()
     }
 
+    /// Switching the base layout keeps shortcuts the user set by hand; picking
+    /// the layout already in use changes nothing.
     var layout: KeyLayout {
         get { saved.layout }
-        set { saved = Saved(layout: newValue) }
+        set {
+            guard newValue != saved.layout else { return }
+            saved = Saved(layout: newValue, custom: saved.custom)
+        }
     }
 
     func combo(for action: PaneAction) -> KeyCombo {

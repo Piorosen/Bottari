@@ -250,7 +250,7 @@ final class SettingsSync {
         let shared = SyncFolder(folder: folder, baseFolder: baseFolder)
         Task {
             let outcome = await Task.detached { Self.run(shared, snapshot) }.value
-            apply(outcome)
+            apply(outcome, mergedFrom: snapshot)
             isSyncing = false
             if syncAgain {
                 syncAgain = false
@@ -296,12 +296,22 @@ final class SettingsSync {
         return others + [me]
     }
 
-    private func apply(_ outcome: Outcome) {
+    /// Puts the merged settings in place. Anything edited here while the merge
+    /// ran (typing a host name, say) is left as it now is and merged again
+    /// right after, rather than swapped for the older copy the merge started from.
+    private func apply(_ outcome: Outcome, mergedFrom snapshot: Snapshot) {
         isApplying = true
         defer { isApplying = false }
         devices = outcome.devices
         errors = outcome.errors
         var found: [Conflict] = []
+        let editedMeanwhile = sources.sites.get() != snapshot.sites || sources.favorites.get() != snapshot.favorites
+            || sources.presets.get() != snapshot.presets || sources.keymap.get() != snapshot.keymap
+            || sources.theme.get() != snapshot.theme || sources.themes.get() != snapshot.themes
+        if editedMeanwhile {
+            syncAgain = true
+            return
+        }
 
         if let sites = outcome.sites {
             if sites.items != sources.sites.get() { sources.sites.set(sites.items) }

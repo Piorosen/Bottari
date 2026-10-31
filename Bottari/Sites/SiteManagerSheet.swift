@@ -218,10 +218,13 @@ struct SiteManagerSheet: View {
                 jumpHostNames: library.jumpHostNames,
                 secretFocused: $secretFocused,
                 isSigningIn: isSigningIn,
+                isSignedIn: library.isSignedInToGoogle(site),
                 signIn: { Task { await signIn(id) } },
                 signOut: { if let site = library.site(id) { library.signOutOfGoogle(site) } }
             )
             .disabled(activity != nil)
+            // Its own state (settings set aside while switching kinds) is per site.
+            .id(id)
             .onChange(of: library.site(id)) {
                 if case .success = outcome { outcome = nil }
             }
@@ -288,7 +291,7 @@ struct SiteManagerSheet: View {
         case .s3(let settings):
             return !settings.bucket.isEmpty && !settings.accessKey.isEmpty
         case .googleDrive(let settings):
-            return (!settings.clientID.isEmpty || GoogleClient.builtIn != nil) && !settings.account.isEmpty
+            return (!settings.clientID.isEmpty || GoogleClient.builtIn != nil) && library.isSignedInToGoogle(site)
         case .sftp:
             break
         }
@@ -472,8 +475,15 @@ private struct SiteForm: View {
     var secretFocused: FocusState<Bool>.Binding
 
     let isSigningIn: Bool
+    /// This Mac holds a Google sign-in for the site.
+    let isSignedIn: Bool
     let signIn: () -> Void
     let signOut: () -> Void
+
+    /// What the site had before the user clicked another kind or sign-in
+    /// method, so clicking back (a slip, say) brings it back instead of blanks.
+    @State private var kindsSetAside: [Int: SavedSite.Kind] = [:]
+    @State private var authenticationsSetAside: [AuthKind: SavedSite.Authentication] = [:]
 
     var body: some View {
         ScrollView {
@@ -542,12 +552,19 @@ private struct SiteForm: View {
                 }
             },
             set: { choice in
-                switch (choice, site.kind) {
-                case (0, .sftp), (1, .s3), (2, .googleDrive): break
-                case (1, _): site.kind = .s3(SavedSite.S3Settings())
-                case (2, _): site.kind = .googleDrive(SavedSite.DriveSettings())
-                default: site.kind = .sftp
+                let current = switch site.kind {
+                case .sftp: 0
+                case .s3: 1
+                case .googleDrive: 2
                 }
+                guard choice != current else { return }
+                kindsSetAside[current] = site.kind
+                let fresh: SavedSite.Kind = switch choice {
+                case 1: .s3(SavedSite.S3Settings())
+                case 2: .googleDrive(SavedSite.DriveSettings())
+                default: .sftp
+                }
+                site.kind = kindsSetAside[choice] ?? fresh
             }
         )
     }
@@ -592,20 +609,29 @@ private struct SiteForm: View {
     private var driveFields: some View {
         LabeledField(String(localized: "이름")) { TextField("이름", text: $site.name).designField() }
         HStack(spacing: 12) {
-            Image(systemName: drive.wrappedValue.account.isEmpty ? "person.crop.circle.badge.questionmark" : "person.crop.circle.badge.checkmark")
+            Image(systemName: isSignedIn ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.questionmark")
                 .font(.ui(.title2))
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(drive.wrappedValue.account.isEmpty ? String(localized: "연결된 Google 계정 없음") : String(localized: "로그인됨 · \(drive.wrappedValue.account)"))
-                    .font(.ui(.body, weight: .medium))
-                Text(drive.wrappedValue.account.isEmpty ? String(localized: "브라우저에서 Google 로그인 창이 열림") : String(localized: "토큰은 키체인에 저장됨"))
+                Group {
+                    if isSignedIn {
+                        Text(drive.wrappedValue.account.isEmpty ? String(localized: "로그인됨") : String(localized: "로그인됨 · \(drive.wrappedValue.account)"))
+                    } else if !drive.wrappedValue.account.isEmpty {
+                        // Signed in on another Mac; this one needs its own sign-in.
+                        Text("이 Mac에서 로그인 필요 · \(drive.wrappedValue.account)")
+                    } else {
+                        Text("연결된 Google 계정 없음")
+                    }
+                }
+                .font(.ui(.body, weight: .medium))
+                Text(isSignedIn ? String(localized: "토큰은 키체인에 저장됨") : String(localized: "브라우저에서 Google 로그인 창이 열림"))
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
             Spacer()
             if isSigningIn {
                 ProgressView().controlSize(.small)
-            } else if drive.wrappedValue.account.isEmpty {
+            } else if !isSignedIn {
                 Button("Google 계정으로 로그인", action: signIn)
                     .buttonStyle(PanelButtonStyle(prominent: true))
                     .fixedSize()
@@ -781,11 +807,13 @@ private struct SiteForm: View {
             get: { site.authentication.kind },
             set: { kind in
                 guard kind != site.authentication.kind else { return }
-                site.authentication = switch kind {
+                authenticationsSetAside[site.authentication.kind] = site.authentication
+                let fresh: SavedSite.Authentication = switch kind {
                 case .agent: .agent(socket: nil)
                 case .keyFile: .keyFile(path: "~/.ssh/id_ed25519")
                 case .password: .password
                 }
+                site.authentication = authenticationsSetAside[kind] ?? fresh
             }
         )
     }
@@ -800,7 +828,11 @@ private struct SiteForm: View {
     private var proxyCommand: Binding<String> {
         Binding(
             get: { site.proxyCommand ?? "" },
-            set: { site.proxyCommand = $0.isEmpty ? nil : $0 }
+            set: {
+                site.proxyCommand = $0.isEmpty ? nil : $0
+                // Typed here, so it may run here.
+                if !$0.isEmpty { SiteLibrary.allowProxyCommand($0.trimmingCharacters(in: .whitespaces), for: site.id) }
+            }
         )
     }
 

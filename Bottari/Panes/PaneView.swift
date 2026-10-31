@@ -262,8 +262,8 @@ struct PaneView: View {
     // MARK: - Files
 
     private var fileTable: some View {
-        Table(of: FileItem.self, selection: $model.selection) {
-            TableColumn(String(localized: "이름")) { item in
+        Table(of: FileItem.self, selection: $model.selection, sortOrder: $model.sortOrder) {
+            TableColumn(String(localized: "이름"), value: \.name, comparator: .localizedStandard) { item in
                 HStack(spacing: 8) {
                     FileGlyph(item: item, isLocal: model.isLocal)
                     if model.renaming == item.id {
@@ -296,7 +296,7 @@ struct PaneView: View {
                 .padding(.vertical, ThemeStore.shared.rowPadding)
             }
             .width(min: 120, ideal: 170)
-            TableColumn(String(localized: "크기")) { item in
+            TableColumn(String(localized: "크기"), value: \.sizeForSorting) { item in
                 Text(item.formattedSize)
                     .font(.ui(.callout))
                     .monospacedDigit()
@@ -304,7 +304,7 @@ struct PaneView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .width(min: 50, ideal: 64, max: 110)
-            TableColumn(String(localized: "수정")) { item in
+            TableColumn(String(localized: "수정"), value: \.dateForSorting) { item in
                 Text(item.shortModified)
                     .font(.ui(.callout))
                     .monospacedDigit()

@@ -17,6 +17,15 @@ final class PaneModel {
     private(set) var connectingSite: SavedSite?
     var selection: Set<FileItem.ID> = []
     var showsHiddenFiles = ThemeStore.shared.current.list.showHidden
+    /// The column header clicked last, and its direction. Folders stay on
+    /// top either way, as in Finder; the choice carries over to new panes.
+    var sortOrder: [KeyPathComparator<FileItem>] = PaneSort.saved {
+        didSet {
+            guard sortOrder != oldValue else { return }
+            items = sorted(items)
+            PaneSort.save(sortOrder)
+        }
+    }
     var viewMode = ViewMode.list
 
     enum ViewMode: CaseIterable {
@@ -74,7 +83,20 @@ final class PaneModel {
     /// the folder otherwise.
     var shownItems: [FileItem] {
         guard showsSearchResults else { return visibleItems }
-        return showsHiddenFiles ? searchResults : searchResults.filter { !$0.isHidden }
+        return sorted(showsHiddenFiles ? searchResults : searchResults.filter { !$0.isHidden })
+    }
+
+    /// `list` in `sortOrder`, folders first, names breaking ties.
+    func sorted(_ list: [FileItem]) -> [FileItem] {
+        let order = sortOrder
+        return list.sorted { a, b in
+            if a.isDirectory != b.isDirectory { return a.isDirectory }
+            for comparator in order {
+                let result = comparator.compare(a, b)
+                if result != .orderedSame { return result == .orderedAscending }
+            }
+            return a.name.localizedStandardCompare(b.name) == .orderedAscending
+        }
     }
 
     var showsSearchResults: Bool {
@@ -570,7 +592,7 @@ final class PaneModel {
                 cancelPreviewDownload()
             }
             path = destination
-            items = listing
+            items = sorted(listing)
             if searchQuery == nil {
                 selection = keepingSelection ? selection.intersection(listing.map(\.id)) : []
             }
@@ -582,4 +604,33 @@ final class PaneModel {
             return false
         }
     }
+}
+
+/// The pane sort as kept between launches: which column, which way.
+enum PaneSort {
+    private static let key = "panes.sort"
+    private static var columns: [(name: String, comparator: KeyPathComparator<FileItem>)] {[
+        ("name", KeyPathComparator(\.name, comparator: .localizedStandard)),
+        ("size", KeyPathComparator(\.sizeForSorting)),
+        ("modified", KeyPathComparator(\.dateForSorting)),
+    ]}
+
+    static var saved: [KeyPathComparator<FileItem>] {
+        let text = UserDefaults.standard.string(forKey: key) ?? "name"
+        let descending = text.hasPrefix("-")
+        guard var comparator = columns.first(where: { $0.name == text.trimmingCharacters(in: ["-"]) })?.comparator else { return [columns[0].comparator] }
+        comparator.order = descending ? .reverse : .forward
+        return [comparator]
+    }
+
+    static func save(_ order: [KeyPathComparator<FileItem>]) {
+        guard let first = order.first, let column = columns.first(where: { $0.comparator.keyPath == first.keyPath }) else { return }
+        UserDefaults.standard.set((first.order == .reverse ? "-" : "") + column.name, forKey: key)
+    }
+}
+
+extension FileItem {
+    /// Sizes to sort by; folders and unknown sizes come first.
+    nonisolated var sizeForSorting: Int64 { size ?? -1 }
+    nonisolated var dateForSorting: Date { modified ?? .distantPast }
 }
