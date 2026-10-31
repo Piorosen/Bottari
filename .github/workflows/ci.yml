@@ -59,6 +59,13 @@ jobs:
           open -n -W .build/xcode/Build/Products/Debug/Bottari.app --args -renderSnapshots "$RUNNER_TEMP/snapshots"
           cat "$RUNNER_TEMP"/snapshots/*-check.txt
           ! grep -h '^FAIL' "$RUNNER_TEMP"/snapshots/*-check.txt
+      # Release leaves out the Debug-only code (snapshots, the showcase), so
+      # it has to compile on its own too.
+      - name: Build (Release, ad-hoc signed)
+        run: |
+          xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Release \
+            -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
+            -skipPackagePluginValidation -skipMacroValidation -quiet build
       - uses: actions/upload-artifact@v4
         if: always()
         with:

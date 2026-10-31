@@ -656,7 +656,6 @@ enum SnapshotRenderer {
         window.close()
     }
 }
-#endif
 
 /// The main window of `-showcase`, once its sample files are made.
 struct ShowcaseWindow: View {
@@ -708,3 +707,4 @@ struct ShowcaseWindow: View {
         }
     }
 }
+#endif
