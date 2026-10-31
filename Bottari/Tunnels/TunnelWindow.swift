@@ -538,7 +538,13 @@ private struct TunnelDetail: View {
     private var instructions: some View {
         let socks = profile.socksPort
         let http = profile.httpPort
-        let lines: [(String, String)] = [
+        // The whole Mac by hand: what "시스템 프록시에 자동 적용" would set,
+        // and the only way in the App Store edition, which may not change it.
+        let system = (
+            String(localized: "Mac 전체 (시스템 설정)"),
+            profile.httpEnabled ? profile.pacURL : String(localized: "먼저 ‘HTTP 프록시도 열기’를 켜십시오.")
+        )
+        var lines: [(String, String)] = [
             ("curl", "curl --socks5-hostname 127.0.0.1:\(socks) http://gitlab.internal"),
             (String(localized: "셸 전체 (~/.zshrc)"), "export ALL_PROXY=socks5h://127.0.0.1:\(socks)"),
             (String(localized: "git (특정 저장소만)"), "git config --global http.https://gitlab.internal.proxy socks5h://127.0.0.1:\(socks)"),
@@ -547,20 +553,38 @@ private struct TunnelDetail: View {
             (String(localized: "DB 도구 (JDBC)"), String(localized: "SOCKS 프록시 127.0.0.1:\(socks) (대부분의 JDBC 도구에서 지원)")),
             ("Firefox", String(localized: "설정 › 네트워크 › SOCKS v5 127.0.0.1:\(socks) · ‘SOCKS v5 사용 시 DNS도 프록시’ 켜기")),
         ]
+        if TunnelProfile.canApplySystemProxy {
+            lines.append(system)
+        } else {
+            lines.insert(system, at: 0)
+        }
         let chosen = lines[min(instructionTab, lines.count - 1)]
+        let isSystem = chosen.0 == system.0
         return VStack(alignment: .leading, spacing: 8) {
             FlowChips(titles: lines.map(\.0), selection: $instructionTab)
+            if isSystem {
+                Text("시스템 설정 › 네트워크 › 사용 중인 연결 › 세부사항 › 프록시에서 ‘자동 프록시 구성’을 켜고 아래 주소를 넣으십시오. 터널로 보낼 주소만 서버를 거치고 나머지는 그대로 연결됩니다. 터널을 끌 때는 그 설정도 끄십시오.")
+                    .font(.ui(.caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(chosen.1)
                 .font(.themeMono(.caption))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
                 .well()
-            Button("복사") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(chosen.1, forType: .string)
+            HStack(spacing: 8) {
+                Button("복사") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(chosen.1, forType: .string)
+                }
+                .buttonStyle(PanelButtonStyle())
+                if isSystem, let settings = URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension") {
+                    Button("네트워크 설정 열기") { NSWorkspace.shared.open(settings) }
+                        .buttonStyle(PanelButtonStyle())
+                }
             }
-            .buttonStyle(PanelButtonStyle())
             .fixedSize()
         }
     }

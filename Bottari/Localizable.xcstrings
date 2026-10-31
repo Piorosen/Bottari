@@ -1441,6 +1441,16 @@
         }
       }
     },
+    "Mac 전체 (시스템 설정)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whole Mac (System Settings)"
+          }
+        }
+      }
+    },
     "Mac에 SOCKS5·HTTP 프록시를 열고, 프록시를 설정한 앱의 지정 주소만 터널로 전송": {
       "localizations": {
         "en": {
@@ -3347,6 +3357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No built-in subtitles"
+          }
+        }
+      }
+    },
+    "네트워크 설정 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Network Settings"
           }
         }
       }
@@ -5855,6 +5875,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "System (SF)"
+          }
+        }
+      }
+    },
+    "시스템 설정 › 네트워크 › 사용 중인 연결 › 세부사항 › 프록시에서 ‘자동 프록시 구성’을 켜고 아래 주소를 넣으십시오. 터널로 보낼 주소만 서버를 거치고 나머지는 그대로 연결됩니다. 터널을 끌 때는 그 설정도 끄십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In System Settings › Network › your connection › Details › Proxies, turn on “Automatic proxy configuration” and enter the address below. Only the addresses you send through the tunnel go via the server; everything else connects as usual. Turn the setting off again when you turn the tunnel off."
           }
         }
       }
