@@ -186,9 +186,30 @@ final class EditorModel {
         await load()
     }
 
+    /// Saves over the server's newer copy, keeping that copy on the Mac
+    /// first: it may hold someone else's work.
     func overwriteServerVersion() async {
+        let replaced = conflict.flatMap { keepCopy(of: $0.theirs) }
         conflict = nil
         await save(force: true)
+        if let replaced, notice == nil {
+            notice = String(localized: "덮어쓴 서버 쪽 내용은 \(replaced.path(percentEncoded: false))에 보관했습니다.")
+        }
+    }
+
+    /// `text` written to Application Support/Bottari/Replaced, named after
+    /// the file and the time.
+    private func keepCopy(of text: String) -> URL? {
+        let folder = URL.applicationSupportDirectory.appending(path: "Bottari/Replaced")
+        let stamp = Date.now.formatted(.iso8601).replacingOccurrences(of: ":", with: "-")
+        let url = folder.appending(path: "\(stamp) \(item.name)")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: url)
+            return url
+        } catch {
+            return nil
+        }
     }
 
     func saveMerged() async {

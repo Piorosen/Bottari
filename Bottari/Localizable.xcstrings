@@ -3341,6 +3341,16 @@
         }
       }
     },
+    "덮어쓴 서버 쪽 내용은 %@에 보관했습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server’s version you replaced is kept in %@."
+          }
+        }
+      }
+    },
     "덮어씁니다": {
       "localizations": {
         "en": {
