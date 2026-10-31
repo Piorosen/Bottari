@@ -102,26 +102,45 @@ extension SavedSite {
 struct PreviewServer: FileProvider {
     let displayName: String
     var bytesPerSecond = 1_000_000
+    /// Where the server's "/" is on this Mac, so it shows server paths such as
+    /// /var/www/site; nil shows the Mac's own paths.
+    var root: URL?
     private let local = LocalFileProvider()
 
-    init(_ name: String, bytesPerSecond: Int = 1_000_000) {
+    init(_ name: String, bytesPerSecond: Int = 1_000_000, root: URL? = nil) {
         displayName = name
         self.bytesPerSecond = bytesPerSecond
+        self.root = root
     }
 
     var locationID: String { "preview://\(displayName)" }
     var capabilities: ProviderCapabilities { [.rangeRead] }
-    var home: RemotePath { local.home }
+    var home: RemotePath { root == nil ? local.home : .root }
 
-    func list(_ path: RemotePath) async throws -> [FileItem] { try await local.list(path) }
-    func stat(_ path: RemotePath) async throws -> FileItem { try await local.stat(path) }
-    func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws { try await local.write(path, from: data) }
-    func makeDirectory(_ path: RemotePath) async throws { try await local.makeDirectory(path) }
-    func move(_ from: RemotePath, to: RemotePath) async throws { try await local.move(from, to: to) }
-    func delete(_ path: RemotePath) async throws { try await local.delete(path) }
+    func list(_ path: RemotePath) async throws -> [FileItem] { try await local.list(onDisk(path)).map(shown) }
+    func stat(_ path: RemotePath) async throws -> FileItem { shown(try await local.stat(onDisk(path))) }
+    func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>) async throws { try await local.write(onDisk(path), from: data) }
+    func makeDirectory(_ path: RemotePath) async throws { try await local.makeDirectory(onDisk(path)) }
+    func move(_ from: RemotePath, to: RemotePath) async throws { try await local.move(onDisk(from), to: onDisk(to)) }
+    func delete(_ path: RemotePath) async throws { try await local.delete(onDisk(path)) }
+
+    private func onDisk(_ path: RemotePath) -> RemotePath {
+        guard let root else { return path }
+        return path == .root ? RemotePath(root.path) : RemotePath(root.path + path.string)
+    }
+
+    /// An item as the server would list it: its path there, owned by the login.
+    private func shown(_ item: FileItem) -> FileItem {
+        guard let root else { return item }
+        let inside = String(item.path.string.dropFirst(root.path.count))
+        return FileItem(
+            path: RemotePath(inside.isEmpty ? "/" : inside), kind: item.kind, isSymbolicLink: item.isSymbolicLink,
+            size: item.size, modified: item.modified, permissions: item.permissions, owner: "deploy"
+        )
+    }
 
     func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
-        let source = Chunks(local.read(path, range: range))
+        let source = Chunks(local.read(onDisk(path), range: range))
         let rate = Double(bytesPerSecond)
         return AsyncThrowingStream(unfolding: {
             guard let chunk = try await source.next() else { return nil }

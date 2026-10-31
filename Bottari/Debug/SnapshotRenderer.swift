@@ -376,7 +376,7 @@ enum SnapshotRenderer {
     }
 
     /// The whole main window as the design shows it: a PROD server on the left
-    /// with nginx.conf selected, a backup folder on the right, two things in the bundle.
+    /// with nginx.conf selected, the NAS's backups on the right, two things in the bundle.
     private static func renderMain(into directory: URL, library: SiteLibrary) async {
         let root = FileManager.default.temporaryDirectory.appending(path: "bottari-main-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -402,7 +402,9 @@ enum SnapshotRenderer {
 
     /// The sample workspace of the main-window snapshot, on files under `root`.
     static func sampleWorkspace(library: SiteLibrary, in root: URL) async -> Workspace {
-        let site = root.appending(path: "site"), backup = root.appending(path: "백업")
+        // Two servers, each a folder standing in for its "/".
+        let web = root.appending(path: "prod-web"), nas = root.appending(path: "home-nas")
+        let site = web.appending(path: "var/www/site"), backup = nas.appending(path: "volume1/backup")
         for folder in [site.appending(path: "assets"), site.appending(path: "releases"), backup.appending(path: "2026-10")] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
@@ -431,16 +433,18 @@ enum SnapshotRenderer {
         try? Data(count: 840_000).write(to: backup.appending(path: "site-assets.zip"))
 
         var prod = library.sites[0]
-        prod.startPath = site.path
+        prod.startPath = "/var/www/site"
+        let webServer = PreviewServer(prod.name, root: web)
         let left = PaneModel(provider: LocalFileProvider(), library: library)
-        await left.switchProvider(to: PreviewServer(prod.name), site: prod)
-        left.selection = [RemotePath(site.path).appending("nginx.conf")]
-        let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(backup.path), library: library)
-        await right.start()
+        await left.switchProvider(to: webServer, site: prod)
+        left.selection = [RemotePath("/var/www/site/nginx.conf")]
+        var home = library.sites[2]
+        home.startPath = "/volume1/backup"
+        let right = PaneModel(provider: LocalFileProvider(), library: library)
+        await right.switchProvider(to: PreviewServer(home.name, root: nas), site: home)
         let workspace = Workspace(left: left, right: right)
-        let local = LocalFileProvider()
-        if let items = try? await local.list(RemotePath(site.path)) {
-            BottariBundle.shared.add(items.filter { $0.name == "nginx.conf" || $0.name == "index.html" }, from: local, site: nil)
+        if let items = try? await webServer.list("/var/www/site") {
+            BottariBundle.shared.add(items.filter { $0.name == "nginx.conf" || $0.name == "index.html" }, from: webServer, site: prod)
         }
         return workspace
     }

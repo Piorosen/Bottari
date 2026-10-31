@@ -638,31 +638,40 @@ private struct PlainTableRows: NSViewRepresentable {
     /// and the watch on its width.
     final class Coordinator {
         weak var table: NSTableView?
+        private weak var watchedClip: NSClipView?
         nonisolated(unsafe) var resizeObserver: (any NSObjectProtocol)?
 
         deinit {
             if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
         }
 
-        /// Fits the columns to the pane whenever its width changes (the
-        /// preview column opening, the divider moving), so the table never
-        /// ends up wider than the pane and needing to scroll sideways.
+        /// Fits the columns to the pane now and whenever its width changes
+        /// (the preview column opening, the divider moving), so the table
+        /// never ends up wider than the pane and needing to scroll sideways.
+        /// SwiftUI can swap in a new table; the watch moves to that one.
         func fitColumns(of table: NSTableView) {
-            guard resizeObserver == nil, let clip = table.enclosingScrollView?.contentView else { return }
+            guard let clip = table.enclosingScrollView?.contentView, clip !== watchedClip else { return }
+            if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+            watchedClip = clip
             clip.postsFrameChangedNotifications = true
             resizeObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: clip, queue: .main) { [weak table] _ in
                 MainActor.assumeIsolated {
-                    guard let table, let clip = table.enclosingScrollView?.contentView else { return }
-                    // Between a resize and the fit below, the table is wider for
-                    // a moment; SwiftUI would show a scroller for that.
-                    table.enclosingScrollView?.hasHorizontalScroller = false
-                    // The table's own width counts its insets and spacing too.
-                    let spare = clip.bounds.width - table.frame.width
-                    guard abs(spare) > 0.5, let name = table.tableColumns.first else { return }
-                    name.width = max(name.minWidth, min(name.maxWidth, name.width + spare))
-                    table.tile()
+                    if let table { Self.fit(table) }
                 }
             }
+            Self.fit(table)
+        }
+
+        static func fit(_ table: NSTableView) {
+            guard let clip = table.enclosingScrollView?.contentView else { return }
+            // Between a resize and the fit below, the table is wider for
+            // a moment; SwiftUI would show a scroller for that.
+            table.enclosingScrollView?.hasHorizontalScroller = false
+            // The table's own width counts its insets and spacing too.
+            let spare = clip.bounds.width - table.frame.width
+            guard clip.bounds.width > 0, abs(spare) > 0.5, let name = table.tableColumns.first else { return }
+            name.width = max(name.minWidth, min(name.maxWidth, name.width + spare))
+            table.tile()
         }
     }
 
@@ -682,9 +691,15 @@ private struct PlainTableRows: NSViewRepresentable {
         DispatchQueue.main.async { Self.tidy(from: view, remembering: coordinator) }
     }
 
-    /// The table this view sits behind: the one under its centre.
-    private static func tidy(from view: NSView, remembering coordinator: Coordinator) {
-        guard let root = view.window?.contentView else { return }
+    /// The table this view sits behind: the one under its centre. Until the
+    /// window has laid it out there is none; look again shortly, as nothing
+    /// else may update this view once it has.
+    private static func tidy(from view: NSView, remembering coordinator: Coordinator, attempt: Int = 0) {
+        func later() {
+            guard attempt < 20 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { tidy(from: view, remembering: coordinator, attempt: attempt + 1) }
+        }
+        guard let root = view.window?.contentView else { return later() }
         let table: NSTableView
         if let known = coordinator.table, known.window === view.window {
             table = known
@@ -694,11 +709,11 @@ private struct PlainTableRows: NSViewRepresentable {
             guard let found = tables(in: root).first(where: { table in
                 let scroll = table.enclosingScrollView ?? table
                 return scroll.convert(scroll.bounds, to: nil).contains(center)
-            }) else { return }
+            }) else { return later() }
             coordinator.table = found
-            coordinator.fitColumns(of: found)
             table = found
         }
+        coordinator.fitColumns(of: table)
         table.gridStyleMask = []
         table.intercellSpacing = NSSize(width: 8, height: table.intercellSpacing.height)
         // The columns fit the pane (see `fitColumns`); nothing to pull sideways.
@@ -712,6 +727,8 @@ private struct PlainTableRows: NSViewRepresentable {
             table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
             table.sizeToFit()
         }
+        // SwiftUI may have set the columns again since the last fit.
+        Coordinator.fit(table)
     }
 
     private static func tables(in view: NSView) -> [NSTableView] {

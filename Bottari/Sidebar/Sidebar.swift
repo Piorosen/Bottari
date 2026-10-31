@@ -18,7 +18,10 @@ struct Sidebar: View {
         (MacFolder.downloads, "bt.download", "Downloads"),
     ]
 
-    private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? String(localized: "이 Mac")
+    /// Pictures of sample data name no real Mac.
+    private static let computerName = AppDelegate.isRenderingSnapshots
+        ? "MacBook Pro"
+        : SCDynamicStoreCopyComputerName(nil, nil) as String? ?? String(localized: "이 Mac")
 
     /// Where a favorite lives: its site's name, this Mac, or a site deleted since.
     private func favoritePlace(_ favorite: Favorites.Favorite) -> String {

@@ -142,10 +142,18 @@ final class ThemeStore {
     @ObservationIgnored private let file = URL.applicationSupportDirectory.appending(path: "Bottari/theme.json")
 
     private init() {
-        // Snapshots draw the default look and leave the user's files alone.
-        current = AppDelegate.isRenderingSnapshots ? Theme.presets[0].theme
+        // Snapshots draw the default look (or the preset `-showcaseTheme N`
+        // names) and leave the user's files alone.
+        current = AppDelegate.isRenderingSnapshots ? Self.showcasePreset
             : (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Theme.self, from: $0) } ?? Theme.presets[0].theme
         if !AppDelegate.isRenderingSnapshots { reloadSaved() }
+    }
+
+    private static var showcasePreset: Theme {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-showcaseTheme"), arguments.indices.contains(flag + 1),
+              let index = Int(arguments[flag + 1]), Theme.presets.indices.contains(index) else { return Theme.presets[0].theme }
+        return Theme.presets[index].theme
     }
 
     // MARK: - Choosing

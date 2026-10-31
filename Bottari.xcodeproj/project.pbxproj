@@ -127,6 +127,7 @@
 				B0771A000000000000000141 /* Sources */,
 				B0771A000000000000000130 /* Frameworks */,
 				B0771A000000000000000142 /* Resources */,
+				B0771A000000000000000143 /* Unsign resource bundles */,
 			);
 			buildRules = (
 			);
@@ -208,6 +209,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		B0771A000000000000000143 /* Unsign resource bundles */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Unsign resource bundles";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# SwiftPM resource bundles hold no code. Signed during the build with the\n# development certificate, they keep that signature when the export re-signs\n# the app for the App Store, and App Store Connect rejects it (ITMS-90284).\n# Unsigned, the app's own signature seals them like any other resource.\nfind \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources\" -maxdepth 1 -name '*.bundle' -type d -exec rm -rf {}/Contents/_CodeSignature \\;\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B0771A000000000000000041 /* Sources */ = {
@@ -350,6 +373,7 @@
 		B0771A000000000000000161 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BOTTARI_GOOGLE_CLIENT_ID = "";
@@ -387,6 +411,7 @@
 		B0771A000000000000000162 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BOTTARI_GOOGLE_CLIENT_ID = "";
