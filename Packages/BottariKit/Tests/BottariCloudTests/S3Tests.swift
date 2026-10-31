@@ -110,6 +110,12 @@ import Testing
         #expect(FakeS3.bucket(bucket).log.contains("PUT copy.bin?partNumber&uploadId"))
     }
 
+    @Test func uploadsSayWhatKindOfFileTheyAre() {
+        #expect(S3Provider.contentType(of: "/site/index.html") == "text/html")
+        #expect(S3Provider.contentType(of: "/img/logo.png") == "image/png")
+        #expect(S3Provider.contentType(of: "/blob") == "application/octet-stream")
+    }
+
     @Test func keysThatAreNotPathsAreLeftOut() async throws {
         FakeS3.put("a//x.txt", Data("x".utf8), in: bucket)
         FakeS3.put("a/./y.txt", Data("y".utf8), in: bucket)

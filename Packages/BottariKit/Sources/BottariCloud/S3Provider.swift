@@ -1,5 +1,6 @@
 import BottariCore
 import Foundation
+import UniformTypeIdentifiers
 
 /// Where an S3 bucket lives and how to reach it.
 public struct S3Configuration: Codable, Hashable, Sendable {
@@ -167,6 +168,7 @@ public struct S3Provider: FileProvider {
             guard let uploadID else {
                 var request = URLRequest(url: configuration.url(for: key))
                 request.httpMethod = "PUT"
+                request.setValue(Self.contentType(of: path), forHTTPHeaderField: "Content-Type")
                 request.httpBody = buffer
                 _ = try await send(&request, path: path, payload: buffer)
                 return
@@ -202,6 +204,12 @@ public struct S3Provider: FileProvider {
         }.value
     }
 
+    /// What browsers and CDNs serving the object are told it is, from its
+    /// extension; S3 would otherwise call everything binary/octet-stream.
+    static func contentType(of path: RemotePath) -> String {
+        UTType(filenameExtension: path.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+    }
+
     static func checkForError(in data: Data, path: RemotePath) throws {
         let reply = S3XML.parse(data)
         guard reply.root == "Error" else { return }
@@ -212,6 +220,7 @@ public struct S3Provider: FileProvider {
     private func startMultipart(_ key: String, path: RemotePath) async throws -> String {
         var request = URLRequest(url: configuration.url(for: key, query: [("uploads", "")]))
         request.httpMethod = "POST"
+        request.setValue(Self.contentType(of: path), forHTTPHeaderField: "Content-Type")
         let (data, _) = try await send(&request, path: path)
         guard let id = S3XML.parse(data).values["UploadId"]?.first else { throw ProviderError.io(String(localized: "S3 업로드를 시작할 수 없습니다")) }
         return id
