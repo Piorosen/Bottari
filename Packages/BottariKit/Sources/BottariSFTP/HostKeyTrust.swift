@@ -82,6 +82,15 @@ public final class KnownHosts: @unchecked Sendable {
         forget(hostKeyID: endpoint.hostKeyID)
     }
 
+    /// Trusts `key` (`type base64`) for a `host` or `[host]:port` name, after
+    /// the user checked a key `hostKeyNotListed` could not vouch for.
+    public func trust(_ key: String, hostKeyID: String) {
+        lock.withLock {
+            keys[hostKeyID] = key
+            save()
+        }
+    }
+
     /// Forgets the key for a `host` or `[host]:port` name, as `hostKeyChanged` reports it.
     public func forget(hostKeyID: String) {
         lock.withLock {
@@ -117,7 +126,13 @@ public final class KnownHosts: @unchecked Sendable {
                     presented: Self.fingerprint(ofOpenSSHKey: presented)
                 )
                 return false
-            case .changed, .unknown:
+            case .otherKinds(let known) where keys[id] == nil:
+                // `ssh` would ask here; trusting it silently would let a
+                // server in the middle pick a kind known_hosts says nothing of.
+                Log.connection.error("\(id): known_hosts에 다른 종류의 호스트 키만 있음")
+                rejections[id] = .hostKeyNotListed(host: id, known: known.map(Self.fingerprint(ofOpenSSHKey:)), presented: presented)
+                return false
+            case .changed, .otherKinds, .unknown:
                 break
             }
             guard let trusted = keys[id] else {
@@ -181,6 +196,8 @@ struct OpenSSHKnownHosts {
         case trusted
         /// The host is listed with another key of the same kind.
         case changed(expected: String)
+        /// The host is listed, but only with keys of other kinds.
+        case otherKinds(known: [String])
         case revoked
         case unknown
     }
@@ -217,6 +234,7 @@ struct OpenSSHKnownHosts {
     func verdict(for presented: String, host: String) -> Verdict {
         let type = presented.split(separator: " ").first.map(String.init) ?? ""
         var expected: String?
+        var others: [String] = []
         for entry in entries where Self.matches(host, entry.hosts) {
             switch entry.marker {
             case "@revoked" where entry.key == presented:
@@ -225,11 +243,14 @@ struct OpenSSHKnownHosts {
                 return .trusted
             case nil where entry.key.hasPrefix(type + " "):
                 expected = expected ?? entry.key
+            case nil:
+                others.append(entry.key)
             default:
                 continue
             }
         }
-        return expected.map { .changed(expected: $0) } ?? .unknown
+        if let expected { return .changed(expected: expected) }
+        return others.isEmpty ? .unknown : .otherKinds(known: others)
     }
 
     /// Whether `host` is one of the comma-separated `patterns`, or matches

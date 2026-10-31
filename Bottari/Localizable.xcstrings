@@ -2243,6 +2243,16 @@
         }
       }
     },
+    "~/.ssh/known_hosts에는 %@의 다른 종류 키만 있어 이 서버가 보낸 키를 확인할 수 없습니다. 서버 관리자에게 지문을 확인한 뒤 맞을 때만 신뢰하십시오.\nknown_hosts의 키: %@\n받은 키: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.ssh/known_hosts lists %1$@ only with keys of other kinds, so the key this server sent can’t be checked. Compare its fingerprint with the server’s administrator and trust it only if it matches.\nKeys in known_hosts: %2$@\nKey received: %3$@"
+          }
+        }
+      }
+    },
     "~/Library/Application Support/Bottari/themes/에 저장됨": {
       "localizations": {
         "en": {

@@ -8,6 +8,13 @@ import Synchronization
 /// command with a shell and speaks SSH over its standard input and output;
 /// what it prints on standard error is kept to explain a failure.
 final class ProxyCommand: Sendable {
+    /// The program a command runs, and nothing after it: the rest may carry
+    /// tokens or passwords (`--service-token-secret …`), which logs must not.
+    static func program(of command: String) -> String {
+        let first = command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
+        return (first as NSString).lastPathComponent + (command.contains(where: \.isWhitespace) ? " …" : "")
+    }
+
     /// `command` with `ssh`'s tokens filled in: `%h` host, `%p` port, `%r`
     /// remote user, `%n` the name as typed, `%u` local user, `%d` home, `%%`.
     static func expand(_ command: String, for endpoint: SFTPEndpoint, alias: String) -> String {
@@ -98,7 +105,7 @@ final class ProxyCommand: Sendable {
             throw SFTPConnectError.proxyCommandFailed(command: command, reason: String(cString: strerror(spawned)))
         }
 
-        Log.connection.info("ProxyCommand 실행 (pid \(pid)): \(command)")
+        Log.connection.info("ProxyCommand 실행 (pid \(pid)): \(Self.program(of: command))")
         let process = ProxyCommand(command: command, pid: pid, errorReader: FileHandle(fileDescriptor: errorPipe[0], closeOnDealloc: true))
         process.collectErrors()
         do {

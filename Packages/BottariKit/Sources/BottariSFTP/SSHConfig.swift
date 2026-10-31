@@ -58,6 +58,8 @@ public struct SSHConfig: Sendable {
 
         var condition: Condition
         var options: [(key: String, value: String)]
+        /// Conditions of the blocks an `Include` sat in, which must hold too.
+        var enclosing: [Condition] = []
     }
 
     /// One condition on a `Match` line.
@@ -100,7 +102,7 @@ public struct SSHConfig: Sendable {
         self.localUser = localUser
         self.localAddresses = localAddresses
         var blocks = [Block(condition: .host(["*"]), options: [])]
-        Self.parse(text, directory: directory, home: home, readFile: readFile, depth: 0, into: &blocks)
+        Self.parse(text, directory: directory, home: home, readFile: readFile, depth: 0, enclosing: [], into: &blocks)
         self.blocks = blocks
         var seen = Set<String>()
         aliases = blocks.flatMap { block -> [String] in
@@ -129,13 +131,13 @@ public struct SSHConfig: Sendable {
         var identityFiles: [String] = []
         // Lazily: most configurations have no localnetwork condition.
         var addresses: [String]?
-        for block in blocks {
-            switch block.condition {
+        func holds(_ condition: Block.Condition) -> Bool {
+            switch condition {
             case .host(let patterns):
-                guard Self.matches(alias, patterns: patterns) else { continue }
+                return Self.matches(alias, patterns: patterns)
             case .match(let criteria):
                 let hostName = values["hostname"].map { $0.replacingOccurrences(of: "%h", with: alias) } ?? alias
-                let holds = criteria.allSatisfy { criterion in
+                return criteria.allSatisfy { criterion in
                     let result: Bool = switch criterion.kind {
                     case .all, .final: true
                     case .host: Self.matches(hostName, patterns: criterion.patterns)
@@ -149,8 +151,10 @@ public struct SSHConfig: Sendable {
                     // An unsupported condition fails even when negated.
                     return criterion.kind == .unsupported ? false : result != criterion.negated
                 }
-                guard holds else { continue }
             }
+        }
+        for block in blocks {
+            guard holds(block.condition), block.enclosing.allSatisfy(holds) else { continue }
             for (key, value) in block.options {
                 if key == "identityfile" {
                     identityFiles.append(value)
@@ -199,6 +203,7 @@ public struct SSHConfig: Sendable {
         home: String,
         readFile: (String) -> String?,
         depth: Int,
+        enclosing: [Block.Condition],
         into blocks: inout [Block]
     ) {
         for rawLine in text.split(whereSeparator: \.isNewline) {
@@ -207,16 +212,24 @@ public struct SSHConfig: Sendable {
             let arguments = Array(words.dropFirst())
             switch keyword {
             case "host":
-                blocks.append(Block(condition: .host(arguments), options: []))
+                blocks.append(Block(condition: .host(arguments), options: [], enclosing: enclosing))
             case "match":
-                blocks.append(Block(condition: .match(Self.criteria(arguments)), options: []))
+                blocks.append(Block(condition: .match(Self.criteria(arguments)), options: [], enclosing: enclosing))
             case "include":
                 guard depth < 8 else { continue }
+                // As in ssh, an Include inside a Host or Match block counts only
+                // where that block applies, and the lines after it go back to
+                // that block rather than to the included file's last one.
+                let around = blocks[blocks.count - 1]
+                let before = blocks.count
                 for pattern in arguments {
                     for path in Self.includedFiles(pattern, directory: directory, home: home) {
                         guard let included = readFile(path) else { continue }
-                        parse(included, directory: directory, home: home, readFile: readFile, depth: depth + 1, into: &blocks)
+                        parse(included, directory: directory, home: home, readFile: readFile, depth: depth + 1, enclosing: around.enclosing + [around.condition], into: &blocks)
                     }
+                }
+                if blocks.count != before {
+                    blocks.append(Block(condition: around.condition, options: [], enclosing: around.enclosing))
                 }
             case "proxycommand":
                 // The command is the rest of the line, as written.
@@ -277,25 +290,29 @@ public struct SSHConfig: Sendable {
         return text.isEmpty ? nil : text
     }
 
-    /// Splits a config line into words: `Key value`, `Key=value`, quotes, `#` comments.
+    /// Splits a config line into words: `Key value`, `Key=value`,
+    /// `Key = value`, quotes, `#` comments. One `=` between the keyword and
+    /// its value is a separator; any other `=` is part of a value.
     static func words(in line: Substring) -> [String] {
-        var words: [String] = []
+        let start = line.drop(while: \.isWhitespace)
+        let keyword = start.prefix { !$0.isWhitespace && $0 != "=" && $0 != "#" }
+        guard !keyword.isEmpty else { return [] }
+        var rest = start.dropFirst(keyword.count).drop(while: \.isWhitespace)
+        if rest.first == "=" { rest = rest.dropFirst() }
+        var words = [String(keyword)]
         var current = ""
         var inQuotes = false
-        var sawKeyword = false
-        for character in line {
+        for character in rest {
             if character == "\"" {
                 inQuotes.toggle()
                 continue
             }
             if !inQuotes {
                 if character == "#" { break }
-                // The first `=` separates the keyword from its value.
-                if character.isWhitespace || (character == "=" && !sawKeyword) {
+                if character.isWhitespace {
                     if !current.isEmpty {
                         words.append(current)
                         current = ""
-                        sawKeyword = true
                     }
                     continue
                 }

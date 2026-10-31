@@ -22,8 +22,8 @@ import Testing
         #expect(list.verdict(for: ed, host: "[nas.local]:2222") == .trusted)
         #expect(list.verdict(for: ed, host: "nas.local") == .unknown)
         #expect(list.verdict(for: otherEd, host: "prod.example.com") == .changed(expected: ed))
-        // A key of another kind says nothing about this one.
-        #expect(list.verdict(for: ecdsa, host: "prod.example.com") == .unknown)
+        // A key of another kind cannot be vouched for, only noted.
+        #expect(list.verdict(for: ecdsa, host: "prod.example.com") == .otherKinds(known: [ed]))
     }
 
     @Test func revokedKeysAndCertificateAuthorities() {
@@ -79,5 +79,25 @@ import Testing
         let new = SFTPEndpoint(host: "new.example.com", username: "me")
         #expect(fresh.check(otherEd, for: new))
         #expect(!fresh.check(ed, for: new))
+    }
+
+    @Test func aKindKnownHostsDoesNotListWaitsForTheUser() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bt-kh-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "known_hosts")
+        try "prod.example.com \(ed)\n".write(to: file, atomically: true, encoding: .utf8)
+        let store = KnownHosts(fileURL: nil, openSSHFiles: [file])
+        let prod = SFTPEndpoint(host: "prod.example.com", username: "me")
+
+        // ssh knows prod by its Ed25519 key; an ECDSA key it cannot vouch for.
+        #expect(!store.check(ecdsa, for: prod))
+        #expect(store.takeRejection(for: prod) == .hostKeyNotListed(host: "prod.example.com", known: [KnownHosts.fingerprint(ofOpenSSHKey: ed)], presented: ecdsa))
+
+        // Once the user has checked it and trusts it, it is let in.
+        store.trust(ecdsa, hostKeyID: "prod.example.com")
+        #expect(store.check(ecdsa, for: prod))
+        // The listed key still works too.
+        #expect(store.check(ed, for: prod))
     }
 }

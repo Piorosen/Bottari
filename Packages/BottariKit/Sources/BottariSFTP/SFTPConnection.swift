@@ -79,6 +79,10 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case hostKeyChangedInKnownHosts(host: String, expected: String, presented: String)
     /// `ssh`'s known_hosts marks the server's key `@revoked`.
     case hostKeyRevoked(host: String)
+    /// `ssh`'s known_hosts lists the server only with keys of other kinds
+    /// (`known` as fingerprints); `presented` is the key as `type base64`,
+    /// for `KnownHosts.trust` once the user has checked it.
+    case hostKeyNotListed(host: String, known: [String], presented: String)
     case authenticationFailed
     case unsupportedKey(String)
     /// The key text could not be parsed, or the passphrase is wrong.
@@ -159,6 +163,8 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "\(host)의 호스트 키가 ~/.ssh/known_hosts에 있는 키와 다릅니다. 서버를 재설치하지 않았다면 연결하지 마십시오. 재설치했다면 터미널에서 ssh-keygen -R '\(host)'를 실행한 뒤 다시 연결하십시오.\nknown_hosts의 키: \(expected)\n받은 키: \(presented)")
         case .hostKeyRevoked(let host):
             String(localized: "\(host)의 호스트 키는 ~/.ssh/known_hosts에서 폐기(@revoked)된 키입니다. 연결하지 않았습니다.")
+        case .hostKeyNotListed(let host, let known, let presented):
+            String(localized: "~/.ssh/known_hosts에는 \(host)의 다른 종류 키만 있어 이 서버가 보낸 키를 확인할 수 없습니다. 서버 관리자에게 지문을 확인한 뒤 맞을 때만 신뢰하십시오.\nknown_hosts의 키: \(known.joined(separator: ", "))\n받은 키: \(KnownHosts.fingerprint(ofOpenSSHKey: presented))")
         case .authenticationFailed:
             String(localized: "로그인할 수 없습니다. 사용자 이름과 비밀번호 또는 키를 확인하십시오.")
         case .unsupportedKey(let type):
@@ -182,7 +188,7 @@ extension SFTPConnectError: LocalizedError {
         case .noRoute(let address):
             String(localized: "\(address)로 가는 경로가 없습니다. 네트워크 또는 VPN 연결을 확인하십시오.")
         case .proxyCommandFailed(let command, let reason):
-            String(localized: "ProxyCommand로 서버에 닿지 못했습니다: \(command)") + (reason.isEmpty ? "" : "\n\(reason)")
+            String(localized: "ProxyCommand로 서버에 닿지 못했습니다: \(ProxyCommand.program(of: command))") + (reason.isEmpty ? "" : "\n\(reason)")
         case .unreachable(let reason):
             String(localized: "서버에 연결할 수 없습니다: \(reason)")
         }
@@ -255,7 +261,7 @@ final class SFTPConnection: @unchecked Sendable {
         timeout: TimeAmount = .seconds(15)
     ) async throws -> SFTPConnection {
         let route = hops.isEmpty
-            ? (proxyCommand.map { " (ProxyCommand: \($0))" } ?? "")
+            ? (proxyCommand.map { " (ProxyCommand: \(ProxyCommand.program(of: $0)))" } ?? "")
             : String(localized: " (경유: ") + hops.map { "\($0.endpoint.username)@\($0.endpoint.hostKeyID)" }.joined(separator: " → ") + ")"
         Log.connection.info("연결 시작: \(endpoint.username)@\(endpoint.hostKeyID)\(route)")
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -266,7 +272,7 @@ final class SFTPConnection: @unchecked Sendable {
                     chain.append(try await connect(hop, through: chain.last, hostKeys: hostKeys, group: group, timeout: timeout).client)
                 } catch let error as SFTPConnectError {
                     switch error {
-                    case .hostKeyChanged, .hostKeyChangedInKnownHosts, .hostKeyRevoked: throw error
+                    case .hostKeyChanged, .hostKeyChangedInKnownHosts, .hostKeyRevoked, .hostKeyNotListed: throw error
                     default: break
                     }
                     throw SFTPConnectError.jumpHostFailed(host: hop.endpoint.hostKeyID, reason: error.localizedDescription)

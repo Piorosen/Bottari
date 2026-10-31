@@ -152,6 +152,9 @@ import Testing
         ("ops@host", SFTPEndpoint(host: "host", username: "ops")),
         ("ops@host:2222", SFTPEndpoint(host: "host", port: 2222, username: "ops")),
         ("host:2222", SFTPEndpoint(host: "host", port: 2222, username: "me")),
+        ("[2001:db8::1]:2222", SFTPEndpoint(host: "2001:db8::1", port: 2222, username: "me")),
+        ("ops@[2001:db8::1]", SFTPEndpoint(host: "2001:db8::1", username: "ops")),
+        ("ops@2001:db8::1", SFTPEndpoint(host: "2001:db8::1", username: "ops")),
     ])
     func hopAddressesParse(text: String, expected: SFTPEndpoint) {
         #expect(SavedSite.endpoint(parsingHop: text, defaultUser: "me") == expected)

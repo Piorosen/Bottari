@@ -17,7 +17,22 @@ struct SiteManagerSheet: View {
 
     private enum Outcome {
         case success(String)
-        case failure(String, changedHostKey: String?, needsSecret: Bool)
+        case failure(String, hostKeyFix: HostKeyFix?, needsSecret: Bool)
+    }
+
+    /// What "trust and try again" does about a host key that was refused.
+    enum HostKeyFix {
+        /// Forget the remembered key, so the next one is taken.
+        case forget(host: String)
+        /// Remember this key, which known_hosts could not vouch for.
+        case trust(host: String, key: String)
+
+        func apply() {
+            switch self {
+            case .forget(let host): AppServices.knownHosts.forget(hostKeyID: host)
+            case .trust(let host, let key): AppServices.knownHosts.trust(key, hostKeyID: host)
+            }
+        }
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -64,8 +79,8 @@ struct SiteManagerSheet: View {
                     .card()
             }
             .padding(.horizontal, 12)
-            if case .failure(let message, let changedHostKey, _) = outcome {
-                failureBanner(message, changedHostKey: changedHostKey)
+            if case .failure(let message, let hostKeyFix, _) = outcome {
+                failureBanner(message, hostKeyFix: hostKeyFix)
                     .padding(.horizontal, 12)
                     .padding(.top, 10)
             }
@@ -215,7 +230,7 @@ struct SiteManagerSheet: View {
         }
     }
 
-    private func failureBanner(_ message: String, changedHostKey: String?) -> some View {
+    private func failureBanner(_ message: String, hostKeyFix: HostKeyFix?) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
@@ -223,9 +238,9 @@ struct SiteManagerSheet: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
-            if let changedHostKey {
+            if let hostKeyFix {
                 Button("새 호스트 키를 신뢰하고 다시 시도", role: .destructive) {
-                    AppServices.knownHosts.forget(hostKeyID: changedHostKey)
+                    hostKeyFix.apply()
                     Task { await run(lastActivity) }
                 }
             }
@@ -347,9 +362,14 @@ struct SiteManagerSheet: View {
     }
 
     private static func failure(_ error: any Error) -> Outcome {
-        var changedHostKey: String?
-        if case SFTPConnectError.hostKeyChanged(let host, _, _) = error {
-            changedHostKey = host
+        var hostKeyFix: HostKeyFix?
+        switch error {
+        case SFTPConnectError.hostKeyChanged(let host, _, _):
+            hostKeyFix = .forget(host: host)
+        case SFTPConnectError.hostKeyNotListed(let host, _, let key):
+            hostKeyFix = .trust(host: host, key: key)
+        default:
+            break
         }
         var needsSecret = false
         switch error {
@@ -358,7 +378,7 @@ struct SiteManagerSheet: View {
         default:
             break
         }
-        return .failure(error.localizedDescription, changedHostKey: changedHostKey, needsSecret: needsSecret)
+        return .failure(error.localizedDescription, hostKeyFix: hostKeyFix, needsSecret: needsSecret)
     }
 
     private func delete(_ site: SavedSite) {

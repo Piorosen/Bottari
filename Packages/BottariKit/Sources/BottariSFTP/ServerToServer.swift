@@ -92,13 +92,14 @@ extension SFTPFileProvider {
         defer { Task { await connection.close() } }
         let command = Self.directCopyCommand(names: items.map(\.name), from: parent, to: folder, reach: reach)
         Log.transfer.info("서버 간 직접 전송: \(endpoint.hostKeyID):\(parent.string) → \(reach.endpoint.hostKeyID):\(folder.string), \(items.count)개 항목")
-        let result = try await connection.run(command, forwarding: reach.agent)
+        let result = try await connection.run("/bin/sh -c " + Self.quote(command), forwarding: reach.agent)
         let message = result.errors.trimmingCharacters(in: .whitespacesAndNewlines)
         switch result.exitStatus {
         case 0?:
             return
-        case 255?, 70?:
-            // ssh's own failures: no route, refused, a host key or login problem.
+        case 255?, 70?, 126?, 127?:
+            // ssh's own failures (no route, refused, a host key or login
+            // problem), or no ssh, tar or mktemp on the source at all.
             throw DirectCopyError.unreachable(message)
         default:
             throw DirectCopyError.failed(message.isEmpty ? String(localized: "종료 코드 \(result.exitStatus.map(String.init) ?? "?")") : message)
@@ -107,29 +108,54 @@ extension SFTPFileProvider {
 
     /// The shell script the source runs: tar the items, pipe them to tar on
     /// the destination over ssh, and exit with whichever side failed.
+    ///
+    /// Jump hosts are chained with explicit ProxyCommands rather than `-J`,
+    /// which would check their keys against the source's own known_hosts and
+    /// ask about unknown ones with nobody to answer. If the channel closes
+    /// (the copy was cancelled), everything the script started is stopped.
     static func directCopyCommand(names: [String], from parent: RemotePath, to folder: RemotePath, reach: DirectReach) -> String {
-        var ssh = ["ssh", "-F", "/dev/null", "-o", "BatchMode=yes", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
-                   "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=15", "-o", "GlobalKnownHostsFile=/dev/null"]
-        if reach.knownHosts != nil {
-            ssh += ["-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=\"$kh\""]
-        } else {
-            ssh += ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-        }
-        if !reach.hops.isEmpty {
-            ssh += ["-J", quote(reach.hops.map { "\($0.username)@\($0.host):\($0.port)" }.joined(separator: ","))]
-        }
-        ssh += ["-p", String(reach.endpoint.port), "-l", quote(reach.endpoint.username), "--", quote(reach.endpoint.host)]
-        ssh.append(quote("tar -C \(quote(folder.string)) -xpf -"))
+        let ssh = sshCommand(to: reach.endpoint, through: reach.hops, checkingKeys: reach.knownHosts != nil)
+            + " " + quote("tar -C \(quote(folder.string)) -xpf -")
         let lines = (reach.knownHosts ?? []).map(quote).joined(separator: " ")
         return """
+        command -v ssh >/dev/null && command -v tar >/dev/null || exit 127
         kh=$(mktemp) && st=$(mktemp) || exit 70
+        export kh
         trap 'rm -f "$kh" "$st"' EXIT
+        trap 'exit 143' TERM
+        ( cat >/dev/null; kill 0 ) </dev/stdin >/dev/null 2>&1 &
         printf '%s\\n' \(lines) > "$kh"
-        ( tar -C \(quote(parent.string)) -cf - -- \(names.map(quote).joined(separator: " ")); echo $? > "$st" ) | \(ssh.joined(separator: " "))
+        ( tar -C \(quote(parent.string)) -cf - -- \(names.map(quote).joined(separator: " ")); echo $? > "$st" ) | \(ssh)
         s=$?
         [ "$s" -eq 0 ] || exit "$s"
         t=$(cat "$st")
         exit "${t:-1}"
         """
+    }
+
+    /// `ssh` to `target` through `hops`, each hop reached by the ProxyCommand
+    /// of the one after it, all with the same strict options.
+    static func sshCommand(to target: SFTPEndpoint, through hops: [SFTPEndpoint], checkingKeys: Bool) -> String {
+        sshOptions(through: hops, checkingKeys: checkingKeys) + " " + destination(target)
+    }
+
+    private static func sshOptions(through hops: [SFTPEndpoint], checkingKeys: Bool) -> String {
+        // "$kh" stays unquoted so each shell along the way expands it.
+        let keys = checkingKeys
+            ? "-o StrictHostKeyChecking=yes -o UserKnownHostsFile=\"$kh\""
+            : "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        var command = "ssh -F /dev/null -o BatchMode=yes -o ForwardAgent=no -o ClearAllForwardings=yes -o LogLevel=ERROR -o ConnectTimeout=15 -o GlobalKnownHostsFile=/dev/null \(keys)"
+        if let last = hops.last {
+            // This ssh fills %h and %p in its ProxyCommand with the target, for
+            // -W to relay to. Everything else in it is the hop's, so its "%"
+            // are doubled to come through for the hop's own ssh to expand.
+            let reachHop = sshOptions(through: Array(hops.dropLast()), checkingKeys: checkingKeys).replacingOccurrences(of: "%", with: "%%")
+            command += " -o " + quote("ProxyCommand=\(reachHop) -W %h:%p \(destination(last).replacingOccurrences(of: "%", with: "%%"))")
+        }
+        return command
+    }
+
+    private static func destination(_ endpoint: SFTPEndpoint) -> String {
+        "-p \(endpoint.port) -l \(quote(endpoint.username)) -- \(quote(endpoint.host))"
     }
 }

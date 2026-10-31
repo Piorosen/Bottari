@@ -134,6 +134,36 @@ struct OpenSSHTests {
         }
     }
 
+    @Test func savingThroughALinkAndInAFolderThatCannotBeWritten() async throws {
+        let folder = try OpenSSH.scratch()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.appending(path: "locked").path)
+            try? FileManager.default.removeItem(at: folder)
+        }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder.appending(path: "sites-available"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: folder.appending(path: "sites-enabled"), withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: folder.appending(path: "sites-available/default"))
+        try fm.createSymbolicLink(atPath: folder.appending(path: "sites-enabled/default").path, withDestinationPath: "../sites-available/default")
+        try fm.createDirectory(at: folder.appending(path: "locked"), withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: folder.appending(path: "locked/app.conf"))
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.appending(path: "locked").path)
+
+        try await withServer(authorizing: [key.publicKey]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+
+            try await provider.write(RemotePath(folder.appending(path: "sites-enabled/default").path), data: Data("new".utf8))
+            // The link is still a link, and the file it points to has the new text.
+            #expect(try fm.destinationOfSymbolicLink(atPath: folder.appending(path: "sites-enabled/default").path) == "../sites-available/default")
+            #expect(try String(contentsOf: folder.appending(path: "sites-available/default"), encoding: .utf8) == "new")
+
+            try await provider.write(RemotePath(folder.appending(path: "locked/app.conf").path), data: Data("new".utf8))
+            #expect(try String(contentsOf: folder.appending(path: "locked/app.conf"), encoding: .utf8) == "new")
+        }
+    }
+
     @Test func listingsDoNotLeaveHandlesOpen() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -226,6 +256,48 @@ struct OpenSSHTests {
         }
         await from.disconnect()
         await to.disconnect()
+    }
+
+    @Test func aServerSendsStraightToAnotherThroughAJumpHost() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sourceLogin = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let login = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 256)
+        let tree = RemotePath(folder.path)
+        try FileManager.default.createDirectory(atPath: tree.appending("from").string, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: tree.appending("to").string, withIntermediateDirectories: true)
+        try "via the bastion".write(toFile: tree.appending("from/note.txt").string, atomically: true, encoding: .utf8)
+
+        let source = try await OpenSSHServer.start(authorizing: [sourceLogin.publicKey])
+        defer { source.stop() }
+        let jump = try await OpenSSHServer.start(authorizing: [login.publicKey])
+        defer { jump.stop() }
+        let destination = try await OpenSSHServer.start(authorizing: [login.publicKey])
+        defer { destination.stop() }
+        let knownHosts = KnownHosts(fileURL: nil)
+        let from = try await SFTPFileProvider.connect(to: source.endpoint, credential: .privateKey(sourceLogin.privateKey), hostKeys: .knownHosts(knownHosts))
+        let to = try await SFTPFileProvider.connect(
+            to: destination.endpoint,
+            credential: .privateKey(login.privateKey),
+            hostKeys: .knownHosts(knownHosts),
+            via: [SSHHop(endpoint: jump.endpoint, credential: .privateKey(login.privateKey))]
+        )
+        #expect(from.canSend(directlyTo: to))
+
+        try await from.send(try await from.list(tree.appending("from")), directlyTo: to, into: tree.appending("to"))
+        #expect(try String(contentsOfFile: tree.appending("to/note.txt").string, encoding: .utf8) == "via the bastion")
+        await from.disconnect()
+        await to.disconnect()
+    }
+
+    @Test func nestedProxyCommandsExpandTokensAtTheirOwnLevel() {
+        let target = SFTPEndpoint(host: "db", port: 5432, username: "me")
+        let hops = [SFTPEndpoint(host: "edge", username: "me"), SFTPEndpoint(host: "inner", username: "me")]
+        let command = SFTPFileProvider.sshCommand(to: target, through: hops, checkingKeys: true)
+        // The ssh to inner expands %h once; the ProxyCommand reaching edge, inside it, waits a level.
+        #expect(command.contains("-W %%h:%%p"))
+        #expect(command.contains(" -W %h:%p"))
+        #expect(!command.contains("-J"))
     }
 
     @Test func passwordLoginsCannotBeLentToAnotherServer() async throws {

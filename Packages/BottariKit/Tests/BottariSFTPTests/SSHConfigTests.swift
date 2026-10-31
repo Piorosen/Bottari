@@ -94,6 +94,44 @@ import Testing
         #expect(host.identityAgent == "/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock")
     }
 
+    @Test func anEqualsSignWithSpacesAroundIt() {
+        let parsed = config("""
+        Host spaced
+          HostName = 10.0.0.5
+          Port = 2222
+          User =deploy
+          SetEnv KEY=value
+        """)
+        let host = parsed.resolve("spaced")
+        #expect(host.hostName == "10.0.0.5")
+        #expect(host.port == 2222)
+        #expect(host.user == "deploy")
+    }
+
+    @Test func linesAfterAnIncludeStayWithTheirOwnBlock() {
+        let parsed = config(
+            """
+            Include orbstack/config
+            User me
+            IdentityFile ~/.ssh/work
+
+            Host gpu
+              Include gpu/a.conf
+              Port 2200
+            """,
+            files: [
+                "/Users/me/.ssh/orbstack/config": "Host orb\n  HostName localhost\n",
+                "/Users/me/.ssh/gpu/a.conf": "User trainer\nHost other\n  User wrong\n",
+            ]
+        )
+        // The global settings below the Include reach every host, not just "orb".
+        #expect(parsed.resolve("anything").user == "me")
+        #expect(parsed.resolve("orb").identityFiles == ["/Users/me/.ssh/work"])
+        // Inside "Host gpu", the included file counts for gpu only.
+        #expect(parsed.resolve("gpu").port == 2200)
+        #expect(parsed.resolve("other").user == "me")
+    }
+
     @Test func percentTokensExpandInIdentityFiles() {
         let parsed = config("""
         Host box

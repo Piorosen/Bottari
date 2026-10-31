@@ -100,18 +100,30 @@ public struct SFTPFileProvider: FileProvider {
         } catch {
             throw await refine(error, path, expectingDirectory: true)
         }
-        var items: [FileItem] = []
-        for entry in names.flatMap(\.components) where entry.filename != "." && entry.filename != ".." {
-            let itemPath = path.appending(entry.filename)
-            var item = Self.item(itemPath, entry.attributes, longname: entry.longname)
-            if item.isSymbolicLink, let target = try? await sftp.getAttributes(at: itemPath.string) {
-                // Describe what the link points at, so a link to a folder opens like one.
-                item = Self.item(itemPath, target, longname: entry.longname, isSymbolicLink: true)
+        let entries = names.flatMap(\.components).filter { $0.filename != "." && $0.filename != ".." }
+        var items = entries.map { Self.item(path.appending($0.filename), $0.attributes, longname: $0.longname) }
+        // Describe what each link points at, so a link to a folder opens like
+        // one. A folder of links (/usr/lib) can hold thousands, so several
+        // are asked about at once rather than one round trip after another.
+        var links = items.indices.filter { items[$0].isSymbolicLink }.map { ($0, items[$0].path.string) }.makeIterator()
+        let client = UncheckedSendable(sftp)
+        await withTaskGroup(of: (Int, SFTPFileAttributes?).self) { group in
+            func askNext() {
+                guard let (index, linkPath) = links.next() else { return }
+                group.addTask { (index, try? await client.value.getAttributes(at: linkPath)) }
             }
-            items.append(item)
+            for _ in 0..<Self.linksAskedAtOnce { askNext() }
+            for await (index, target) in group {
+                if let target {
+                    items[index] = Self.item(items[index].path, target, longname: entries[index].longname, isSymbolicLink: true)
+                }
+                askNext()
+            }
         }
         return items.sorted(by: FileItem.finderOrder)
     }
+
+    static let linksAskedAtOnce = 16
 
     public func stat(_ path: RemotePath) async throws -> FileItem {
         do {
@@ -136,27 +148,37 @@ public struct SFTPFileProvider: FileProvider {
         try await write(path, from: data, resumingAt: 0)
     }
 
-    public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
+    public func write(_ given: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
+        let sftp = try await link.live().sftp
+        // Saving through a link writes the file it points to, as an editor
+        // would, instead of replacing the link with a plain file.
+        let path = await Self.followingLinks(given, on: sftp)
         guard let parent = path.parent else { throw ProviderError.permissionDenied(path) }
         // Upload next to the target and swap it in at the end, so a dropped
         // connection never leaves a half-written file where the original was.
         // What was written stays in the partial file so a retry can resume.
         let temp = path.partialWritePath
-        let sftp = try await link.live().sftp
+        let file: SFTPFile
         do {
             if offset > 0 {
                 // Drop anything past the point the caller resumes from.
                 try await sftp.setAttributes(at: temp.string, to: SFTPFileAttributes(size: UInt64(offset)))
             }
-            let file = try await sftp.openFile(filePath: temp.string, flags: offset > 0 ? [.write] : [.write, .create, .truncate])
-            do {
-                try await Self.write(UncheckedSendable(file), from: data, startingAt: UInt64(offset))
-                try await file.close()
-            } catch {
-                try? await file.close()
-                throw error
-            }
+            file = try await sftp.openFile(filePath: temp.string, flags: offset > 0 ? [.write] : [.write, .create, .truncate])
         } catch {
+            // A folder where only its files may be written (a group-writable
+            // config under /etc, say) has no room for a file beside them, so
+            // the file is rewritten where it is, as vi would.
+            if offset == 0, case ProviderError.permissionDenied = Self.translate(error, path), (try? await sftp.getAttributes(at: path.string)) != nil {
+                return try await writeInPlace(path, from: data, on: sftp)
+            }
+            throw Self.translate(error, path)
+        }
+        do {
+            try await Self.write(UncheckedSendable(file), from: data, startingAt: UInt64(offset))
+            try await file.close()
+        } catch {
+            try? await file.close()
             throw Self.translate(error, path)
         }
         do {
@@ -165,6 +187,32 @@ public struct SFTPFileProvider: FileProvider {
             // Everything was written; what went wrong is the destination itself
             // (a folder in the way, no permission), so a resume would not help.
             try? await sftp.remove(at: temp.string)
+            throw Self.translate(error, path)
+        }
+    }
+
+    /// Where writing to `path` should land: the file a link there points to,
+    /// or `path` itself when it is no link or does not exist yet.
+    static func followingLinks(_ path: RemotePath, on sftp: SFTPClient) async -> RemotePath {
+        guard (try? await sftp.getAttributes(at: path.string)) != nil,
+              let real = try? await sftp.getRealPath(atPath: path.string), real.hasPrefix("/")
+        else { return path }
+        return RemotePath(real)
+    }
+
+    /// Truncates and rewrites the file itself. Not safe against a dropped
+    /// connection, so only for when nothing can be written beside it.
+    private func writeInPlace(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, on sftp: SFTPClient) async throws {
+        do {
+            let file = try await sftp.openFile(filePath: path.string, flags: [.write, .truncate])
+            do {
+                try await Self.write(UncheckedSendable(file), from: data, startingAt: 0)
+                try await file.close()
+            } catch {
+                try? await file.close()
+                throw error
+            }
+        } catch {
             throw Self.translate(error, path)
         }
     }
@@ -204,17 +252,32 @@ public struct SFTPFileProvider: FileProvider {
         guard canRunCommands else { return FileSearch.walk(self, from: folder, matching: query, limit: limit) }
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         let pattern = trimmed.contains(where: { $0 == "*" || $0 == "?" }) ? trimmed : "*\(trimmed)*"
-        // Each match comes back as "d path" or "f path"; links to folders count as files.
-        let command = "find \(Self.quote(folder.string)) -mindepth 1 -iname \(Self.quote(pattern)) "
+        // Each match comes back as "d path" or "f path"; links to folders count
+        // as files. find's own status follows as "end N", unless head cut it off.
+        let command = "(find \(Self.quote(folder.string)) -mindepth 1 -iname \(Self.quote(pattern)) "
             + "-exec sh -c 'for p; do if [ -d \"$p\" ] && [ ! -L \"$p\" ]; then echo \"d $p\"; else echo \"f $p\"; fi; done' sh {} + "
-            + "2>/dev/null | head -n \(limit)"
+            + "2>/dev/null; echo \"end $?\") | head -n \(limit + 1)"
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let output = try await run(command)
-                    for line in output.split(separator: "\n") where line.count > 2 {
-                        let kind: FileItem.Kind = line.hasPrefix("d ") ? .directory : .file
-                        continuation.yield(FileItem(path: RemotePath(String(line.dropFirst(2))), kind: kind))
+                    let output = (try? await run(command)) ?? "end 127"
+                    var found = 0
+                    var findFailed = false
+                    for line in output.split(separator: "\n") {
+                        if line.hasPrefix("end ") {
+                            findFailed = line != "end 0"
+                        } else if line.count > 2, found < limit {
+                            let kind: FileItem.Kind = line.hasPrefix("d ") ? .directory : .file
+                            continuation.yield(FileItem(path: RemotePath(String(line.dropFirst(2))), kind: kind))
+                            found += 1
+                        }
+                    }
+                    // A find without -iname (or none at all) finds nothing and
+                    // says so; unreadable folders also fail it, but after results.
+                    if findFailed, found == 0, !Task.isCancelled {
+                        for try await item in FileSearch.walk(self, from: folder, matching: query, limit: limit) {
+                            continuation.yield(item)
+                        }
                     }
                     continuation.finish()
                 } catch {
@@ -238,8 +301,10 @@ public struct SFTPFileProvider: FileProvider {
 
     public func checksum(_ path: RemotePath) async throws -> String {
         guard canRunCommands else { throw ProviderError.unsupported(String(localized: "체크섬")) }
+        // From stdin, so the name never appears in the output: GNU sha256sum
+        // marks names with a backslash or newline by prefixing the hash.
         let file = Self.quote(path.string)
-        let output = try await run("sha256sum -- \(file) 2>/dev/null || shasum -a 256 -- \(file)")
+        let output = try await run("sha256sum < \(file) 2>/dev/null || shasum -a 256 < \(file)")
         guard let hash = output.split(whereSeparator: \.isWhitespace).first, hash.count == 64 else {
             throw ProviderError.io(String(localized: "체크섬을 읽을 수 없습니다: \(output)"))
         }
@@ -267,11 +332,13 @@ public struct SFTPFileProvider: FileProvider {
         "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    /// Runs `command` with /bin/sh whatever the account's login shell is
+    /// (csh and fish read `2>/dev/null` and `$(…)` differently, or not at all).
     static func run(_ command: String, on connection: SFTPConnection) async throws -> String {
         var output = ByteBuffer()
         var errors = ByteBuffer()
         do {
-            for try await chunk in try await connection.client.executeCommandStream(command) {
+            for try await chunk in try await connection.client.executeCommandStream("/bin/sh -c " + quote(command)) {
                 switch chunk {
                 case .stdout(let buffer): output.writeImmutableBuffer(buffer)
                 case .stderr(let buffer): errors.writeImmutableBuffer(buffer)

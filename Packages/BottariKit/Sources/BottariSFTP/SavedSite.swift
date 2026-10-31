@@ -355,7 +355,8 @@ extension SavedSite {
         return ProxyCommand.expand(command, for: endpoint, alias: sshConfigAlias ?? name)
     }
 
-    /// `[user@]host[:port]`, as ProxyJump writes a hop.
+    /// `[user@]host[:port]`, as ProxyJump writes a hop. An IPv6 address
+    /// comes bare (`2001:db8::1`, no port) or in brackets (`[2001:db8::1]:2222`).
     static func endpoint(parsingHop text: String, defaultUser: String) -> SFTPEndpoint {
         var rest = Substring(text)
         var user = defaultUser
@@ -364,7 +365,12 @@ extension SavedSite {
             rest = rest[rest.index(after: at)...]
         }
         var port = 22
-        if let colon = rest.lastIndex(of: ":"), let parsed = Int(rest[rest.index(after: colon)...]) {
+        if rest.hasPrefix("["), let close = rest.firstIndex(of: "]") {
+            let after = rest[rest.index(after: close)...]
+            if after.hasPrefix(":"), let parsed = Int(after.dropFirst()) { port = parsed }
+            rest = rest[rest.index(after: rest.startIndex)..<close]
+        } else if rest.filter({ $0 == ":" }).count == 1, let colon = rest.lastIndex(of: ":"), let parsed = Int(rest[rest.index(after: colon)...]) {
+            // One colon is a port; more mean a bare IPv6 address.
             port = parsed
             rest = rest[..<colon]
         }
