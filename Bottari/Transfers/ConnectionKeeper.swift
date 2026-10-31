@@ -17,6 +17,14 @@ final class ConnectionKeeper {
         }
     }
 
+    /// Takes a connection opened for something other than a pane, such as a
+    /// resumed transfer or a bundle preset, to close once nothing uses it.
+    func adopt(_ provider: any FileProvider) {
+        guard let server = provider as? SFTPFileProvider, !parked.contains(where: { $0.connectionID == server.connectionID }) else { return }
+        parked.append(server)
+        closeUnused()
+    }
+
     /// Closes parked connections that nothing uses any more.
     func closeUnused() {
         let unused = parked.filter { !isInUse($0) }
@@ -32,6 +40,6 @@ final class ConnectionKeeper {
         }
         let transferring = AppServices.transfers.unfinishedJobs.contains { uses($0.source.provider) || uses($0.destination.provider) }
         let onClipboard = AppServices.clipboard.content.map { uses($0.provider) } ?? false
-        return transferring || onClipboard || ExternalEdits.shared.uses(server) || BottariBundle.shared.uses(server)
+        return transferring || onClipboard || ExternalEdits.shared.uses(server) || BottariBundle.shared.uses(server) || Viewers.uses(server)
     }
 }

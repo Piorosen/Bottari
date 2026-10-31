@@ -88,18 +88,23 @@ final class TransferRecords {
         resuming.insert(record.id)
         problems[record.id] = nil
         defer { resuming.remove(record.id) }
+        var opened: [any FileProvider] = []
         do {
-            let source = try await endpoint(for: record.source)
-            let destination = try await endpoint(for: record.destination)
+            let source = try await endpoint(for: record.source, opened: &opened)
+            let destination = try await endpoint(for: record.destination, opened: &opened)
             interrupted.removeAll { $0.id == record.id }
             await queue.resume(record, from: source, to: destination)
             saveNow()
         } catch {
             problems[record.id] = error.localizedDescription
         }
+        // Closed once the job no longer needs them, or now if it never started.
+        opened.forEach(AppServices.connections.adopt)
     }
 
-    private func endpoint(for place: TransferRecord.Place) async throws -> TransferEndpoint {
+    /// `opened` collects connections made just for this, as opposed to ones a
+    /// pane or another job already had.
+    private func endpoint(for place: TransferRecord.Place, opened: inout [any FileProvider]) async throws -> TransferEndpoint {
         if place.place == "local" {
             return TransferEndpoint(LocalFileProvider(), name: place.name, place: place.place)
         }
@@ -115,6 +120,7 @@ final class TransferRecords {
             return TransferEndpoint(open.provider, name: site.name, place: place.place)
         }
         let provider = try await AppServices.sites.connect(site)
+        opened.append(provider)
         return TransferEndpoint(provider, name: site.name, place: place.place)
     }
 }

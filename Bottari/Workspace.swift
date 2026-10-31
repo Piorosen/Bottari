@@ -4,6 +4,7 @@ import BottariSFTP
 import BottariTransfer
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum PaneSide {
     case left, right
@@ -160,7 +161,10 @@ final class Workspace {
 
     func open(_ favorite: Favorites.Favorite) {
         guard let siteID = favorite.siteID else { return openOnMac(favorite.path) }
-        guard let site = AppServices.sites.site(siteID) else { return }
+        guard let site = AppServices.sites.site(siteID) else {
+            refusal = String(localized: "‘\(favorite.name)’ 즐겨찾기의 연결이 삭제되었습니다. 사이드바에서 오른쪽 클릭해 제거하십시오.")
+            return
+        }
         let pane = pane(activeSide)
         if pane.site?.id == siteID {
             Task { await pane.open(favorite.path) }
@@ -185,6 +189,8 @@ final class Workspace {
             do {
                 try await pane.connect(to: site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
                 await then?(pane)
+            } catch is CancellationError {
+                // Overtaken by another place chosen for the pane meanwhile.
             } catch {
                 if let request = PasswordRequest(site: site, side: side, error: error, typed: typedSecrets, sites: pane.library.sites, failed: failed, then: then) {
                     passwordRequest = request
@@ -325,13 +331,19 @@ final class Workspace {
         if pane.provider.capabilities.contains(.trash) {
             Task { await pane.remove(items, permanently: false) }
         } else {
-            pendingDeletion = DeletionRequest(items: items, side: side, site: pane.site, folder: pane.path)
+            pendingDeletion = DeletionRequest(items: items, side: side, site: pane.site, folder: pane.path, locationID: pane.provider.locationID)
         }
     }
 
     func confirm(_ deletion: DeletionRequest) {
         pendingDeletion = nil
         let pane = pane(deletion.side)
+        // The pane may have moved to another server while the sheet was up;
+        // the same paths there are other files.
+        if let place = deletion.locationID, pane.provider.locationID != place {
+            refusal = String(localized: "패인이 다른 위치로 바뀌어 삭제하지 않았습니다.")
+            return
+        }
         Task { await pane.remove(deletion.items, permanently: true) }
     }
 
@@ -344,14 +356,15 @@ final class Workspace {
 
     // MARK: - Drag and drop
 
-    /// What is being dragged out of a pane. Drags carry only a token; the items
-    /// themselves stay here, since remote files have no file URL to hand over.
+    /// What is being dragged out of a pane. Drags carry only a token, under a
+    /// type other apps cannot see; the items themselves stay here, since
+    /// remote files have no file URL to hand over.
     private struct PaneDrag {
+        let token: String
         let pane: PaneModel
         let items: [FileItem]
     }
 
-    private static let dragTokenPrefix = "bottari-drag:"
     private static var currentDrag: PaneDrag?
 
     /// The drag contents for `item`: the whole selection when it is selected.
@@ -359,12 +372,27 @@ final class Workspace {
     func dragProvider(for item: FileItem, from side: PaneSide) -> NSItemProvider {
         let pane = pane(side)
         let items = pane.selection.contains(item.id) ? pane.selectedItems : [item]
-        Self.currentDrag = PaneDrag(pane: pane, items: items)
-        let provider = NSItemProvider(object: (Self.dragTokenPrefix + UUID().uuidString) as NSString)
-        if pane.provider.isLocal {
-            provider.registerObject(URL(fileURLWithPath: item.path.string) as NSURL, visibility: .all)
+        let token = UUID().uuidString
+        Self.currentDrag = PaneDrag(token: token, pane: pane, items: items)
+        let provider = pane.provider.isLocal ? NSItemProvider(object: URL(fileURLWithPath: item.path.string) as NSURL) : NSItemProvider()
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.bottariPaneItems.identifier, visibility: .ownProcess) { completion in
+            completion(Data(token.utf8), nil)
+            return nil
         }
         return provider
+    }
+
+    /// The pane drag these providers carry, if they come from one.
+    private static func paneDrag(in providers: [NSItemProvider]) async -> PaneDrag? {
+        guard let carrier = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.bottariPaneItems.identifier) }) else { return nil }
+        let token: String? = await withCheckedContinuation { continuation in
+            _ = carrier.loadDataRepresentation(forTypeIdentifier: UTType.bottariPaneItems.identifier) { data, _ in
+                continuation.resume(returning: data.map { String(decoding: $0, as: UTF8.self) })
+            }
+        }
+        guard let drag = currentDrag, drag.token == token else { return nil }
+        currentDrag = nil
+        return drag
     }
 
     /// Items dropped on a pane go into its folder: copied, or moved with ⌘ held.
@@ -372,9 +400,7 @@ final class Workspace {
         let kind: TransferKind = NSEvent.modifierFlags.contains(.command) ? .move : .copy
         let destination = pane(side)
         Task {
-            let texts = await Self.loadStrings(from: providers)
-            if texts.contains(where: { $0.hasPrefix(Self.dragTokenPrefix) }), let drag = Self.currentDrag {
-                Self.currentDrag = nil
+            if let drag = await Self.paneDrag(in: providers) {
                 // Dropped back where it came from.
                 guard drag.pane !== destination else { return }
                 request(TransferRequest(
@@ -413,9 +439,7 @@ final class Workspace {
     /// Items dragged from a pane or Finder onto the bundle.
     func dropIntoBundle(_ providers: [NSItemProvider]) -> Bool {
         Task {
-            let texts = await Self.loadStrings(from: providers)
-            if texts.contains(where: { $0.hasPrefix(Self.dragTokenPrefix) }), let drag = Self.currentDrag {
-                Self.currentDrag = nil
+            if let drag = await Self.paneDrag(in: providers) {
                 BottariBundle.shared.add(drag.items, from: drag.pane.provider, site: drag.pane.site)
                 return
             }
@@ -427,19 +451,6 @@ final class Workspace {
             BottariBundle.shared.add(items, from: local, site: nil)
         }
         return true
-    }
-
-    private static func loadStrings(from providers: [NSItemProvider]) async -> [String] {
-        var loaded: [String] = []
-        for provider in providers where provider.canLoadObject(ofClass: NSString.self) {
-            let text: String? = await withCheckedContinuation { continuation in
-                _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-                    continuation.resume(returning: (object as? NSString).map { $0 as String })
-                }
-            }
-            if let text { loaded.append(text) }
-        }
-        return loaded
     }
 
     private static func loadFileURLs(from providers: [NSItemProvider]) async -> [URL] {
@@ -463,6 +474,8 @@ struct DeletionRequest: Identifiable {
     let side: PaneSide
     let site: SavedSite?
     let folder: RemotePath
+    /// The provider the items were chosen on.
+    var locationID: String?
 }
 
 /// The pane with keyboard focus, for the Edit menu's copy and paste.
@@ -471,6 +484,11 @@ struct PaneFocus {
     let side: PaneSide
 
     var pane: PaneModel { workspace.pane(side) }
+}
+
+extension UTType {
+    /// Items dragged out of a pane (declared in Info.plist).
+    static let bottariPaneItems = UTType(exportedAs: "io.github.piorosen.bottari.pane-items")
 }
 
 extension FocusedValues {

@@ -5,6 +5,8 @@ import SwiftUI
 struct PermissionsRequest: Identifiable {
     let id = UUID()
     let items: [FileItem]
+    /// The provider the items were chosen on.
+    let locationID: String
 }
 
 /// Read, write and execute for owner, group and everyone, as boxes and as the

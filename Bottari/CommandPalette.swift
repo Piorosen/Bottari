@@ -228,6 +228,13 @@ struct CommandPalette: View {
                 })
             }
         }
+        // Nothing to act on: leave out what would silently do nothing.
+        if selection.isEmpty {
+            list.removeAll { ["copy-other", "move-other", "bundle"].contains($0.id) }
+        }
+        if BottariBundle.shared.entries.isEmpty {
+            list.removeAll { $0.id == "bundle-send" }
+        }
         for profile in TunnelStore.shared.profiles {
             let active = TunnelStore.shared.state(profile.id).isActive
             list.append(PaletteCommand(id: "tunnel-\(profile.id)", title: String(localized: "터널 \(profile.name) \(active ? String(localized: "끄기") : String(localized: "켜기"))"), subtitle: profile.mode.title, symbol: "point.3.filled.connected.trianglepath.dotted", keywords: String(localized: "tunnel vpn 터널")) {

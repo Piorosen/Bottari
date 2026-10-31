@@ -38,7 +38,7 @@ struct PaneView: View {
                 case .grid: fileGrid
                 }
             }
-            .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
+            .onDrop(of: [.bottariPaneItems, .fileURL], isTargeted: $isDropTarget) { providers in
                 workspace.drop(providers, onto: side)
             }
             .overlay {
@@ -83,7 +83,9 @@ struct PaneView: View {
             listFocused = true
             workspace.focusRequest = nil
         }
-        .focusedValue(\.paneFocus, PaneFocus(workspace: workspace, side: side))
+        // While a name is typed (search, rename), keys such as ⌘⌫, ⌘A and ⌘V
+        // belong to the text, not to the files.
+        .focusedValue(\.paneFocus, model.renaming == nil && !model.isTypingInSearch ? PaneFocus(workspace: workspace, side: side) : nil)
         .onReceive(NotificationCenter.default.publisher(for: .transfersChanged)) { _ in
             model.refreshAfterTransfers(AppServices.transfers.jobs)
         }
@@ -94,6 +96,10 @@ struct PaneView: View {
         }
         .sheet(item: $permissions) { request in
             PermissionsSheet(items: request.items) { mode, scope in
+                guard model.provider.locationID == request.locationID else {
+                    model.showError(String(localized: "패인이 다른 위치로 바뀌어 권한을 바꾸지 않았습니다."))
+                    return
+                }
                 Task { await model.setPermissions(mode, on: request.items, scope: scope) }
             }
         }
@@ -462,7 +468,7 @@ struct PaneView: View {
                 }
             }
             if !readOnlyHere, model.provider.capabilities.contains(.permissions) {
-                Button("권한 변경…") { permissions = PermissionsRequest(items: items) }
+                Button("권한 변경…") { permissions = PermissionsRequest(items: items, locationID: model.provider.locationID) }
             }
             if items.count == 1, let item = items.first, !readOnlyHere, model.provider.capabilities.contains(.symbolicLinks) {
                 Button("링크 만들기") { Task { await model.makeLink(to: item) } }
@@ -545,25 +551,43 @@ struct PaneView: View {
 /// Takes the grid lines off the table SwiftUI draws, so rows sit on the card
 /// like the design's.
 private struct PlainTableRows: NSViewRepresentable {
+    /// The table once found, so each update does not walk the window again.
+    final class Coordinator {
+        weak var table: NSTableView?
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { Self.tidy(from: view) }
+        let coordinator = context.coordinator
+        DispatchQueue.main.async { Self.tidy(from: view, remembering: coordinator) }
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { Self.tidy(from: view) }
+        let coordinator = context.coordinator
+        DispatchQueue.main.async { Self.tidy(from: view, remembering: coordinator) }
     }
 
     /// The table this view sits behind: the one under its centre.
-    private static func tidy(from view: NSView) {
+    private static func tidy(from view: NSView, remembering coordinator: Coordinator) {
         guard let root = view.window?.contentView else { return }
-        let frame = view.convert(view.bounds, to: nil)
-        let center = CGPoint(x: frame.midX, y: frame.midY)
-        guard let table = tables(in: root).first(where: { table in
-            let scroll = table.enclosingScrollView ?? table
-            return scroll.convert(scroll.bounds, to: nil).contains(center)
-        }) else { return }
+        let table: NSTableView
+        if let known = coordinator.table, known.window === view.window {
+            table = known
+        } else {
+            let frame = view.convert(view.bounds, to: nil)
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            guard let found = tables(in: root).first(where: { table in
+                let scroll = table.enclosingScrollView ?? table
+                return scroll.convert(scroll.bounds, to: nil).contains(center)
+            }) else { return }
+            coordinator.table = found
+            table = found
+        }
         table.gridStyleMask = []
         table.intercellSpacing = NSSize(width: 8, height: table.intercellSpacing.height)
         if table.numberOfRows > 0, let row = table.rowView(atRow: 0, makeIfNecessary: true) {
@@ -598,6 +622,7 @@ private struct SearchField: View {
             TextField("이 폴더 아래에서 찾을 이름 (*.log 같은 패턴도 됨)", text: $text)
                 .textFieldStyle(.plain)
                 .focused($focused)
+                .onChange(of: focused) { model.isTypingInSearch = focused }
                 .onChange(of: text) { model.search(text) }
                 .onSubmit(done)
                 .onKeyPress(.escape) {

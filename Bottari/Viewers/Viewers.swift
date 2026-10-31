@@ -80,6 +80,13 @@ enum Viewers {
     static func close(_ id: UUID) {
         contexts[id] = nil
         editors[id] = nil
+        // The pane may have moved on, leaving the window the last user of its connection.
+        AppServices.connections.closeUnused()
+    }
+
+    /// Whether an open window (terminal, screen, editor…) works through this connection.
+    static func uses(_ server: SFTPFileProvider) -> Bool {
+        contexts.values.contains { ($0.provider as? SFTPFileProvider)?.connectionID == server.connectionID }
     }
 
     static func track(_ editor: EditorModel, in id: UUID) {

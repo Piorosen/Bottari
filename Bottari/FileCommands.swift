@@ -12,13 +12,16 @@ struct FileCommands: Commands {
         // Keys come from the keymap (Settings › 단축키); plain keys such as
         // Space are left to the file list, so they still type in text fields.
         CommandGroup(after: .newItem) {
-            action(.newFolder, String(localized: "새 폴더"), needsSelection: false)
+            action(.newFolder, String(localized: "새 폴더"), when: { _ in true })
             Divider()
             action(.copyToOther, String(localized: "반대편 패인에 복사"))
             action(.moveToOther, String(localized: "반대편 패인으로 이동"))
-            action(.rename, String(localized: "이름 바꾸기"))
+            action(.rename, String(localized: "이름 바꾸기"), when: { $0.selection.count == 1 })
             action(.preview, String(localized: "빠른 미리보기"))
-            action(.edit, String(localized: "편집기로 열기"))
+            action(.edit, String(localized: "편집기로 열기"), when: { pane in
+                let chosen = pane.selectedItems
+                return chosen.count == 1 && !chosen[0].isDirectory
+            })
         }
         CommandGroup(replacing: .pasteboard) {
             Button("잘라내기") { sendToTextField(#selector(NSText.cut(_:))) }
@@ -80,6 +83,7 @@ struct FileCommands: Commands {
                     }
                 }
                 .keyboardShortcut(.downArrow)
+                .disabled(focus?.pane.selectedItems.count != 1)
                 Divider()
                 Button("이 폴더에서 찾기") {
                     if let focus { focus.workspace.searchRequest = focus.side }
@@ -98,13 +102,14 @@ struct FileCommands: Commands {
         }
     }
 
-    /// A menu item for a keymap action on the focused pane.
-    private func action(_ action: PaneAction, _ title: String, needsSelection: Bool = true) -> some View {
+    /// A menu item for a keymap action on the focused pane, enabled when
+    /// `when` says the pane is in a state the action can work with.
+    private func action(_ action: PaneAction, _ title: String, when: (PaneModel) -> Bool = { !$0.selection.isEmpty }) -> some View {
         Button(title) {
             if let focus { focus.workspace.perform(action, in: focus.side) }
         }
         .keyboardShortcut(Keymap.shared.shortcut(for: action))
-        .disabled(focus == nil || (needsSelection && focus?.pane.selection.isEmpty != false))
+        .disabled(focus.map { !when($0.pane) } ?? true)
     }
 
     private func run(_ action: @escaping (PaneModel) async -> Void) {

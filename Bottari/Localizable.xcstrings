@@ -2293,6 +2293,16 @@
         }
       }
     },
+    "‘%@’ 즐겨찾기의 연결이 삭제되었습니다. 사이드바에서 오른쪽 클릭해 제거하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection behind the favorite “%@” was deleted. Right-click it in the sidebar to remove it."
+          }
+        }
+      }
+    },
     "‘%@’에 가는 길에 거치는 점프 호스트": {
       "localizations": {
         "en": {
@@ -4575,6 +4585,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete…"
+          }
+        }
+      }
+    },
+    "삭제된 연결": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted connection"
           }
         }
       }
@@ -9043,6 +9063,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch Pane"
+          }
+        }
+      }
+    },
+    "패인이 다른 위치로 바뀌어 권한을 바꾸지 않았습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pane moved to another place, so the permissions were left as they were."
+          }
+        }
+      }
+    },
+    "패인이 다른 위치로 바뀌어 삭제하지 않았습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pane moved to another place, so nothing was deleted."
           }
         }
       }

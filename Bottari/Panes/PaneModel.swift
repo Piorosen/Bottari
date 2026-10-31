@@ -30,6 +30,12 @@ final class PaneModel {
     /// "미리보기 받는 중 · 12 MB / 40 MB" while a server file downloads for a preview.
     private(set) var downloadStatus: String?
     @ObservationIgnored private var previewDownload: Task<Void, Never>?
+    /// Which download the footer and `previewDownload` belong to, so an older
+    /// one finishing late does not clear a newer one's.
+    @ObservationIgnored private var previewDownloadID: UUID?
+    @ObservationIgnored private var downloadStatusID: UUID?
+    /// The search field has the keyboard, so file commands leave its keys alone.
+    var isTypingInSearch = false
 
     /// What to find under the folder; nil while the pane shows the folder itself.
     private(set) var searchQuery: String?
@@ -43,6 +49,8 @@ final class PaneModel {
     private var forwardStack: [RemotePath] = []
     private var siteID: SavedSite.ID?
     @ObservationIgnored private var loadGeneration = 0
+    /// Bumped by every connect and switch, so only the newest one lands.
+    @ObservationIgnored private var placeGeneration = 0
     /// Ended transfers this pane has already reloaded for.
     @ObservationIgnored private var seenTransfers: Set<TransferJob.ID> = []
     @ObservationIgnored private var hasStarted = false
@@ -88,16 +96,32 @@ final class PaneModel {
 
     /// Connects to a saved site and shows it in this pane. `typedSecrets` are
     /// passwords the user just typed for it (see `SiteLibrary.connect`).
+    /// A connect overtaken by a newer one (the user clicked elsewhere
+    /// meanwhile) closes what it opened and throws `CancellationError`.
     func connect(to site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true) async throws {
+        placeGeneration += 1
+        let generation = placeGeneration
         connectingSite = site
-        defer { connectingSite = nil }
+        defer { if generation == placeGeneration { connectingSite = nil } }
         let provider = try await library.connect(site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
+        guard generation == placeGeneration else {
+            await AppServices.connections.release(provider)
+            throw CancellationError()
+        }
         await switchProvider(to: provider, site: site)
     }
 
     /// Shows a different location in this pane, starting at the site's start
     /// folder or the provider's home, and closes the connection the pane was using before.
     func switchProvider(to newProvider: any FileProvider, site: SavedSite? = nil) async {
+        if connectingSite?.id != site?.id || site == nil {
+            placeGeneration += 1
+            connectingSite = nil
+        }
+        // Results and downloads from the old place mean nothing here.
+        endSearch()
+        cancelPreviewDownload()
+        renaming = nil
         let previous = provider
         provider = newProvider
         siteID = site?.id
@@ -121,7 +145,7 @@ final class PaneModel {
     }
 
     func selectAll() {
-        selection = Set(visibleItems.map(\.id))
+        selection = Set(shownItems.map(\.id))
     }
 
     /// Reloads if a transfer that just ended wrote into this folder or moved files out of it.
@@ -133,6 +157,9 @@ final class PaneModel {
             let wroteHere = job.destination.provider.locationID == here && job.destinationFolder == path
             let movedOut = job.kind == .move && job.source.provider.locationID == here && job.items.contains { $0.path.parent == path }
             touched = touched || wroteHere || movedOut
+            if job.kind == .move, job.source.provider.locationID == here {
+                forgetResults(job.items.map(\.path))
+            }
         }
         if touched {
             Task { await reload() }
@@ -205,6 +232,10 @@ final class PaneModel {
         errorMessage = nil
     }
 
+    func showError(_ message: String) {
+        errorMessage = message
+    }
+
     // MARK: - Search
 
     func beginSearch() {
@@ -235,6 +266,8 @@ final class PaneModel {
                 guard !Task.isCancelled else { return }
                 self?.errorMessage = error.localizedDescription
             }
+            // A cancelled search ends quietly too; the newer one owns the spinner.
+            guard !Task.isCancelled else { return }
             self?.isSearching = false
         }
     }
@@ -245,6 +278,17 @@ final class PaneModel {
         searchQuery = nil
         searchResults = []
         isSearching = false
+        isTypingInSearch = false
+    }
+
+    /// Drops results that are gone: trashed, deleted, renamed or moved away.
+    private func forgetResults(_ paths: [RemotePath]) {
+        guard !searchResults.isEmpty else { return }
+        let gone = Set(paths)
+        searchResults.removeAll { item in
+            gone.contains(item.path) || gone.contains { item.path.string.hasPrefix($0.string + "/") }
+        }
+        selection.subtract(paths)
     }
 
     /// Opens the folder holding a search result, with the result selected.
@@ -271,10 +315,8 @@ final class PaneModel {
             quickLookURL = nil
             return
         }
-        if let download = previewDownload {
-            download.cancel()
-            previewDownload = nil
-            downloadStatus = nil
+        if previewDownload != nil {
+            cancelPreviewDownload()
             return
         }
         let chosen = selectedItems
@@ -285,8 +327,15 @@ final class PaneModel {
             return
         }
         guard !first.isDirectory else { return }
+        let id = UUID()
+        previewDownloadID = id
         previewDownload = Task {
-            defer { previewDownload = nil }
+            defer {
+                if previewDownloadID == id {
+                    previewDownload = nil
+                    previewDownloadID = nil
+                }
+            }
             do {
                 let url = try await download(first)
                 guard !Task.isCancelled else { return }
@@ -299,15 +348,30 @@ final class PaneModel {
         }
     }
 
+    private func cancelPreviewDownload() {
+        previewDownload?.cancel()
+        previewDownload = nil
+        previewDownloadID = nil
+        downloadStatus = nil
+        downloadStatusID = nil
+    }
+
     /// A local copy of a server file through the cache, reporting progress in the footer.
     func download(_ item: FileItem) async throws -> URL {
         let total = item.size.map { ByteFormat.string($0) }
+        let id = UUID()
+        downloadStatusID = id
         downloadStatus = String(localized: "받는 중…")
-        defer { downloadStatus = nil }
+        defer {
+            if downloadStatusID == id {
+                downloadStatus = nil
+                downloadStatusID = nil
+            }
+        }
         return try await AppServices.fileCache.localURL(for: item, from: provider) { [weak self] received in
             let text = String(localized: "받는 중 · \(ByteFormat.string(received))") + (total.map { " / \($0)" } ?? "")
             Task { @MainActor in
-                if self?.downloadStatus != nil { self?.downloadStatus = text }
+                if self?.downloadStatusID == id { self?.downloadStatus = text }
             }
         }
     }
@@ -347,6 +411,13 @@ final class PaneModel {
         } catch {
             errorMessage = error.localizedDescription
             return
+        }
+        if showsSearchResults, let index = searchResults.firstIndex(where: { $0.id == item.id }) {
+            if let renamed = try? await provider.stat(target) {
+                searchResults[index] = renamed
+            } else {
+                searchResults.remove(at: index)
+            }
         }
         await reload()
         selection = [target]
@@ -417,6 +488,7 @@ final class PaneModel {
     func remove(_ doomed: [FileItem], permanently: Bool) async {
         let trash = !permanently && provider.capabilities.contains(.trash)
         isLoading = true
+        var removed: [RemotePath] = []
         for item in doomed {
             do {
                 if trash {
@@ -424,11 +496,13 @@ final class PaneModel {
                 } else {
                     try await provider.delete(item.path)
                 }
+                removed.append(item.path)
             } catch {
                 errorMessage = error.localizedDescription
                 break
             }
         }
+        forgetResults(removed)
         await reload()
     }
 
@@ -491,7 +565,10 @@ final class PaneModel {
         do {
             let listing = try await provider.list(destination)
             guard generation == loadGeneration else { return false }
-            if destination != path { endSearch() }
+            if destination != path {
+                endSearch()
+                cancelPreviewDownload()
+            }
             path = destination
             items = listing
             if searchQuery == nil {

@@ -13,6 +13,20 @@
 	<string>$(BOTTARI_GOOGLE_CLIENT_ID)</string>
 	<key>BottariGoogleClientSecret</key>
 	<string>$(BOTTARI_GOOGLE_CLIENT_SECRET)</string>
+	<!-- What a drag between panes carries; only Bottari itself can read it. -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.piorosen.bottari.pane-items</string>
+			<key>UTTypeDescription</key>
+			<string>Bottari items</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Why macOS asks for access; the English text is in Bottari/InfoPlist.xcstrings. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>집이나 회사 네트워크에 있는 NAS와 서버에 연결합니다.</string>

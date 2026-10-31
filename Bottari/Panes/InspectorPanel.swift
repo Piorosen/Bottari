@@ -123,7 +123,16 @@ struct InspectorPanel: View {
             }
         case .image:
             if provider.isLocal {
-                preview = Self.thumbnail(CGImageSourceCreateWithURL(URL(fileURLWithPath: item.path.string) as CFURL, nil)).map(Preview.image) ?? .none
+                // Reading it would make macOS download it from iCloud first.
+                if let cloud = item.cloud, cloud != .downloaded {
+                    preview = .message(String(localized: "iCloud에만 있음"))
+                    return
+                }
+                preview = .loading
+                let url = URL(fileURLWithPath: item.path.string)
+                let image = await Self.thumbnail { CGImageSourceCreateWithURL(url as CFURL, nil) }
+                guard !Task.isCancelled else { return }
+                preview = image.map(Preview.image) ?? .none
                 return
             }
             guard size <= 5_000_000 else {
@@ -134,7 +143,9 @@ struct InspectorPanel: View {
             do {
                 let data = try await provider.readData(item.path)
                 guard !Task.isCancelled else { return }
-                preview = Self.thumbnail(CGImageSourceCreateWithData(data as CFData, nil)).map(Preview.image) ?? .none
+                let image = await Self.thumbnail { CGImageSourceCreateWithData(data as CFData, nil) }
+                guard !Task.isCancelled else { return }
+                preview = image.map(Preview.image) ?? .none
             } catch {
                 if !Task.isCancelled { preview = .message(String(localized: "미리 볼 수 없음")) }
             }
@@ -143,12 +154,18 @@ struct InspectorPanel: View {
         }
     }
 
-    private static func thumbnail(_ source: CGImageSource?) -> NSImage? {
-        guard let source, let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: 600,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-        ] as CFDictionary) else { return nil }
+    /// Decoding a large photo takes a while, so it happens off the main
+    /// thread, where arrowing through a folder would stutter.
+    private static func thumbnail(_ source: @escaping @Sendable () -> CGImageSource?) async -> NSImage? {
+        let decoded = await Task.detached(priority: .userInitiated) { () -> DecodedImage? in
+            guard let source = source(), let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 600,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+            ] as CFDictionary) else { return nil }
+            return DecodedImage(image: image)
+        }.value
+        guard let image = decoded?.image else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
 
@@ -257,4 +274,9 @@ struct InspectorPanel: View {
         let bytes = selected.compactMap(\.size).reduce(0, +)
         return bytes > 0 ? ByteFormat.string(bytes) : ""
     }
+}
+
+/// A thumbnail on its way back from the decoding thread; nothing else holds it.
+private nonisolated struct DecodedImage: @unchecked Sendable {
+    let image: CGImage
 }

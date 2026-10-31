@@ -132,6 +132,8 @@ final class BottariBundle {
                 missing.append(place.path.name)
             }
         }
+        // Closed once the bundle lets go of their items.
+        providers.values.forEach(AppServices.connections.adopt)
         return missing
     }
 

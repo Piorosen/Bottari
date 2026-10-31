@@ -20,6 +20,12 @@ struct Sidebar: View {
 
     private static let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? ?? String(localized: "이 Mac")
 
+    /// Where a favorite lives: its site's name, this Mac, or a site deleted since.
+    private func favoritePlace(_ favorite: Favorites.Favorite) -> String {
+        guard let siteID = favorite.siteID else { return String(localized: "이 Mac") }
+        return library.site(siteID)?.name ?? String(localized: "삭제된 연결")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -28,7 +34,7 @@ struct Sidebar: View {
                         group(String(localized: "즐겨찾기")) {
                             ForEach(Favorites.shared.items) { favorite in
                                 SidebarRow(symbol: "bt.star", title: favorite.name, isCurrent: isCurrent(favorite)) {
-                                    Text(favorite.siteID.flatMap { library.site($0)?.name } ?? String(localized: "이 Mac"))
+                                    Text(favoritePlace(favorite))
                                         .font(.themeMono(.caption2))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
@@ -276,7 +282,7 @@ private struct BundleCard: View {
         }
         .padding(12)
         .card(highlighted: isDropTarget)
-        .onDrop(of: [.utf8PlainText, .fileURL], isTargeted: $isDropTarget) { providers in
+        .onDrop(of: [.bottariPaneItems, .fileURL], isTargeted: $isDropTarget) { providers in
             workspace.dropIntoBundle(providers)
         }
         .alert("보따리 프리셋 이름", isPresented: $namingPreset) {
