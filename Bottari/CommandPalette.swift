@@ -202,6 +202,12 @@ struct CommandPalette: View {
             PaletteCommand(id: "reload", title: String(localized: "새로고침"), subtitle: "⌘R", symbol: "arrow.clockwise", keywords: "reload refresh") {
                 Task { await pane.reload() }
             },
+            PaletteCommand(id: "mirror", title: String(localized: "반대편 패인에 이 폴더 열기"), subtitle: "⌥⌘O", symbol: "rectangle.split.2x1", keywords: "mirror same folder other pane") {
+                workspace.showInOtherPane(from: side)
+            },
+            PaletteCommand(id: "swap", title: String(localized: "두 패인 바꾸기"), subtitle: "⌥⌘U", symbol: "arrow.left.arrow.right", keywords: "swap exchange panes") {
+                workspace.swapPanes()
+            },
             PaletteCommand(id: "hidden", title: pane.showsHiddenFiles ? String(localized: "숨김 파일 감추기") : String(localized: "숨김 파일 보기"), symbol: "eye", keywords: "hidden dotfiles") {
                 pane.showsHiddenFiles.toggle()
             },

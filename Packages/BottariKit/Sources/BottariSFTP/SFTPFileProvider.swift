@@ -426,6 +426,9 @@ public struct SFTPFileProvider: FileProvider {
                     offset += UInt64(slice.readableBytes)
                 }
             }
+            // A stream read by a cancelled task (a paused or cancelled
+            // transfer) just stops, as if the file had ended there.
+            try Task.checkCancellation()
             try await group.waitForAll()
         }
     }

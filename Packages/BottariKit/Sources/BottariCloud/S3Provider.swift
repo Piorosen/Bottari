@@ -161,6 +161,9 @@ public struct S3Provider: FileProvider {
                     parts.append((parts.count + 1, try await uploadPart(key, uploadID: uploadID!, number: parts.count + 1, data: Data(part), path: path)))
                 }
             }
+            // A stream read by a cancelled task (a paused or cancelled
+            // transfer) just stops, as if the file had ended there.
+            try Task.checkCancellation()
             guard let uploadID else {
                 var request = URLRequest(url: configuration.url(for: key))
                 request.httpMethod = "PUT"

@@ -155,6 +155,8 @@ final class MemoryFileProvider: FileProvider {
                 received.append(chunk)
                 if fails { throw ProviderError.io("디스크가 가득 찼어요") }
             }
+            // As the real providers do: a cancelled stream is not the whole file.
+            try Task.checkCancellation()
         } catch {
             state.withLock { $0.entries[partial] = Entry(data: received) }
             throw error

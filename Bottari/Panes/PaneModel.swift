@@ -160,6 +160,36 @@ final class PaneModel {
         await AppServices.connections.release(previous)
     }
 
+    /// Trades places with `other`: where each pane is, what it shows, its
+    /// history and selection. Connections move along with the panes.
+    func exchange(with other: PaneModel) {
+        endSearch()
+        other.endSearch()
+        cancelPreviewDownload()
+        other.cancelPreviewDownload()
+        // Anything either pane was still loading or connecting to is stale now.
+        loadGeneration += 1
+        other.loadGeneration += 1
+        placeGeneration += 1
+        other.placeGeneration += 1
+        connectingSite = nil
+        other.connectingSite = nil
+        isLoading = false
+        other.isLoading = false
+        renaming = nil
+        other.renaming = nil
+        swap(&provider, &other.provider)
+        swap(&path, &other.path)
+        swap(&items, &other.items)
+        swap(&siteID, &other.siteID)
+        swap(&backStack, &other.backStack)
+        swap(&forwardStack, &other.forwardStack)
+        swap(&selection, &other.selection)
+        swap(&errorMessage, &other.errorMessage)
+        swap(&showsHiddenFiles, &other.showsHiddenFiles)
+        swap(&viewMode, &other.viewMode)
+    }
+
     /// Lets go of the pane's connection, e.g. when its window closes. It stays
     /// open while a transfer still uses it.
     func disconnect() async {

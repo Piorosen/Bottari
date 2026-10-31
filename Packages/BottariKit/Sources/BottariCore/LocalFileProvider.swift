@@ -106,6 +106,10 @@ public struct LocalFileProvider: FileProvider {
                 for try await chunk in data {
                     try handle.write(contentsOf: chunk)
                 }
+                // A stream read by a cancelled task (a paused or cancelled
+                // transfer) just stops, as if the file had ended there; what
+                // arrived stays partial instead of becoming the file.
+                try Task.checkCancellation()
                 try handle.close()
             } catch {
                 try? handle.close()
@@ -135,6 +139,7 @@ public struct LocalFileProvider: FileProvider {
         for try await chunk in read(path, range: nil) {
             hash.update(data: chunk)
         }
+        try Task.checkCancellation()
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
@@ -304,6 +309,18 @@ public struct LocalFileProvider: FileProvider {
         var first = Darwin.stat(), second = Darwin.stat()
         guard lstat(a.string, &first) == 0, lstat(b.string, &second) == 0 else { return false }
         return first.st_dev == second.st_dev && first.st_ino == second.st_ino
+    }
+
+    /// Whether two paths (or the folders they would go in) are on one volume,
+    /// where a copy can be a clone and a move a rename.
+    public static func areOnSameVolume(_ a: RemotePath, _ b: RemotePath) -> Bool {
+        func volume(_ path: RemotePath) -> (any NSCopying & NSSecureCoding & NSObjectProtocol)? {
+            var probe = path
+            while !FileManager.default.fileExists(atPath: probe.string), let parent = probe.parent { probe = parent }
+            return try? URL(fileURLWithPath: probe.string).resourceValues(forKeys: [.volumeIdentifierKey]).volumeIdentifier
+        }
+        guard let first = volume(a), let second = volume(b) else { return true }
+        return first.isEqual(second)
     }
 
     /// APFS and HFS+ always treat the two ways of typing "é" or "한" as one

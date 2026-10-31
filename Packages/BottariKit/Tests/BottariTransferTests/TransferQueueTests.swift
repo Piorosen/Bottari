@@ -82,6 +82,26 @@ import Testing
         #expect(TransferQueue.route(.move, from: server, to: server) == .withinLocation)
     }
 
+    @Test func aFolderCopiedOnTheMacGoesFileByFile() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "bottari-local-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        for name in ["photos/a.jpg", "photos/b.jpg", "photos/raw/c.dng"] {
+            let url = root.appending(path: "src/" + name)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(repeating: 1, count: 1000).write(to: url)
+        }
+        try FileManager.default.createDirectory(at: root.appending(path: "dst"), withIntermediateDirectories: true)
+        let local = LocalFileProvider()
+        let photos = try await local.stat(RemotePath(root.appending(path: "src/photos").path))
+
+        let job = try await finished(queue.enqueue(.copy, [photos], from: TransferEndpoint(local), to: TransferEndpoint(local), into: RemotePath(root.appending(path: "dst").path)))
+
+        #expect(job.state == .finished)
+        // Each file counted and copied on its own, rather than one folder-sized step.
+        #expect(job.completedFiles == 3 && job.transferredBytes == 3000)
+        #expect(FileManager.default.fileExists(atPath: root.appending(path: "dst/photos/raw/c.dng").path))
+    }
+
     @Test func linkedFoldersAreNotFollowed() async throws {
         mac.addFile("/project/main.swift", "print()")
         mac.addFile("/project/node_modules/huge.js", "…")

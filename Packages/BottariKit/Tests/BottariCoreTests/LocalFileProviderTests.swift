@@ -20,6 +20,22 @@ import Testing
         try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: path.string)
     }
 
+    @Test func aCancelledWriteNeverBecomesTheFile() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let target = dir.appending("upload.bin")
+        let (stream, more) = AsyncThrowingStream<Data, any Error>.makeStream()
+        let writing = Task { try await provider.write(target, from: stream) }
+        more.yield(Data(repeating: 1, count: 1000))
+        try await Task.sleep(for: .milliseconds(50))
+        // Cancelling ends the stream as if the file stopped here.
+        writing.cancel()
+        let result = await writing.result
+        #expect(throws: CancellationError.self) { try result.get() }
+        #expect(!FileManager.default.fileExists(atPath: target.string))
+        more.finish()
+    }
+
     @Test func renamingOnlyTheCaseWorksWhereTheDiskIgnoresIt() async throws {
         let dir = try makeTempDirectory()
         defer { cleanUp(dir) }

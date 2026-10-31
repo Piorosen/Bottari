@@ -311,6 +311,16 @@
         }
       }
     },
+    "%@, 폴더": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, folder"
+          }
+        }
+      }
+    },
     "%@:%lld 연결 실패 · %@": {
       "localizations": {
         "en": {
@@ -3489,6 +3499,16 @@
         }
       }
     },
+    "두 패인 바꾸기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swap Panes"
+          }
+        }
+      }
+    },
     "둘 다 유지": {
       "localizations": {
         "en": {
@@ -3965,6 +3985,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy to Other Pane"
+          }
+        }
+      }
+    },
+    "반대편 패인에 이 폴더 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show This Folder in the Other Pane"
           }
         }
       }

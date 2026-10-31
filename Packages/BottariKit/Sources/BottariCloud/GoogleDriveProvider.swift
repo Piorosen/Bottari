@@ -125,6 +125,9 @@ public struct GoogleDriveProvider: FileProvider {
                 buffer.removeFirst(piece.count)
             }
         }
+        // A stream read by a cancelled task (a paused or cancelled transfer)
+        // just stops, as if the file had ended there.
+        try Task.checkCancellation()
         let finished = try await uploadChunk(buffer, to: session, at: sent, total: sent + Int64(buffer.count), path: path)
         // The folder's listing takes the new file in, instead of being fetched
         // again for each of a thousand uploads into it.

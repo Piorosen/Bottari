@@ -69,7 +69,8 @@ import Testing
 
         #expect(job.route == .direct)
         #expect(job.state == .finished)
-        #expect(sent.withLock { $0.paths } == ["/site", "/db.sql"])
+        // Sent side by side, so in either order.
+        #expect(sent.withLock { $0.paths }.sorted() == ["/db.sql", "/site"])
         #expect(backup.text("/site/img/logo.svg") == "<svg/>")
         #expect(backup.text("/db.sql") == "dump")
         // Nothing was read through the Mac.

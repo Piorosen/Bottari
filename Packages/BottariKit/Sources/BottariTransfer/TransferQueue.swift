@@ -278,8 +278,17 @@ public final class TransferQueue {
             fail(item, error.localizedDescription, retry: rescan, in: job)
             return
         }
+        // On the Mac, one system call per folder would show no progress, not
+        // stop when cancelled, and skip the clash questions: folders are gone
+        // through file by file, and files bound for another disk are streamed.
+        // Within one disk a file is still copied (cloned, on APFS) or renamed whole.
+        let localAcrossDisks = job.route == .withinLocation && job.source.provider.isLocal
+            && !LocalFileProvider.areOnSameVolume(item.path, destination.parent ?? destination)
         let wholeItem: WorkItem.Action = switch job.route {
-        case .withinLocation: job.kind == .move ? .rename : .providerCopy
+        case .withinLocation where localAcrossDisks: .stream
+        case .withinLocation where job.kind == .move: .rename
+        case .withinLocation where job.source.provider.isLocal && item.isDirectory: .stream
+        case .withinLocation: .providerCopy
         case .direct where !throughMac: .direct
         default: .stream
         }

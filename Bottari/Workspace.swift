@@ -54,6 +54,8 @@ final class Workspace {
     var searchRequest: PaneSide?
     /// Opens viewer windows; the main window sets it, since only views can open windows.
     @ObservationIgnored var viewerOpener: ViewerOpener?
+    /// The main window used last, for requests from elsewhere (Settings) to land in.
+    @ObservationIgnored static weak var lastActive: Workspace?
 
     init(left: PaneModel = PaneModel(provider: LocalFileProvider()), right: PaneModel = PaneModel(provider: LocalFileProvider())) {
         self.left = left
@@ -209,6 +211,33 @@ final class Workspace {
         var typed = request.typed
         typed[request.key] = secret
         connect(request.site, in: request.side, typedSecrets: typed, keepingTypedSecrets: keeping, failed: request.failed, then: request.then)
+    }
+
+    /// The two panes trade places.
+    func swapPanes() {
+        left.exchange(with: right)
+        activeSide = activeSide.other
+        focusRequest = activeSide
+    }
+
+    /// Shows the folder of the pane on `side` in the other pane as well:
+    /// the same place on the Mac, or a connection of its own to the same site.
+    func showInOtherPane(from side: PaneSide) {
+        let source = pane(side)
+        let target = pane(side.other)
+        let folder = source.path
+        if source.provider.isLocal {
+            Task {
+                if !target.provider.isLocal { await target.switchProvider(to: LocalFileProvider()) }
+                await target.open(folder)
+            }
+        } else if let site = source.site {
+            if target.site?.id == site.id {
+                Task { await target.open(folder) }
+            } else {
+                connect(site, in: side.other, then: { await $0.open(folder) })
+            }
+        }
     }
 
     func isOpen(_ site: SavedSite) -> Bool {

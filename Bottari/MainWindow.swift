@@ -8,6 +8,7 @@ struct MainWindow: View {
     @State private var workspace: Workspace
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.controlActiveState) private var activeState
 
     init(workspace: Workspace = Workspace()) {
         _workspace = State(initialValue: workspace)
@@ -66,8 +67,13 @@ struct MainWindow: View {
                 openWindow(id: windowID, value: context)
             }
         }
+        .onChange(of: activeState, initial: true) {
+            if activeState == .key { Workspace.lastActive = workspace }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openOnMac)) { notification in
-            if let path = notification.object as? String { workspace.openOnMac(RemotePath(path)) }
+            // Only the window used last, not every window that is open.
+            guard Workspace.lastActive === workspace, let path = notification.object as? String else { return }
+            workspace.openOnMac(RemotePath(path))
         }
         .onChange(of: hasPendingConflict) {
             // A clash needs an answer; show where to give it.

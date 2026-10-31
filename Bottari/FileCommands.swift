@@ -92,6 +92,15 @@ struct FileCommands: Commands {
                 Button("새로고침") { run { await $0.reload() } }
                     .keyboardShortcut("r")
                 Divider()
+                Button("반대편 패인에 이 폴더 열기") {
+                    if let focus { focus.workspace.showInOtherPane(from: focus.side) }
+                }
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                Button("두 패인 바꾸기") {
+                    focus?.workspace.swapPanes()
+                }
+                .keyboardShortcut("u", modifiers: [.command, .option])
+                Divider()
                 Button("SSH 터미널") {
                     if let focus { focus.workspace.openTerminal(in: focus.side) }
                 }

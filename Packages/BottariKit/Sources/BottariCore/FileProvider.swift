@@ -155,6 +155,8 @@ extension FileProvider {
         for try await chunk in read(path, range: range) {
             out.append(chunk)
         }
+        // A cancelled read ends early, as if the file were shorter.
+        try Task.checkCancellation()
         return out
     }
 

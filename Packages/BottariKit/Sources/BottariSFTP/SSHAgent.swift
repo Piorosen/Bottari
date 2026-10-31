@@ -71,11 +71,14 @@ struct SSHAgentClient: Sendable {
         guard path.count < MemoryLayout.size(ofValue: address.sun_path) else { throw SSHAgentError.unavailable(socketPath) }
         address.sun_family = sa_family_t(AF_UNIX)
         withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: path) }
-        let connected = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+        var connected: Int32
+        repeat {
+            connected = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
             }
-        }
+        } while connected != 0 && errno == EINTR
         guard connected == 0 else { throw SSHAgentError.unavailable(socketPath) }
 
         var message = Data()
@@ -85,6 +88,8 @@ struct SSHAgentClient: Sendable {
             var sent = 0
             while sent < buffer.count {
                 let n = write(fd, buffer.baseAddress! + sent, buffer.count - sent)
+                // A signal (a child process ending, say) only interrupted it.
+                if n < 0, errno == EINTR { continue }
                 guard n > 0 else { throw SSHAgentError.unavailable(socketPath) }
                 sent += n
             }
@@ -101,6 +106,7 @@ struct SSHAgentClient: Sendable {
         try data.withUnsafeMutableBytes { buffer in
             while received < count {
                 let n = read(fd, buffer.baseAddress! + received, count - received)
+                if n < 0, errno == EINTR { continue }
                 guard n > 0 else { throw SSHAgentError.unexpectedReply }
                 received += n
             }

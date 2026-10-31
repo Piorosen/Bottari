@@ -369,6 +369,11 @@ struct PaneView: View {
                     })
                     .contextMenu { contextMenu(for: selected ? model.selectedItems : [item]) }
                     .onDrag { workspace.dragProvider(for: item, from: side) }
+                    // Taps on a plain view: tell VoiceOver what it is and does.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(item.isDirectory ? String(localized: "\(item.name), 폴더") : item.name)
+                    .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityAction { workspace.open(item, in: side) }
                 }
             }
             .padding(10)
