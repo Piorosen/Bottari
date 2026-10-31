@@ -36,7 +36,7 @@ step "보관 (App Store, 빌드 $build_number)"
 xcodebuild -project Bottari.xcodeproj -scheme "Bottari App Store" -configuration Release \
   -destination 'generic/platform=macOS' -derivedDataPath "$derived" -quiet \
   archive -archivePath "$archive" "${auth[@]}" \
-  DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$build_number" \
+  DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" CURRENT_PROJECT_VERSION="$build_number" \
   ${BUNDLE_ID:+PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"} \
   BOTTARI_GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}" BOTTARI_GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-}"
 
