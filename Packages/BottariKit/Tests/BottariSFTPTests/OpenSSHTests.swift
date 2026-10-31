@@ -134,6 +134,21 @@ struct OpenSSHTests {
         }
     }
 
+    @Test func listingsDoNotLeaveHandlesOpen() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        // sftp-server keeps each open directory as a file descriptor; here it
+        // gets 64 of them, as a busy server might have left.
+        try await withServer(authorizing: [key.publicKey], extraConfig: ["Subsystem sftp ulimit -n 64; exec /usr/libexec/sftp-server"]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+            for _ in 0..<200 {
+                _ = try await provider.list(RemotePath(folder.path))
+            }
+        }
+    }
+
     // MARK: Agent forwarding
 
     @Test func aCommandCanUseTheForwardedAgent() async throws {

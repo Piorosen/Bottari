@@ -1,0 +1,108 @@
+{
+  "sourceLanguage": "ko",
+  "strings": {
+    "CFBundleDisplayName": {
+      "shouldTranslate": false
+    },
+    "NSDesktopFolderUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari shows the files on your Desktop and sends them to and from your servers."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "데스크탑의 파일을 보여 주고 서버와 주고받습니다."
+          }
+        }
+      }
+    },
+    "NSDocumentsFolderUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari shows the files in Documents and sends them to and from your servers."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "문서 폴더의 파일을 보여 주고 서버와 주고받습니다."
+          }
+        }
+      }
+    },
+    "NSDownloadsFolderUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari shows the files in Downloads and sends them to and from your servers."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다운로드 폴더의 파일을 보여 주고 서버와 주고받습니다."
+          }
+        }
+      }
+    },
+    "NSHumanReadableCopyright": {
+      "shouldTranslate": false
+    },
+    "NSLocalNetworkUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari connects to the NAS and servers on your home or office network."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "집이나 회사 네트워크에 있는 NAS와 서버에 연결합니다."
+          }
+        }
+      }
+    },
+    "NSNetworkVolumesUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari shows the files on network volumes and sends them to and from your servers."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네트워크 볼륨의 파일을 보여 주고 서버와 주고받습니다."
+          }
+        }
+      }
+    },
+    "NSRemovableVolumesUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari shows the files on external disks and sends them to and from your servers."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "외장 디스크의 파일을 보여 주고 서버와 주고받습니다."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

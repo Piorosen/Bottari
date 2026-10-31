@@ -13,5 +13,18 @@
 	<string>$(BOTTARI_GOOGLE_CLIENT_ID)</string>
 	<key>BottariGoogleClientSecret</key>
 	<string>$(BOTTARI_GOOGLE_CLIENT_SECRET)</string>
+	<!-- Why macOS asks for access; the English text is in Bottari/InfoPlist.xcstrings. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>집이나 회사 네트워크에 있는 NAS와 서버에 연결합니다.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>데스크탑의 파일을 보여 주고 서버와 주고받습니다.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>문서 폴더의 파일을 보여 주고 서버와 주고받습니다.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>다운로드 폴더의 파일을 보여 주고 서버와 주고받습니다.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>외장 디스크의 파일을 보여 주고 서버와 주고받습니다.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>네트워크 볼륨의 파일을 보여 주고 서버와 주고받습니다.</string>
 </dict>
 </plist>

@@ -177,6 +177,8 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public var passphraseKey: String { "site.\(id.uuidString).passphrase" }
     /// The VNC or Screen Sharing password.
     public var screenPasswordKey: String { "site.\(id.uuidString).screen" }
+    /// The account a Screen Sharing password belongs to, kept beside it.
+    public var screenUsernameKey: String { "site.\(id.uuidString).screen-user" }
     public var s3SecretKey: String { "site.\(id.uuidString).s3secret" }
     /// The archived Google sign-in, base64.
     public var googleSignInKey: String { "site.\(id.uuidString).google" }

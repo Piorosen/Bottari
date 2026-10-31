@@ -92,7 +92,7 @@ final class SiteLibrary {
         guard let site = site(id) else { return }
         sites.removeAll { $0.id == id }
         recentlyImported.remove(id)
-        for key in [site.passwordKey, site.passphraseKey, site.screenPasswordKey, site.s3SecretKey, site.googleSignInKey, site.googleClientSecretKey] {
+        for key in [site.passwordKey, site.passphraseKey, site.screenPasswordKey, site.screenUsernameKey, site.s3SecretKey, site.googleSignInKey, site.googleClientSecretKey] {
             try? secrets.setSecret(nil, for: key)
         }
         persist()

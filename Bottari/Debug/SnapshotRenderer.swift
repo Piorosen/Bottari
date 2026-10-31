@@ -162,7 +162,7 @@ enum SnapshotRenderer {
         AppServices.transferRecords.showForPreview([
             TransferRecord(
                 id: UUID(), kind: .copy, items: ["/Users/me/Movies/촬영본"],
-                source: .init(place: "local", name: "이 Mac"), destination: .init(place: "site:nas", name: "home-nas"),
+                source: .init(place: "local", name: String(localized: "이 Mac")), destination: .init(place: "site:nas", name: "home-nas"),
                 folder: "/volume1/backup", policy: .ask, verifiesChecksums: true,
                 done: (0..<48).map { RemotePath("/Users/me/Movies/촬영본/clip-\($0).mov") }, unfinished: [],
                 totalFiles: 120, totalBytes: 84_000_000_000, transferredBytes: 31_500_000_000, savedAt: Date()
@@ -336,7 +336,11 @@ enum SnapshotRenderer {
         let gpu = TunnelProfile(name: "GPU 클러스터", siteID: library.sites[1].id, mode: .bottariOnly, routes: "10.0.4.0/24")
         TunnelStore.shared.showPreview(
             [proxy, office, gpu],
-            states: [proxy.id: .on("SOCKS5 :1080 · HTTP :8118 · 시스템 프록시에 PAC 적용"), office.id: .off, gpu.id: .on("Bottari 연결만 dev-api 경유")],
+            states: [
+                proxy.id: .on("SOCKS5 :1080 · HTTP :8118" + String(localized: " · 시스템 프록시에 PAC 적용")),
+                office.id: .off,
+                gpu.id: .on(String(localized: "Bottari 연결만 \(library.sites[1].name) 경유")),
+            ],
             connections: [proxy.id: [
                 .init(id: UUID(), host: "photos.home.arpa", port: 443, kind: "SOCKS", opened: Date()),
                 .init(id: UUID(), host: "192.168.0.20", port: 5000, kind: "HTTP", opened: Date()),

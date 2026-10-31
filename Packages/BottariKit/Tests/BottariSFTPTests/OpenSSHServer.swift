@@ -109,8 +109,7 @@ final class OpenSSHServer {
                 "StrictModes no",
                 "PasswordAuthentication no",
                 "KbdInteractiveAuthentication no",
-                "Subsystem sftp /usr/libexec/sftp-server",
-            ] + extraConfig).joined(separator: "\n").appending("\n").write(to: config, atomically: true, encoding: .utf8)
+            ] + extraConfig + (extraConfig.contains { $0.hasPrefix("Subsystem") } ? [] : ["Subsystem sftp /usr/libexec/sftp-server"])).joined(separator: "\n").appending("\n").write(to: config, atomically: true, encoding: .utf8)
             let process = Process()
             process.executableURL = URL(fileURLWithPath: OpenSSH.sshd)
             process.arguments = ["-D", "-f", config.path, "-E", folder.appending(path: "sshd.log").path]

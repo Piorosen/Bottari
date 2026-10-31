@@ -134,7 +134,7 @@ public final class PortForward: Sendable {
 
     static func open(on client: SSHClient, host: String, port: Int) async throws -> PortForward {
         let clientBox = UncheckedSendable(client)
-        let listener = try await ServerBootstrap(group: client.eventLoop)
+        let listener = try await ServerBootstrap(group: TunnelProxy.listenerLoop)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             // Hold incoming bytes until the SSH side is open.
             .childChannelOption(ChannelOptions.autoRead, value: false)

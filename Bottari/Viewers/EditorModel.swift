@@ -116,7 +116,9 @@ final class EditorModel {
             notice = String(localized: "읽기 전용 서버에는 저장할 수 없습니다.")
             return
         }
-        guard let data = TextCodec.encode(text, as: format) else {
+        // Typing goes on while the upload runs; only what was sent counts as saved.
+        let sending = text
+        guard let data = TextCodec.encode(sending, as: format) else {
             notice = String(localized: "\(format.label)로 저장할 수 없는 문자가 있습니다.")
             return
         }
@@ -127,7 +129,7 @@ final class EditorModel {
                 let current = try await provider.stat(item.path)
                 if current.modified != remoteModified || current.size != remoteSize {
                     let theirs = TextCodec.decode(try await provider.readData(item.path))?.text ?? ""
-                    let merged: String? = switch ThreeWayMerge.merge(base: savedText, mine: text, theirs: theirs) {
+                    let merged: String? = switch ThreeWayMerge.merge(base: savedText, mine: sending, theirs: theirs) {
                     case .merged(let text): text
                     case .conflict: nil
                     }
@@ -142,9 +144,9 @@ final class EditorModel {
                 await refreshRemoteState()
                 return
             }
-            savedText = text
+            savedText = sending
             savedData = data
-            isDirty = false
+            isDirty = text != sending
             conflict = nil
             savedAt = Date()
             await refreshRemoteState()

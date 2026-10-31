@@ -38,6 +38,12 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
 
     @ObservationIgnored private var connection: VNCConnection?
     @ObservationIgnored private var forward: PortForward?
+    /// Bumped by each connect and disconnect, so a connect that was overtaken
+    /// while its tunnel opened gives up instead of replacing the newer one.
+    @ObservationIgnored private var attempt = 0
+    /// What the user typed, kept in the Keychain only once it got us in.
+    @ObservationIgnored private var typedCredential: (username: String?, password: String)?
+    @ObservationIgnored private var usedStoredPassword = false
 
     init(provider: SFTPFileProvider?, site: SavedSite, screen: SavedSite.RemoteScreen) {
         self.provider = provider
@@ -51,13 +57,23 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
 
     func connect() async {
         disconnect()
+        let current = attempt
         hasStopped = false
+        guard (1...65535).contains(screen.port) else {
+            status = String(localized: "화면 포트 \(screen.port)은(는) 쓸 수 없습니다. 연결 관리에서 1–65535 사이로 고치십시오.")
+            hasStopped = true
+            return
+        }
         do {
             var host = self.host
             var port = screen.port
             if screen.throughTunnel, let provider {
                 status = String(localized: "SSH 터널 여는 중…")
                 let forward = try await provider.forward(toHost: "localhost", port: screen.port)
+                guard attempt == current else {
+                    await forward.close()
+                    return
+                }
                 self.forward = forward
                 host = "127.0.0.1"
                 port = forward.localPort
@@ -66,7 +82,7 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             let settings = VNCConnection.Settings(
                 isDebugLoggingEnabled: false,
                 hostname: host,
-                port: UInt16(port),
+                port: UInt16(clamping: port),
                 isShared: true,
                 isScalingEnabled: scalesToFit,
                 useDisplayLink: true,
@@ -80,12 +96,14 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
             self.connection = connection
             connection.connect()
         } catch {
+            guard attempt == current else { return }
             status = String(localized: "터널을 열 수 없습니다: \(error.localizedDescription)")
             hasStopped = true
         }
     }
 
     func disconnect() {
+        attempt += 1
         connection?.disconnect()
         connection = nil
         framebufferView = nil
@@ -131,17 +149,28 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
     nonisolated func connection(_ connection: VNCConnection, stateDidChange connectionState: VNCConnection.ConnectionState) {
         let status = connectionState.status
         let error = connectionState.error?.localizedDescription
+        let wrongPassword = (connectionState.error as? VNCError)?.isAuthenticationError ?? false
+        let source = ObjectIdentifier(connection)
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
+                // A connection already replaced by a newer one has nothing to say.
+                guard let current = self.connection, ObjectIdentifier(current) == source else { return }
                 switch status {
                 case .connecting:
                     self.status = String(localized: "\(self.kindName)에 연결 중…")
                 case .connected:
                     self.isConnected = true
                     self.status = String(localized: "연결됨")
+                    self.keepTypedCredential()
                 case .disconnecting:
                     self.status = String(localized: "연결 해제 중…")
                 case .disconnected:
+                    if wrongPassword {
+                        self.typedCredential = nil
+                        // A stored password that no longer works would fail every time.
+                        if self.usedStoredPassword { try? AppServices.sites.secrets.setSecret(nil, for: self.site.screenPasswordKey) }
+                    }
+                    self.connection = nil
                     self.isConnected = false
                     self.framebufferView = nil
                     self.status = error.map { String(localized: "연결 끊김: \($0)") } ?? String(localized: "연결 해제됨")
@@ -161,12 +190,16 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
         let reply = UncheckedBox(completion)
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                let stored = try? AppServices.sites.secrets.secret(for: self.site.screenPasswordKey)
+                let secrets = AppServices.sites.secrets
+                let stored = try? secrets.secret(for: self.site.screenPasswordKey)
                 if let stored, !stored.isEmpty {
+                    self.usedStoredPassword = true
+                    let account = (try? secrets.secret(for: self.site.screenUsernameKey)).flatMap { $0 } ?? self.username
                     reply.value(needsUsername
-                        ? VNCUsernamePasswordCredential(username: self.username, password: stored)
+                        ? VNCUsernamePasswordCredential(username: account, password: stored)
                         : VNCPasswordCredential(password: stored))
                 } else {
+                    self.usedStoredPassword = false
                     self.credentialRequest = CredentialRequest(needsUsername: needsUsername, completion: reply.value)
                 }
             }
@@ -176,12 +209,19 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
     /// The user typed a password (and for Screen Sharing, maybe another account).
     func answer(_ request: CredentialRequest, username: String, password: String, remember: Bool) {
         credentialRequest = nil
-        if remember {
-            try? AppServices.sites.secrets.setSecret(password, for: site.screenPasswordKey)
-        }
+        typedCredential = remember ? (request.needsUsername && !username.isEmpty ? username : nil, password) : nil
         request.completion(request.needsUsername
             ? VNCUsernamePasswordCredential(username: username.isEmpty ? self.username : username, password: password)
             : VNCPasswordCredential(password: password))
+    }
+
+    /// Saves the password the user typed, now that it worked.
+    private func keepTypedCredential() {
+        guard let typed = typedCredential else { return }
+        typedCredential = nil
+        let secrets = AppServices.sites.secrets
+        try? secrets.setSecret(typed.password, for: site.screenPasswordKey)
+        try? secrets.setSecret(typed.username, for: site.screenUsernameKey)
     }
 
     nonisolated func connection(_ connection: VNCConnection, didCreateFramebuffer framebuffer: VNCFramebuffer) {
@@ -189,6 +229,7 @@ final class ScreenModel: NSObject, VNCConnectionDelegate {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 let (connection, framebuffer) = box.value
+                guard connection === self.connection else { return }
                 // The view draws updates and passes connection events on to us.
                 let view = VNCCAFramebufferView(frame: CGRect(origin: .zero, size: framebuffer.size.cgSize), framebuffer: framebuffer, connection: connection, connectionDelegate: self)
                 connection.delegate = view

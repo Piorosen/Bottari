@@ -64,6 +64,8 @@ struct ViewerContext {
 
 enum Viewers {
     private static var contexts: [UUID: ViewerContext] = [:]
+    /// Editors in open windows, so quitting can ask about unsaved changes.
+    private static var editors: [UUID: EditorModel] = [:]
 
     static func register(_ context: ViewerContext) -> UUID {
         let id = UUID()
@@ -77,6 +79,15 @@ enum Viewers {
 
     static func close(_ id: UUID) {
         contexts[id] = nil
+        editors[id] = nil
+    }
+
+    static func track(_ editor: EditorModel, in id: UUID) {
+        editors[id] = editor
+    }
+
+    static var unsavedEditors: [EditorModel] {
+        editors.values.filter(\.isDirty)
     }
 }
 

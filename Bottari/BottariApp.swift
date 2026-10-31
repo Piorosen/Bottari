@@ -123,20 +123,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = AppServices.transferRecords
     }
 
+    /// Edits not yet on their server would be lost, so quitting asks first.
     /// Quitting mid-transfer is fine, since the transfer carries on next time,
     /// but say so first.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !Self.isRenderingSnapshots else { return .terminateNow }
+        let unsaved = Viewers.unsavedEditors.map(\.item.name) + ExternalEdits.shared.unsent.map(\.item.name)
+        if !unsaved.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "저장하지 않은 파일 \(unsaved.count)개가 있습니다")
+            alert.informativeText = unsaved.sorted().joined(separator: ", ") + "\n\n" + String(localized: "지금 종료하면 이 변경 사항은 서버에 올라가지 않습니다.")
+            alert.addButton(withTitle: String(localized: "취소"))
+            alert.addButton(withTitle: String(localized: "저장하지 않고 종료"))
+            alert.buttons[1].hasDestructiveAction = true
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        }
         let active = AppServices.transfers.jobs.filter(\.isActive)
-        guard !active.isEmpty, !Self.isRenderingSnapshots else { return .terminateNow }
-        let alert = NSAlert()
-        alert.messageText = String(localized: "전송 \(active.count)개가 진행 중입니다")
-        let resumable = active.allSatisfy { $0.record != nil }
-        alert.informativeText = resumable
-            ? String(localized: "지금 종료하면 다음에 Bottari를 열 때 전송 센터에서 이어서 보낼 수 있습니다.")
-            : String(localized: "지금 종료하면 일부 전송은 처음부터 다시 시작해야 합니다.")
-        alert.addButton(withTitle: String(localized: "종료"))
-        alert.addButton(withTitle: String(localized: "취소"))
-        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+        if !active.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "전송 \(active.count)개가 진행 중입니다")
+            let resumable = active.allSatisfy { $0.record != nil }
+            alert.informativeText = resumable
+                ? String(localized: "지금 종료하면 다음에 Bottari를 열 때 전송 센터에서 이어서 보낼 수 있습니다.")
+                : String(localized: "지금 종료하면 일부 전송은 처음부터 다시 시작해야 합니다.")
+            alert.addButton(withTitle: String(localized: "종료"))
+            alert.addButton(withTitle: String(localized: "취소"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        }
+        // A proxy setting left pointing at a tunnel that is gone would cut
+        // the Mac off from the web.
+        guard TunnelStore.shared.changedSystemProxy else { return .terminateNow }
+        Task {
+            await TunnelStore.shared.restoreSystemProxies()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

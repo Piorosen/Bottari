@@ -21,6 +21,7 @@ struct EditorWindow: View {
             guard model == nil, let context = Viewers.context(contextID) else { return }
             let editor = EditorModel(context: context)
             model = editor
+            Viewers.track(editor, in: contextID)
             Task { await editor.load() }
         }
         .onDisappear {

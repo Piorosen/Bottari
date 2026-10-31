@@ -121,6 +121,16 @@
         }
       }
     },
+    "%@ · Ctrl-C로 종료하면 방화벽 규칙도 복원됩니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Press Ctrl-C to stop; the firewall rules are restored too"
+          }
+        }
+      }
+    },
     "%@ · 원격 화면": {
       "localizations": {
         "en": {
@@ -2095,12 +2105,42 @@
         }
       }
     },
+    "sshuttle 실행됨": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sshuttle is running"
+          }
+        }
+      }
+    },
+    "sshuttle 종료됨": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sshuttle stopped"
+          }
+        }
+      }
+    },
     "sshuttle, sudo, 서버의 Python 3 필요 (UDP 제외)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Needs sshuttle, sudo and Python 3 on the server (no UDP)"
+          }
+        }
+      }
+    },
+    "sshuttle이 시작되지 않았습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sshuttle didn’t start"
           }
         }
       }
@@ -2279,6 +2319,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moving files from ‘%@’"
+          }
+        }
+      }
+    },
+    "‘%@’의 변경 사항이 아직 서버에 올라가지 않았습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes to “%@” haven’t been uploaded yet"
           }
         }
       }
@@ -2759,6 +2809,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change Permissions…"
+          }
+        }
+      }
+    },
+    "그냥 중단하면 Mac에서 편집한 내용이 지워집니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you stop now, the edits made on this Mac are deleted."
           }
         }
       }
@@ -3875,6 +3935,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Light default"
+          }
+        }
+      }
+    },
+    "버리고 중단": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard and Stop"
           }
         }
       }
@@ -5709,6 +5779,16 @@
         }
       }
     },
+    "업로드하고 중단": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload and Stop"
+          }
+        }
+      }
+    },
     "없음": {
       "localizations": {
         "en": {
@@ -7407,12 +7487,50 @@
         }
       }
     },
+    "저장하지 않고 종료": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit Without Saving"
+          }
+        }
+      }
+    },
     "저장하지 않으면 변경 사항이 손실됩니다.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "If you don’t save, your changes are lost."
+          }
+        }
+      }
+    },
+    "저장하지 않은 파일 %lld개가 있습니다": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld file has unsaved changes"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld files have unsaved changes"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장하지 않은 파일 %lld개가 있습니다"
           }
         }
       }
@@ -7859,6 +7977,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "If you quit now, you can carry on from the Transfer Center the next time you open Bottari."
+          }
+        }
+      }
+    },
+    "지금 종료하면 이 변경 사항은 서버에 올라가지 않습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you quit now, these changes won’t reach the server."
           }
         }
       }
@@ -8669,6 +8797,16 @@
         }
       }
     },
+    "터미널 창에서 sudo 암호를 입력하십시오": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your sudo password in the Terminal window"
+          }
+        }
+      }
+    },
     "터미널에서 sshuttle 실행 중 (Ctrl-C로 종료)": {
       "localizations": {
         "en": {
@@ -9385,6 +9523,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Screen port"
+          }
+        }
+      }
+    },
+    "화면 포트 %lld은(는) 쓸 수 없습니다. 연결 관리에서 1–65535 사이로 고치십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen port %lld can’t be used. Change it to a number from 1 to 65535 in Connections."
           }
         }
       }

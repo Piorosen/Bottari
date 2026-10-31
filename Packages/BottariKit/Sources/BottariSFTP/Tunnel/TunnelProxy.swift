@@ -47,11 +47,15 @@ public final class TunnelProxy: Sendable {
         self.report = report
     }
 
+    /// Listeners outlive the SSH connection's own loop, which shuts down with
+    /// the connection; closing a listener there afterwards would never finish.
+    static var listenerLoop: any EventLoopGroup { MultiThreadedEventLoopGroup.singleton }
+
     /// Port 0 picks a free one. `pac` is asked for the PAC file on each request.
     static func start(on client: SSHClient, socksPort: Int, httpPort: Int?, pac: @escaping @Sendable () -> String) async throws -> TunnelProxy {
         let (activity, report) = AsyncStream.makeStream(of: Activity.self)
         let opener = DirectChannelOpener(client: client, report: report)
-        let socks = try await ServerBootstrap(group: client.eventLoop)
+        let socks = try await ServerBootstrap(group: Self.listenerLoop)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
@@ -64,7 +68,7 @@ public final class TunnelProxy: Sendable {
         var boundHTTP: Int?
         if let httpPort {
             do {
-                let http = try await ServerBootstrap(group: client.eventLoop)
+                let http = try await ServerBootstrap(group: Self.listenerLoop)
                     .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
                     .childChannelInitializer { channel in
                         channel.eventLoop.makeCompletedFuture {
@@ -124,7 +128,9 @@ private struct DirectChannelOpener: Sendable {
                 let remote = try await client.value.createDirectTCPIPChannel(
                     using: .init(targetHost: host, targetPort: port, originatorAddress: local.remoteAddress ?? (try SocketAddress(ipAddress: "127.0.0.1", port: 0)))
                 ) { remote in
-                    remote.eventLoop.makeCompletedFuture {
+                    // The server may speak first (ssh, SMTP, MySQL); its bytes
+                    // wait until the client has had the proxy's reply.
+                    remote.setOption(ChannelOptions.autoRead, value: false).flatMapThrowing {
                         try remote.pipeline.syncOperations.addHandler(Relay(to: local))
                     }
                 }
@@ -152,6 +158,8 @@ private func startRelaying<Handshake: RemovableChannelHandler>(_ context: Channe
         channel.pipeline.syncOperations.removeHandler(handshake, promise: nil)
         channel.setOption(ChannelOptions.autoRead, value: true).whenFailure { _ in }
         channel.read()
+        remote.setOption(ChannelOptions.autoRead, value: true).whenFailure { _ in }
+        remote.read()
     } catch {
         channel.close(promise: nil)
         remote.close(promise: nil)
@@ -204,7 +212,10 @@ private final class SOCKSHandshake: ChannelInboundHandler, RemovableChannelHandl
             let channel = context.channel
             opener.open(host, port, kind: "SOCKS", for: channel) { [self] result in
                 // `then` runs on the channel's loop.
-                guard let context = try? channel.pipeline.syncOperations.context(handler: self) else { return }
+                guard let context = try? channel.pipeline.syncOperations.context(handler: self) else {
+                    if case .success(let remote) = result { remote.close(promise: nil) }
+                    return
+                }
                 switch result {
                 case .success(let remote):
                     context.writeAndFlush(wrapOutboundOut(ByteBuffer(bytes: [5, 0, 0, 1, 0, 0, 0, 0, 0, 0])), promise: nil)
@@ -280,6 +291,7 @@ private final class HTTPProxyHandshake: ChannelInboundHandler, RemovableChannelH
         let headLength = end.upperBound - view.startIndex
         guard let head = buffer.readString(length: headLength) else { return }
         var lines = head.components(separatedBy: "\r\n").filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return respond(context, status: "400 Bad Request") }
         let requestLine = lines.removeFirst().split(separator: " ").map(String.init)
         guard requestLine.count == 3 else { return respond(context, status: "400 Bad Request") }
         let (method, target, version) = (requestLine[0], requestLine[1], requestLine[2])
@@ -312,7 +324,10 @@ private final class HTTPProxyHandshake: ChannelInboundHandler, RemovableChannelH
         context.channel.setOption(ChannelOptions.autoRead, value: false).whenFailure { _ in }
         let channel = context.channel
         opener.open(host, port, kind: "HTTP", for: channel) { [self] result in
-            guard let context = try? channel.pipeline.syncOperations.context(handler: self) else { return }
+            guard let context = try? channel.pipeline.syncOperations.context(handler: self) else {
+                if case .success(let remote) = result { remote.close(promise: nil) }
+                return
+            }
             switch result {
             case .success(let remote):
                 if let greeting {
