@@ -223,6 +223,8 @@ final class Keymap {
         KeyCombo("up", command: true): String(localized: "상위 폴더"), KeyCombo("down", command: true): String(localized: "열기"), KeyCombo("`", control: true): String(localized: "SSH 터미널"),
         KeyCombo(",", command: true): String(localized: "설정"), KeyCombo("q", command: true): String(localized: "종료"), KeyCombo("w", command: true): String(localized: "창 닫기"),
         KeyCombo("n", command: true): String(localized: "새 창"), KeyCombo("delete"): String(localized: "뒤로"),
+        KeyCombo("f", command: true): String(localized: "이 폴더에서 찾기"), KeyCombo("p", shift: true, command: true): String(localized: "미리보기 보기"),
+        KeyCombo("o", option: true, command: true): String(localized: "반대편 패인에 이 폴더 열기"), KeyCombo("u", option: true, command: true): String(localized: "두 패인 바꾸기"),
     ]
 
     private init() {

@@ -28,6 +28,7 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            OpenTargetPicker(workspace: workspace)
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if !Favorites.shared.items.isEmpty {
@@ -81,6 +82,10 @@ struct Sidebar: View {
                             } action: {
                                 workspace.openOnMac(path)
                             }
+                            .contextMenu {
+                                Button("왼쪽 패인에서 열기") { workspace.openOnMac(path, in: .left) }
+                                Button("오른쪽 패인에서 열기") { workspace.openOnMac(path, in: .right) }
+                            }
                         }
                         SidebarRow(symbol: "bt.apps", title: String(localized: "응용 프로그램"), isCurrent: activePane.isLocal && activePane.path == "/Applications") {
                             EmptyView()
@@ -119,6 +124,7 @@ struct Sidebar: View {
 
     private func siteRow(_ site: SavedSite) -> some View {
         let open = workspace.isOpen(site)
+        let connecting = workspace.left.connectingSite?.id == site.id || workspace.right.connectingSite?.id == site.id
         return SidebarRow(symbol: site.symbol, title: site.name, isCurrent: activePane.site?.id == site.id, isBold: open,
                           tint: site.tag == .prod ? SavedSite.Tag.prod.color : nil) {
             HStack(spacing: 6) {
@@ -126,21 +132,93 @@ struct Sidebar: View {
                     TagChip.outlined(tag)
                 }
                 // Only open connections get a dot, so they stand out in a long list.
-                if open {
+                if connecting {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .help("연결하는 중")
+                        .transition(.opacity)
+                } else if open {
                     StatusDot(on: true)
                         .help("연결됨")
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
+            .motion(value: connecting)
+            .motion(value: open)
         } action: {
             workspace.open(site)
         }
         .contextMenu {
+            Button("왼쪽 패인에서 열기") {
+                workspace.activeSide = .left
+                workspace.connect(site, in: .left)
+            }
+            Button("오른쪽 패인에서 열기") {
+                workspace.activeSide = .right
+                workspace.connect(site, in: .right)
+            }
+            Divider()
             Button("연결 관리에서 열기") { workspace.siteManager = SiteManagerRequest(selection: site.id) }
         }
     }
 
     private func isCurrent(_ favorite: Favorites.Favorite) -> Bool {
         activePane.path == favorite.path && activePane.site?.id == favorite.siteID && (favorite.siteID != nil || activePane.isLocal)
+    }
+}
+
+/// Which pane the sidebar opens places in. It is the active pane, so
+/// clicking a pane changes it too; this says so, and lets it be picked here.
+private struct OpenTargetPicker: View {
+    let workspace: Workspace
+    @Namespace private var highlight
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("여는 곳")
+                .font(.ui(.caption, weight: .medium))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            HStack(spacing: 0) {
+                segment(.left, symbol: "rectangle.lefthalf.filled", title: String(localized: "왼쪽"))
+                segment(.right, symbol: "rectangle.righthalf.filled", title: String(localized: "오른쪽"))
+            }
+            .padding(2)
+            .background(Palette.panel, in: .rect(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line))
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .help("사이드바에서 고른 서버나 폴더가 열릴 패인입니다. 패인을 클릭해도 바뀝니다.")
+        .motion(value: workspace.activeSide)
+    }
+
+    private func segment(_ side: PaneSide, symbol: String, title: String) -> some View {
+        let isOn = workspace.activeSide == side
+        return Button {
+            workspace.activeSide = side
+            workspace.focusRequest = side
+        } label: {
+            Label(title, systemImage: symbol)
+                .labelStyle(.titleAndIcon)
+                .font(.ui(.caption, weight: isOn ? .semibold : .regular))
+                .foregroundStyle(isOn ? AnyShapeStyle(Color.themeAccent) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background {
+                    // One highlight that slides to the chosen side.
+                    if isOn {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Palette.selection)
+                            .matchedGeometryEffect(id: "target", in: highlight)
+                    }
+                }
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(side == .left ? String(localized: "왼쪽 패인에 열기") : String(localized: "오른쪽 패인에 열기"))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
@@ -171,6 +249,8 @@ private struct SidebarRow<Accessory: View>: View {
             .padding(.vertical, 6)
             .background(isCurrent ? Palette.selection : hovering ? Palette.line.opacity(0.5) : .clear, in: .rect(cornerRadius: 7))
             .contentShape(.rect)
+            .motion(Motion.quick, value: hovering)
+            .motion(value: isCurrent)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -282,6 +362,8 @@ private struct BundleCard: View {
         }
         .padding(12)
         .card(highlighted: isDropTarget)
+        // Items going in and coming out ease, rather than the card jumping.
+        .motion(value: bundle.entries.map(\.id))
         .onDrop(of: [.bottariPaneItems, .fileURL], isTargeted: $isDropTarget) { providers in
             workspace.dropIntoBundle(providers)
         }

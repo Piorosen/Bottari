@@ -145,9 +145,10 @@ final class Workspace {
 
     // MARK: - Places
 
-    /// Opens a folder on the Mac in the active pane.
-    func openOnMac(_ path: RemotePath) {
-        let pane = pane(activeSide)
+    /// Opens a folder on the Mac in the active pane, or in `side`.
+    func openOnMac(_ path: RemotePath, in side: PaneSide? = nil) {
+        if let side { activeSide = side }
+        let pane = pane(side ?? activeSide)
         Task {
             if !pane.provider.isLocal {
                 await pane.switchProvider(to: LocalFileProvider())
@@ -522,4 +523,7 @@ extension UTType {
 
 extension FocusedValues {
     @Entry var paneFocus: PaneFocus?
+    /// The workspace of the main window in front, for menu commands that are
+    /// about the window rather than a pane (the preview column).
+    @Entry var workspace: Workspace?
 }

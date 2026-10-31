@@ -14,6 +14,98 @@ nonisolated enum BundledFonts {
     }
 }
 
+/// How things move. One short, settled curve everywhere, so the app feels of
+/// a piece; under System Settings › Accessibility › Reduce Motion, things that
+/// would slide only fade.
+enum Motion {
+    /// Panels opening, banners appearing, the active pane changing.
+    static let standard = Animation.snappy(duration: 0.24)
+    /// Hover and press feedback, which must not lag behind the pointer.
+    static let quick = Animation.easeOut(duration: 0.12)
+    /// Progress creeping forward between updates.
+    static let progress = Animation.linear(duration: 0.3)
+    /// What Reduce Motion gets instead of any of the above.
+    static let reduced = Animation.easeInOut(duration: 0.15)
+
+    /// How fast animations play: `-slowMotion 8` (Debug builds) plays them
+    /// eight times slower, to look at them frame by frame.
+    static let speed: Double = {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if let flag = arguments.firstIndex(of: "-slowMotion"), arguments.indices.contains(flag + 1), let factor = Double(arguments[flag + 1]), factor > 0 {
+            return 1 / factor
+        }
+        #endif
+        return 1
+    }()
+}
+
+extension View {
+    /// `.animation(_:value:)` that becomes a short fade under Reduce Motion.
+    func motion<Value: Equatable>(_ animation: Animation = Motion.standard, value: Value) -> some View {
+        modifier(MotionModifier(animation: animation, value: value))
+    }
+
+    /// Comes in from `edge` and leaves the same way, or fades under Reduce Motion.
+    func slides(from edge: Edge) -> some View {
+        modifier(SlideTransition(edge: edge))
+    }
+
+    /// Grows from a little smaller as it fades in, like a popover; fades only
+    /// under Reduce Motion.
+    func pops() -> some View {
+        modifier(PopTransition())
+    }
+
+    /// For a row that opens up among others (a search field, a banner): it
+    /// fades in a few points above its place while what follows makes room.
+    /// Sliding in from the edge would draw it over the row above.
+    func unfolds() -> some View {
+        modifier(UnfoldTransition())
+    }
+}
+
+private struct UnfoldTransition: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -6)))
+    }
+}
+
+private struct MotionModifier<Value: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: Value
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.animation((reduceMotion ? Motion.reduced : animation).speed(Motion.speed), value: value)
+    }
+}
+
+private struct SlideTransition: ViewModifier {
+    let edge: Edge
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transition(reduceMotion ? .opacity : .move(edge: edge).combined(with: .opacity))
+    }
+}
+
+private struct PopTransition: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.transition(reduceMotion ? .opacity : .scale(scale: 0.97, anchor: .top).combined(with: .opacity))
+    }
+}
+
+/// Runs `change` animated, or with a short fade under Reduce Motion.
+@MainActor
+func withMotion(_ animation: Animation = Motion.standard, _ change: () -> Void) {
+    withAnimation((NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? Motion.reduced : animation).speed(Motion.speed), change)
+}
+
 /// How table rows look in the design: no lines between them, and a faint
 /// accent behind the selected one with the text left as it is. AppKit has no
 /// switch for either, so the row view's drawing methods are replaced.
@@ -103,6 +195,8 @@ extension View {
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
                     .strokeBorder(highlighted ? Color.themeAccent.opacity(0.75) : Palette.line, lineWidth: highlighted ? 1.5 : 1)
+                    // Only the border eases over, not what the card holds.
+                    .motion(value: highlighted)
             )
     }
 
@@ -238,6 +332,8 @@ struct IconButtonStyle: ButtonStyle {
             .background(isOn ? Palette.selection : configuration.isPressed ? Palette.panel2 : Palette.panel, in: .rect(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.line))
             .contentShape(.rect)
+            .motion(Motion.quick, value: isOn)
+            .motion(Motion.quick, value: configuration.isPressed)
     }
 }
 
@@ -266,6 +362,8 @@ struct PanelButtonStyle: ButtonStyle {
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
             .contentShape(.rect)
+            .motion(Motion.quick, value: configuration.isPressed)
+            .motion(Motion.quick, value: isEnabled)
     }
 }
 

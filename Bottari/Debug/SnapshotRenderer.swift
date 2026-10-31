@@ -104,6 +104,16 @@ enum SnapshotRenderer {
                 size: CGSize(width: 560, height: 300), appearance: appearance,
                 to: directory.appending(path: "pane-search-\(name).png")
             )
+            // An empty folder says what to do with it.
+            let emptyFolder = folder.appending(path: "empty-\(name)")
+            try? FileManager.default.createDirectory(at: emptyFolder, withIntermediateDirectories: true)
+            let empty = PaneModel(provider: LocalFileProvider(), start: RemotePath(emptyFolder.path), library: library)
+            await empty.start()
+            await render(
+                PaneView(workspace: Workspace(left: empty, right: right), side: .left),
+                size: CGSize(width: 560, height: 360), appearance: appearance,
+                to: directory.appending(path: "pane-empty-\(name).png")
+            )
         }
         await renderTransfers(into: directory)
         await renderGallery(into: directory)
@@ -357,6 +367,28 @@ enum SnapshotRenderer {
     private static func renderMain(into directory: URL, library: SiteLibrary) async {
         let root = FileManager.default.temporaryDirectory.appending(path: "bottari-main-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = await sampleWorkspace(library: library, in: root)
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            // The split view's sidebar does not draw off-screen; lay the two side by side instead.
+            await render(HStack(spacing: 0) {
+                Sidebar(workspace: workspace).frame(width: 240)
+                Rectangle().fill(Palette.line).frame(width: 1)
+                MainContent(workspace: workspace)
+            }.themed(), size: CGSize(width: 1440, height: 860), appearance: appearance,
+                         to: directory.appending(path: "main-\(name).png"))
+        }
+        BottariBundle.shared.clear()
+    }
+
+    /// Whether the app was started with `-showcase`: the main window on sample
+    /// data, live, for trying the UI and its animations by hand or by script.
+    /// Like snapshot rendering, nothing is saved, synced or connected.
+    static var isShowcase: Bool {
+        ProcessInfo.processInfo.arguments.contains("-showcase")
+    }
+
+    /// The sample workspace of the main-window snapshot, on files under `root`.
+    static func sampleWorkspace(library: SiteLibrary, in root: URL) async -> Workspace {
         let site = root.appending(path: "site"), backup = root.appending(path: "백업")
         for folder in [site.appending(path: "assets"), site.appending(path: "releases"), backup.appending(path: "2026-10")] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -397,16 +429,7 @@ enum SnapshotRenderer {
         if let items = try? await local.list(RemotePath(site.path)) {
             BottariBundle.shared.add(items.filter { $0.name == "nginx.conf" || $0.name == "index.html" }, from: local, site: nil)
         }
-        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            // The split view's sidebar does not draw off-screen; lay the two side by side instead.
-            await render(HStack(spacing: 0) {
-                Sidebar(workspace: workspace).frame(width: 240)
-                Rectangle().fill(Palette.line).frame(width: 1)
-                MainContent(workspace: workspace)
-            }.themed(), size: CGSize(width: 1440, height: 860), appearance: appearance,
-                         to: directory.appending(path: "main-\(name).png"))
-        }
-        BottariBundle.shared.clear()
+        return workspace
     }
 
     /// The sidebar with a few things in the bundle.
@@ -634,3 +657,54 @@ enum SnapshotRenderer {
     }
 }
 #endif
+
+/// The main window of `-showcase`, once its sample files are made.
+struct ShowcaseWindow: View {
+    @State private var workspace: Workspace?
+
+    var body: some View {
+        if let workspace {
+            MainWindow(workspace: workspace)
+        } else {
+            ProgressView()
+                .frame(minWidth: 1100, minHeight: 560)
+                .task {
+                    let root = FileManager.default.temporaryDirectory.appending(path: "bottari-showcase")
+                    try? FileManager.default.removeItem(at: root)
+                    let sample = await SnapshotRenderer.sampleWorkspace(library: SiteLibrary.preview(), in: root)
+                    workspace = sample
+                    if ProcessInfo.processInfo.arguments.contains("-showcaseScript") {
+                        // Not this view's task: it ends as soon as the window replaces it.
+                        Task { await Self.play(on: sample) }
+                    }
+                }
+        }
+    }
+
+    /// Goes through the animated changes one after another, three seconds
+    /// apart, writing when each began to /tmp/bottari-showcase.log, so a
+    /// recording of the window can be matched up with them.
+    private static func play(on workspace: Workspace) async {
+        let log = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "bottari-showcase.log")
+        var lines: [String] = []
+        let start = Date()
+        let steps: [(String, () -> Void)] = [
+            ("hide-preview", { workspace.showsInspector = false }),
+            ("show-preview", { workspace.showsInspector = true }),
+            ("activate-right", { workspace.activeSide = .right }),
+            ("search", { workspace.left.beginSearch() }),
+            ("end-search", { workspace.left.endSearch() }),
+            ("error", { workspace.left.showError("서버와의 연결이 끊어졌습니다") }),
+            ("dismiss-error", { workspace.left.dismissError() }),
+            ("palette", { workspace.showsPalette = true }),
+            ("close-palette", { workspace.showsPalette = false }),
+            ("swap", { withMotion { workspace.swapPanes() } }),
+        ]
+        for (name, step) in steps {
+            try? await Task.sleep(for: .seconds(3))
+            lines.append(String(format: "%.2f %@", Date().timeIntervalSince(start), name))
+            try? lines.joined(separator: "\n").write(to: log, atomically: true, encoding: .utf8)
+            step()
+        }
+    }
+}

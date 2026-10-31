@@ -7,8 +7,17 @@ import SwiftUI
 /// focus, and on text everywhere else (the connection manager's fields).
 struct FileCommands: Commands {
     @FocusedValue(\.paneFocus) private var focus
+    @FocusedValue(\.workspace) private var workspace
 
     var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            // Finder's key for its own preview column.
+            Button(workspace?.showsInspector == false ? String(localized: "미리보기 보기") : String(localized: "미리보기 가리기")) {
+                if let workspace { withMotion { workspace.showsInspector.toggle() } }
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            .disabled(workspace == nil)
+        }
         // Keys come from the keymap (Settings › 단축키); plain keys such as
         // Space are left to the file list, so they still type in text fields.
         CommandGroup(after: .newItem) {

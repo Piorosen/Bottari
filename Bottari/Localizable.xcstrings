@@ -3121,6 +3121,26 @@
         }
       }
     },
+    "다른 위치 열기 (이 Mac, 저장된 서버, 클라우드)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open another place (this Mac, saved servers, clouds)"
+          }
+        }
+      }
+    },
+    "다른 패인이나 Finder에서 파일을 끌어다 놓으면 여기로 복사됩니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag files here from the other pane or from Finder to copy them in."
+          }
+        }
+      }
+    },
     "다시 시도": {
       "localizations": {
         "en": {
@@ -3515,6 +3535,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Swap Panes"
+          }
+        }
+      }
+    },
+    "두 패인 바꾸기 (⌥⌘U)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swap Panes (⌥⌘U)"
           }
         }
       }
@@ -3959,12 +3989,32 @@
         }
       }
     },
+    "미리보기 가리기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Preview"
+          }
+        }
+      }
+    },
     "미리보기 닫기": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Hide Preview"
+          }
+        }
+      }
+    },
+    "미리보기 보기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Preview"
           }
         }
       }
@@ -4655,6 +4705,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Folders added to the sidebar"
+          }
+        }
+      }
+    },
+    "사이드바에서 고른 서버나 폴더가 열릴 패인입니다. 패인을 클릭해도 바뀝니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pane that servers and folders picked in the sidebar open in. Clicking a pane changes it too."
           }
         }
       }
@@ -5989,6 +6049,26 @@
         }
       }
     },
+    "여기에 놓으면 복사 · ⌘를 누른 채 놓으면 이동": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop to copy here · Hold ⌘ to move instead"
+          }
+        }
+      }
+    },
+    "여는 곳": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in"
+          }
+        }
+      }
+    },
     "여는 중…": {
       "localizations": {
         "en": {
@@ -6309,6 +6389,16 @@
         }
       }
     },
+    "연결하는 중": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting"
+          }
+        }
+      }
+    },
     "열 수 없음": {
       "localizations": {
         "en": {
@@ -6429,6 +6519,36 @@
         }
       }
     },
+    "오른쪽": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right"
+          }
+        }
+      }
+    },
+    "오른쪽 패인에 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in the right pane"
+          }
+        }
+      }
+    },
+    "오른쪽 패인에서 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Right Pane"
+          }
+        }
+      }
+    },
     "올바른 형식이 아닙니다: “%@”": {
       "localizations": {
         "en": {
@@ -6523,6 +6643,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "External edits %lld"
+          }
+        }
+      }
+    },
+    "왼쪽": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        }
+      }
+    },
+    "왼쪽 패인에 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in the left pane"
+          }
+        }
+      }
+    },
+    "왼쪽 패인에서 열기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Left Pane"
           }
         }
       }
@@ -9133,6 +9283,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "are asked about one by one"
+          }
+        }
+      }
+    },
+    "파일을 다른 패인으로 끌어 놓거나 ⌘C, ⌘V로 보내면 여기에 진행 상황이 나옵니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag files to the other pane or use ⌘C and ⌘V; their progress shows here"
           }
         }
       }

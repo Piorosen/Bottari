@@ -111,6 +111,13 @@ Debug 빌드는 창을 띄우지 않고 샘플 데이터로 각 화면을 PNG로
 make snapshots SHOTS=/tmp/bottari-shots
 ```
 
+애니메이션은 쇼케이스로 본다. 샘플 데이터의 메인 창을 실제로 띄우고 아무것도 저장하지 않는다. `-showcaseScript`를 붙이면 미리보기 열고 닫기, 패인 전환, 검색, 오류 띠, 명령 팔레트, 패인 바꾸기를 3초 간격으로 차례로 실행한다. `-slowMotion 6`은 모든 애니메이션을 6배 느리게 재생한다.
+
+```sh
+open -n "$HOME/Library/Developer/Xcode/DerivedData/Bottari-make/Build/Products/Debug/Bottari.app" \
+  --args -showcase -showcaseScript -slowMotion 6 -ApplePersistenceIgnoreState YES
+```
+
 ### 아이콘
 
 앱 아이콘과 사이드바, 툴바의 선 아이콘은 코드로 그린다. 스크립트를 고친 뒤 다시 생성한다.

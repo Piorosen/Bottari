@@ -8,6 +8,7 @@ import SwiftUI
 struct TransferCenter: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var filter = Filter.all
+    @Namespace private var filterTab
     @State private var selection: TransferJob.ID?
 
     @AppStorage(TransferSettings.maxConcurrentKey) private var maxConcurrent = 3
@@ -64,9 +65,13 @@ struct TransferCenter: View {
                             ForEach(shown) { job in
                                 TransferRow(job: job, isSelected: job.id == selected?.id)
                                     .onTapGesture { selection = job.id }
+                                    .transition(.opacity)
                             }
                         }
                         .padding(8)
+                        // Jobs arriving, finishing and leaving the list ease in and out.
+                        .motion(value: shown.map(\.id))
+                        .motion(value: records.interrupted.map(\.id))
                     }
                 }
                 Rectangle().fill(Palette.line).frame(height: 1)
@@ -128,16 +133,25 @@ struct TransferCenter: View {
                         HStack(spacing: 5) {
                             Text(option.title).font(.ui(.callout, weight: filter == option ? .semibold : .regular))
                             Text("\(count)").font(.themeMono(.caption)).foregroundStyle(.secondary)
+                                .contentTransition(.numericText())
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(filter == option ? Palette.panel : .clear, in: .rect(cornerRadius: 6))
-                        .shadow(color: filter == option ? .black.opacity(0.08) : .clear, radius: 1, y: 1)
+                        .background {
+                            // One tab background that slides to the chosen filter.
+                            if filter == option {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Palette.panel)
+                                    .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+                                    .matchedGeometryEffect(id: "filter", in: filterTab)
+                            }
+                        }
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .motion(value: filter)
             .padding(3)
             .background(Palette.panel2, in: .rect(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
@@ -212,6 +226,8 @@ struct ChoiceButtonStyle: ButtonStyle {
             .background(isOn ? Palette.selection : configuration.isPressed ? Palette.panel2 : Palette.panel, in: .rect(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(isOn ? Color.themeAccent.opacity(0.7) : Palette.line))
             .contentShape(.rect)
+            .motion(Motion.quick, value: isOn)
+            .motion(Motion.quick, value: configuration.isPressed)
     }
 }
 
@@ -270,9 +286,11 @@ struct TransferRow: View {
             }
             if let conflict = job.pendingConflict {
                 conflictPrompt(conflict)
+                    .unfolds()
             }
             if !job.failures.isEmpty {
                 failureNote
+                    .unfolds()
             }
         }
         .padding(.horizontal, 12)
@@ -280,6 +298,10 @@ struct TransferRow: View {
         .background(isSelected ? Palette.selection : hovering ? Palette.panel2 : .clear, in: .rect(cornerRadius: 8))
         .contentShape(.rect)
         .onHover { hovering = $0 }
+        .motion(Motion.quick, value: hovering)
+        .motion(value: isSelected)
+        .motion(value: job.pendingConflict?.id)
+        .motion(value: job.failures.count)
     }
 
     private var controls: some View {

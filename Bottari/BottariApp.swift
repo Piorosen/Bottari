@@ -12,6 +12,12 @@ struct BottariApp: App {
 
     var body: some Scene {
         WindowGroup(id: "main") {
+            #if DEBUG
+            if SnapshotRenderer.isShowcase {
+                ShowcaseWindow()
+                    .themed()
+            }
+            #endif
             // Rendering snapshots lists no real folders at all.
             if !AppDelegate.isRenderingSnapshots {
                 MainWindow()
@@ -101,9 +107,10 @@ struct BottariApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Snapshots or the showcase: sample data only, and nothing saved.
     static var isRenderingSnapshots: Bool {
         #if DEBUG
-        SnapshotRenderer.outputDirectory != nil
+        SnapshotRenderer.outputDirectory != nil || SnapshotRenderer.isShowcase
         #else
         false
         #endif
@@ -113,6 +120,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         if let directory = SnapshotRenderer.outputDirectory {
             Task { await SnapshotRenderer.run(into: directory) }
+            return
+        }
+        if SnapshotRenderer.isShowcase {
+            ThemeStore.shared.applyAppearance()
             return
         }
         #endif

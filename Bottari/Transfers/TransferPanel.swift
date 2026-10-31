@@ -73,9 +73,11 @@ struct TransferBar: View {
                 .font(.ui(.callout))
                 Spacer(minLength: 8)
             } else {
-                Text("대기 중인 전송 없음")
+                // Idle: say how something gets here, for anyone new.
+                Text("파일을 다른 패인으로 끌어 놓거나 ⌘C, ⌘V로 보내면 여기에 진행 상황이 나옵니다")
                     .font(.ui(.callout))
                     .foregroundStyle(.secondary)
+                    .truncationMode(.tail)
                 Spacer(minLength: 8)
             }
             ExternalEditsButton()
@@ -90,6 +92,9 @@ struct TransferBar: View {
         .padding(.vertical, 9)
         .background(Palette.panel)
         .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
+        // A job starting, finishing or asking a question eases in.
+        .motion(value: featured?.id)
+        .motion(value: featured?.pendingConflict != nil)
     }
 }
 

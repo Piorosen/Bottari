@@ -16,6 +16,7 @@ struct PaneView: View {
     @State private var siteManager: SiteManagerRequest?
     @State private var isDropTarget = false
     @State private var permissions: PermissionsRequest?
+    @State private var placeHovering = false
 
     init(workspace: Workspace, side: PaneSide) {
         self.workspace = workspace
@@ -31,13 +32,15 @@ struct PaneView: View {
             header
             if let message = model.errorMessage {
                 ErrorBanner(message: message, dismiss: model.dismissError)
+                    .unfolds()
             }
             Group {
                 switch model.viewMode {
-                case .list: fileTable
-                case .grid: fileGrid
+                case .list: fileTable.transition(.opacity)
+                case .grid: fileGrid.transition(.opacity)
                 }
             }
+            .motion(value: model.viewMode)
             .onDrop(of: [.bottariPaneItems, .fileURL], isTargeted: $isDropTarget) { providers in
                 workspace.drop(providers, onto: side)
             }
@@ -47,7 +50,8 @@ struct PaneView: View {
                         ContentUnavailableView("찾은 항목 없음", systemImage: "magnifyingglass")
                     }
                 } else if model.visibleItems.isEmpty && !model.isLoading && model.errorMessage == nil {
-                    ContentUnavailableView("빈 폴더", systemImage: "folder")
+                    ContentUnavailableView("빈 폴더", systemImage: "folder", description: Text("다른 패인이나 Finder에서 파일을 끌어다 놓으면 여기로 복사됩니다."))
+                        .transition(.opacity)
                 }
             }
             Rectangle().fill(Palette.line).frame(height: 1)
@@ -67,9 +71,28 @@ struct PaneView: View {
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.themeAccent, lineWidth: 2)
                     .background(Color.themeAccent.opacity(0.06), in: .rect(cornerRadius: 10))
+                    .overlay(alignment: .bottom) {
+                        // What letting go will do, and how to make it a move.
+                        Label("여기에 놓으면 복사 · ⌘를 누른 채 놓으면 이동", systemImage: "arrow.down.doc")
+                            .font(.ui(.callout, weight: .medium))
+                            .foregroundStyle(Color.themeAccent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Palette.panel, in: .capsule)
+                            .overlay(Capsule().strokeBorder(Color.themeAccent.opacity(0.5)))
+                            .padding(.bottom, 40)
+                    }
                     .allowsHitTesting(false)
+                    .transition(.opacity)
             }
         }
+        .motion(Motion.quick, value: isDropTarget)
+        .motion(value: model.errorMessage)
+        // Clicking anywhere in the pane, not only its list, makes it the one
+        // the sidebar and the menus act on.
+        .simultaneousGesture(TapGesture().onEnded {
+            if !isActive { workspace.activeSide = side }
+        })
         .frame(minWidth: 340)
         .task { await model.start() }
         .onDisappear {
@@ -175,11 +198,14 @@ struct PaneView: View {
             .padding(.leading, 4)
             if model.searchQuery != nil {
                 SearchField(model: model) { listFocused = true }
+                    .unfolds()
             }
         }
         .padding(.horizontal, 12)
         .padding(.top, 12)
         .padding(.bottom, 8)
+        .motion(value: model.searchQuery != nil)
+        .motion(value: model.connectingSite?.id)
     }
 
     /// The place's name, which is also where another place is chosen.
@@ -203,6 +229,13 @@ struct PaneView: View {
                 }
             }
             Divider()
+            Button("반대편 패인에 이 폴더 열기", systemImage: "rectangle.split.2x1") {
+                workspace.showInOtherPane(from: side)
+            }
+            Button("두 패인 바꾸기", systemImage: "arrow.left.arrow.right") {
+                workspace.swapPanes()
+            }
+            Divider()
             Button("연결 관리…", systemImage: "list.bullet.rectangle") {
                 siteManager = SiteManagerRequest(selection: model.site?.id)
             }
@@ -214,13 +247,22 @@ struct PaneView: View {
                     .font(.ui(.body, weight: .semibold))
                     .foregroundStyle(isProd ? SavedSite.Tag.prod.color : Palette.text)
                     .lineLimit(1)
+                // Says the name is a menu: this is where another place is picked.
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(placeHovering ? Palette.line.opacity(0.6) : .clear, in: .rect(cornerRadius: 6))
+            .motion(Motion.quick, value: placeHovering)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("위치 선택")
+        .onHover { placeHovering = $0 }
+        .help("다른 위치 열기 (이 Mac, 저장된 서버, 클라우드)")
         .disabled(model.connectingSite != nil)
     }
 
@@ -556,9 +598,36 @@ struct PaneView: View {
 /// Takes the grid lines off the table SwiftUI draws, so rows sit on the card
 /// like the design's.
 private struct PlainTableRows: NSViewRepresentable {
-    /// The table once found, so each update does not walk the window again.
+    /// The table once found, so each update does not walk the window again,
+    /// and the watch on its width.
     final class Coordinator {
         weak var table: NSTableView?
+        nonisolated(unsafe) var resizeObserver: (any NSObjectProtocol)?
+
+        deinit {
+            if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+        }
+
+        /// Fits the columns to the pane whenever its width changes (the
+        /// preview column opening, the divider moving), so the table never
+        /// ends up wider than the pane and needing to scroll sideways.
+        func fitColumns(of table: NSTableView) {
+            guard resizeObserver == nil, let clip = table.enclosingScrollView?.contentView else { return }
+            clip.postsFrameChangedNotifications = true
+            resizeObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: clip, queue: .main) { [weak table] _ in
+                MainActor.assumeIsolated {
+                    guard let table, let clip = table.enclosingScrollView?.contentView else { return }
+                    // Between a resize and the fit below, the table is wider for
+                    // a moment; SwiftUI would show a scroller for that.
+                    table.enclosingScrollView?.hasHorizontalScroller = false
+                    // The table's own width counts its insets and spacing too.
+                    let spare = clip.bounds.width - table.frame.width
+                    guard abs(spare) > 0.5, let name = table.tableColumns.first else { return }
+                    name.width = max(name.minWidth, min(name.maxWidth, name.width + spare))
+                    table.tile()
+                }
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -591,10 +660,13 @@ private struct PlainTableRows: NSViewRepresentable {
                 return scroll.convert(scroll.bounds, to: nil).contains(center)
             }) else { return }
             coordinator.table = found
+            coordinator.fitColumns(of: found)
             table = found
         }
         table.gridStyleMask = []
         table.intercellSpacing = NSSize(width: 8, height: table.intercellSpacing.height)
+        // The columns fit the pane (see `fitColumns`); nothing to pull sideways.
+        table.enclosingScrollView?.horizontalScrollElasticity = .none
         if table.numberOfRows > 0, let row = table.rowView(atRow: 0, makeIfNecessary: true) {
             TableRowLook.hideSeparators(in: type(of: row))
             TableRowLook.useFaintSelection(in: type(of: row))

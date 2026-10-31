@@ -154,7 +154,9 @@ struct ProgressStrip: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule().fill(Palette.line)
+                // Glides between updates instead of jumping each tick.
                 Capsule().fill(tint).frame(width: max(0, min(1, value)) * geometry.size.width)
+                    .motion(Motion.progress, value: value)
             }
         }
         .frame(height: 5)

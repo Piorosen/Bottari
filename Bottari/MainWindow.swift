@@ -28,11 +28,15 @@ struct MainWindow: View {
                 ZStack(alignment: .top) {
                     Color.black.opacity(0.15)
                         .onTapGesture { workspace.showsPalette = false }
+                        .transition(.opacity)
                     CommandPalette(workspace: workspace) { workspace.showsPalette = false }
                         .padding(.top, 60)
+                        .pops()
                 }
             }
         }
+        .motion(value: workspace.showsPalette)
+        .focusedSceneValue(\.workspace, workspace)
         .toolbar { toolbar }
         .sheet(item: $workspace.pendingConfirmation) { request in
             WriteConfirmationSheet(request: request) {
@@ -164,7 +168,7 @@ struct MainContent: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                PaneSplit(ratio: $workspace.paneRatio) {
+                PaneSplit(ratio: $workspace.paneRatio, swap: workspace.swapPanes) {
                     PaneView(workspace: workspace, side: .left)
                 } right: {
                     PaneView(workspace: workspace, side: .right)
@@ -172,8 +176,10 @@ struct MainContent: View {
                 if workspace.showsInspector {
                     InspectorPanel(workspace: workspace)
                         .frame(width: 280)
+                        .slides(from: .trailing)
                 }
             }
+            .motion(value: workspace.showsInspector)
             .padding(12)
             TransferBar(workspace: workspace)
         }
@@ -181,12 +187,15 @@ struct MainContent: View {
     }
 }
 
-/// Two views side by side with a gap that drags to resize them.
+/// Two views side by side with a gap that drags to resize them, and shows
+/// a button to swap them while the pointer is over it.
 struct PaneSplit<Left: View, Right: View>: View {
     @Binding var ratio: CGFloat
+    var swap: (() -> Void)?
     @ViewBuilder let left: Left
     @ViewBuilder let right: Right
     @State private var start: CGFloat?
+    @State private var hoveringGap = false
 
     private let gap: CGFloat = 12
 
@@ -201,6 +210,7 @@ struct PaneSplit<Left: View, Right: View>: View {
                     .contentShape(.rect)
                     .onHover { inside in
                         if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                        hoveringGap = inside
                     }
                     .gesture(
                         DragGesture(minimumDistance: 1)
@@ -211,10 +221,30 @@ struct PaneSplit<Left: View, Right: View>: View {
                             }
                             .onEnded { _ in start = nil }
                     )
-                    .onTapGesture(count: 2) { ratio = 0.5 }
+                    .onTapGesture(count: 2) { withMotion { ratio = 0.5 } }
+                    .overlay {
+                        if let swap, hoveringGap || hoveringSwap {
+                            Button(action: { withMotion { swap() } }) {
+                                Image(systemName: "arrow.left.arrow.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .frame(width: 22, height: 22)
+                                    .background(Palette.panel, in: .circle)
+                                    .overlay(Circle().strokeBorder(Palette.line))
+                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                                    .contentShape(.circle)
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hoveringSwap = $0 }
+                            .help("두 패인 바꾸기 (⌥⌘U)")
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
+                        }
+                    }
+                    .motion(Motion.quick, value: hoveringGap || hoveringSwap)
                 right
                     .frame(maxWidth: .infinity)
             }
         }
     }
+
+    @State private var hoveringSwap = false
 }
