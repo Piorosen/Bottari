@@ -424,6 +424,11 @@ public final class TransferQueue {
 
     // MARK: - Running
 
+    /// Tries after a dropped connection before an item counts as failed.
+    static let automaticRetries = 3
+    /// The pause before the first of those; each next one waits longer.
+    nonisolated(unsafe) static var retryPause: Duration = .seconds(3)
+
     private enum Outcome {
         case done(bytes: Int64, verified: Bool)
         case skipped(bytes: Int64)
@@ -431,6 +436,8 @@ public final class TransferQueue {
         case failed(String, WorkItem)
         /// Stopped by pause or cancel, carrying the item as far as it got.
         case interrupted(WorkItem)
+        /// The connection dropped; the item goes again after a pause.
+        case retryLater(WorkItem, reason: String)
         case planned
     }
 
@@ -441,7 +448,7 @@ public final class TransferQueue {
                 launch(job.pending.removeFirst(), in: job)
                 active += 1
             }
-            if job.state == .running, !job.isPreparing, job.pending.isEmpty, job.running.isEmpty {
+            if job.state == .running, !job.isPreparing, job.pending.isEmpty, job.running.isEmpty, job.waitingToRetry == 0 {
                 finish(job)
             }
         }
@@ -581,6 +588,12 @@ public final class TransferQueue {
             if job.state == .paused || job.state == .cancelled || error is CancellationError {
                 return .interrupted(work)
             }
+            // Wi-Fi changing or a server restarting should not fail a long
+            // transfer; the partial copy is resumed where it can be.
+            if ProviderError.isPassing(error), work.automaticRetries < Self.automaticRetries {
+                work.automaticRetries += 1
+                return .retryLater(work, reason: error.localizedDescription)
+            }
             return .failed(error.localizedDescription, work)
         }
     }
@@ -664,6 +677,19 @@ public final class TransferQueue {
                 discardPartials(of: [work], in: job)
             } else {
                 job.pending.insert(work, at: 0)
+            }
+        case .retryLater(let work, let reason):
+            Log.transfer.info("\(job.logName): \(work.source.path) 연결 문제로 \(work.automaticRetries)번째 다시 시도 예정: \(reason)")
+            job.waitingToRetry += 1
+            Task { [self] in
+                try? await Task.sleep(for: Self.retryPause * work.automaticRetries)
+                job.waitingToRetry -= 1
+                if job.state == .cancelled {
+                    discardPartials(of: [work], in: job)
+                } else {
+                    job.pending.insert(work, at: 0)
+                }
+                pump()
             }
         case .planned:
             break

@@ -26,6 +26,8 @@ final class MemoryFileProvider: FileProvider {
         var damagedChecksums: Set<String> = []
         /// Names that cannot be deleted.
         var failingDeletes: Set<String> = []
+        /// Writes still to fail as if the connection dropped midway.
+        var droppedWrites = 0
         /// How names count as the same, e.g. like the Mac's disk.
         var matching = NameMatching.exact
     }
@@ -140,12 +142,14 @@ final class MemoryFileProvider: FileProvider {
 
     func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
         let partial = path.partialWritePath
-        let (fails, written) = try state.withLock { state in
+        let (fails, drops, written) = try state.withLock { state in
             guard let parent = path.parent, state.entries[parent]?.isDirectory == true else { throw ProviderError.notFound(path) }
             if state.entries[path]?.isDirectory == true { throw ProviderError.isADirectory(path) }
             state.writesInProgress += 1
             state.mostWritesAtOnce = max(state.mostWritesAtOnce, state.writesInProgress)
-            return (state.failingWrites.contains(path.name), state.entries[partial]?.data.prefix(Int(offset)) ?? Data())
+            let drops = state.droppedWrites > 0
+            if drops { state.droppedWrites -= 1 }
+            return (state.failingWrites.contains(path.name), drops, state.entries[partial]?.data.prefix(Int(offset)) ?? Data())
         }
         defer { state.withLock { $0.writesInProgress -= 1 } }
         // Collect into the partial file and commit at the end, like an atomic write.
@@ -154,6 +158,7 @@ final class MemoryFileProvider: FileProvider {
             for try await chunk in data {
                 received.append(chunk)
                 if fails { throw ProviderError.io("디스크가 가득 찼어요") }
+                if drops { throw ProviderError.disconnected("연결이 끊어졌어요") }
             }
             // As the real providers do: a cancelled stream is not the whole file.
             try Task.checkCancellation()

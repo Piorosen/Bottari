@@ -74,6 +74,8 @@ public final class TransferJob: Identifiable {
     @ObservationIgnored var pending: [WorkItem] = []
     @ObservationIgnored var running: [UUID: (work: WorkItem, counter: ByteCounter, task: Task<Void, Never>)] = [:]
     @ObservationIgnored var retryable: [UUID: WorkItem] = [:]
+    /// Items waiting out a dropped connection before their next try.
+    @ObservationIgnored var waitingToRetry = 0
     /// Destination folder listings, by folder, so each folder is listed once.
     /// Names are keyed by `nameMatching`, so Report.txt finds report.txt on a Mac.
     @ObservationIgnored var listings: [RemotePath: [String: FileItem]] = [:]

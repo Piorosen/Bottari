@@ -383,7 +383,7 @@ import Testing
         #expect(SFTPFileProvider.translate(.permissionDenied, message: "", path) == .permissionDenied(path))
         #expect(SFTPFileProvider.translate(.unsupportedOperation, message: "", path) == .unsupported("SFTP"))
         #expect(SFTPFileProvider.translate(.failure, message: "Failure", path) == .io("Failure"))
-        #expect(SFTPFileProvider.translate(.connectionLost, message: "", path) == .io("서버와의 연결이 끊어졌습니다"))
+        #expect(SFTPFileProvider.translate(.connectionLost, message: "", path) == .disconnected("서버와의 연결이 끊어졌습니다"))
     }
 
     @Test func ownerComesFromTheLongname() {

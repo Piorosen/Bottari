@@ -316,6 +316,22 @@ import Testing
         #expect(server.text(RemotePath("/" + decomposed)) == "old hangul")
     }
 
+    @Test func aDroppedConnectionIsTriedAgainBeforeItCountsAsFailed() async throws {
+        TransferQueue.retryPause = .milliseconds(1)
+        mac.addFile("/a.bin", Data(repeating: 3, count: 5000))
+        mac.addFile("/b.bin", Data(repeating: 4, count: 5000))
+        server.state.withLock { $0.droppedWrites = 2 }
+        let recovered = try await finished(try await transfer(.copy, ["/a.bin"], from: mac, to: server))
+        #expect(recovered.state == .finished)
+        #expect(server.data("/a.bin") == Data(repeating: 3, count: 5000))
+
+        // A connection that keeps dropping fails in the end, for the user to retry.
+        server.state.withLock { $0.droppedWrites = 10 }
+        let gaveUp = try await finished(try await transfer(.copy, ["/b.bin"], from: mac, to: server))
+        #expect(gaveUp.state == .failed)
+        #expect(server.state.withLock { $0.droppedWrites } == 10 - 1 - TransferQueue.automaticRetries)
+    }
+
     @Test func failedFilesCanBeSkipped() async throws {
         mac.addFile("/bad.txt", "bad")
         server.state.withLock { $0.failingWrites = ["bad.txt"] }

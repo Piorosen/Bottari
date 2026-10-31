@@ -637,7 +637,15 @@ public struct SFTPFileProvider: FileProvider {
         case SFTPError.errorStatus(let status):
             return translate(status.errorCode, message: status.message, path)
         case SFTPError.connectionClosed:
-            return ProviderError.io(String(localized: "서버와의 연결이 끊어졌습니다"))
+            return ProviderError.disconnected(String(localized: "서버와의 연결이 끊어졌습니다"))
+        case let failure as SFTPConnectError:
+            // Reconnecting failed: a network problem may pass, a refused key will not.
+            switch failure {
+            case .noResponse, .refused, .unknownHost, .noRoute, .unreachable, .jumpHostFailed:
+                return ProviderError.disconnected(failure.localizedDescription)
+            default:
+                return ProviderError.io(failure.localizedDescription)
+            }
         default:
             return ProviderError.io(String(describing: error))
         }
@@ -648,7 +656,7 @@ public struct SFTPFileProvider: FileProvider {
         case .noSuchFile: .notFound(path)
         case .permissionDenied: .permissionDenied(path)
         case .unsupportedOperation: .unsupported(message.isEmpty ? "SFTP" : message)
-        case .noConnection, .connectionLost: .io(String(localized: "서버와의 연결이 끊어졌습니다"))
+        case .noConnection, .connectionLost: .disconnected(String(localized: "서버와의 연결이 끊어졌습니다"))
         default: .io(message.isEmpty ? String(localized: "SFTP 오류: \(String(describing: code))") : message)
         }
     }

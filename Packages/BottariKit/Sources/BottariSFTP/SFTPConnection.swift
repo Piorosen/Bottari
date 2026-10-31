@@ -637,7 +637,14 @@ private final class LoginFailureWatcher: ChannelInboundHandler, @unchecked Senda
     }
 
     func errorCaught(context: ChannelHandlerContext, error: any Error) {
-        if error is SSHClientError || error is AuthenticationFailed {
+        // Only a refused login means the sign-in methods ran out; a channel
+        // that could not be made in time is a network problem, not a wrong key.
+        let refused: Bool = switch error {
+        case is AuthenticationFailed: true
+        case let error as SSHClientError: error != .channelCreationFailed
+        default: false
+        }
+        if refused {
             tracker.markExhausted()
             context.close(promise: nil)
         }

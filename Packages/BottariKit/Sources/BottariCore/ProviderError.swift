@@ -11,6 +11,20 @@ public enum ProviderError: Error, Equatable, Sendable {
     /// The provider cannot do this at all; the associated value names the operation.
     case unsupported(String)
     case io(String)
+    /// The connection dropped or could not be made again; trying once more
+    /// a little later may well work.
+    case disconnected(String)
+
+    /// Whether an error is a passing network problem (a dropped connection,
+    /// Wi-Fi changing) rather than something about the file.
+    public static func isPassing(_ error: any Error) -> Bool {
+        if case ProviderError.disconnected = error { return true }
+        if let url = error as? URLError {
+            return [.networkConnectionLost, .notConnectedToInternet, .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed].contains(url.code)
+        }
+        let error = error as NSError
+        return error.domain == NSPOSIXErrorDomain && [ECONNRESET, ETIMEDOUT, ENETDOWN, ENETUNREACH, EHOSTUNREACH, EPIPE].contains(Int32(error.code))
+    }
 }
 
 extension ProviderError: LocalizedError {
@@ -23,6 +37,7 @@ extension ProviderError: LocalizedError {
         case .permissionDenied(let path): String(localized: "접근 권한이 없습니다: \(path.string)")
         case .unsupported(let operation): String(localized: "이 위치에서 지원하지 않는 작업입니다: \(operation)")
         case .io(let message): message
+        case .disconnected(let message): message
         }
     }
 }

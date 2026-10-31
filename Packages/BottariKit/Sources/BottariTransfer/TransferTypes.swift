@@ -212,6 +212,8 @@ struct WorkItem: Sendable {
     var mayHavePartial = false
     /// A move copied it already and only deleting the original is left.
     var copied = false
+    /// Times it was tried again by itself after the connection dropped.
+    var automaticRetries = 0
 }
 
 /// Bytes streamed so far by one transfer, written by the stream and read by the
