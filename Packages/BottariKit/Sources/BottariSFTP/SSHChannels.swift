@@ -26,6 +26,12 @@ public final class TerminalSession: Sendable {
     private let input: AsyncStream<Input>.Continuation
     private let task: Task<Void, Never>
 
+    /// A size a pseudo-terminal can have: SSH sends it unsigned, and Citadel
+    /// stops the app on a negative one.
+    static func clamped(_ value: Int) -> Int {
+        min(max(value, 1), 10_000)
+    }
+
     init(link: SFTPLink, columns: Int, rows: Int, folder: RemotePath?) {
         let (events, output) = AsyncStream.makeStream(of: Event.self)
         let (inputs, input) = AsyncStream.makeStream(of: Input.self)
@@ -35,8 +41,8 @@ public final class TerminalSession: Sendable {
             let request = SSHChannelRequestEvent.PseudoTerminalRequest(
                 wantReply: true,
                 term: "xterm-256color",
-                terminalCharacterWidth: columns,
-                terminalRowHeight: rows,
+                terminalCharacterWidth: Self.clamped(columns),
+                terminalRowHeight: Self.clamped(rows),
                 terminalPixelWidth: 0,
                 terminalPixelHeight: 0,
                 terminalModes: SSHTerminalModes([:])
@@ -97,7 +103,7 @@ public final class TerminalSession: Sendable {
     }
 
     public func resize(columns: Int, rows: Int) {
-        input.yield(.resize(columns: columns, rows: rows))
+        input.yield(.resize(columns: Self.clamped(columns), rows: Self.clamped(rows)))
     }
 
     public func close() {

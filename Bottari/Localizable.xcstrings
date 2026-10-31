@@ -511,6 +511,16 @@
         }
       }
     },
+    "%@의 포트 %lld은(는) 쓸 수 없습니다. 연결 관리에서 1–65535 사이로 고치십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Port %2$lld of %1$@ can’t be used. Change it to a number from 1 to 65535 in Connections."
+          }
+        }
+      }
+    },
     "%@의 호스트 키가 ~/.ssh/known_hosts에 있는 키와 다릅니다. 서버를 재설치하지 않았다면 연결하지 마십시오. 재설치했다면 터미널에서 ssh-keygen -R '%@'를 실행한 뒤 다시 연결하십시오.\nknown_hosts의 키: %@\n받은 키: %@": {
       "localizations": {
         "en": {
@@ -9643,6 +9653,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proxy started: SOCKS5 :1080 · HTTP :8118"
+          }
+        }
+      }
+    },
+    "프록시 포트 %lld은(는) 쓸 수 없습니다. 0–65535 사이로 고치십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy port %lld can’t be used. Change it to a number from 0 to 65535."
           }
         }
       }

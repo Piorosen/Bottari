@@ -124,6 +124,8 @@ import Testing
                 seen += String(decoding: data, as: UTF8.self)
                 if !sent, seen.contains("$ ") {
                     sent = true
+                    // A view not laid out yet reports sizes like these; they must not crash.
+                    terminal.resize(columns: -2, rows: 0)
                     terminal.resize(columns: 100, rows: 30)
                     terminal.send("hello bottari\n")
                 }
@@ -138,5 +140,14 @@ import Testing
         #expect(ended == .some(nil), "\(String(describing: ended))")
         await provider.disconnect()
         await server.stop()
+    }
+}
+
+@Suite struct TerminalSizeTests {
+    @Test func sizesStayWithinWhatAPseudoTerminalCanHave() {
+        #expect(TerminalSession.clamped(-2) == 1)
+        #expect(TerminalSession.clamped(0) == 1)
+        #expect(TerminalSession.clamped(120) == 120)
+        #expect(TerminalSession.clamped(1_000_000) == 10_000)
     }
 }

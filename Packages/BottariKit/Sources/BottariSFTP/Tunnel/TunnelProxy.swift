@@ -1,3 +1,4 @@
+import BottariCore
 import Citadel
 import Foundation
 import NIOCore
@@ -104,7 +105,11 @@ public final class TunnelProxy: Sendable {
 extension SFTPFileProvider {
     /// Starts SOCKS5 (and optionally HTTP) proxies through this server.
     public func startProxy(socksPort: Int, httpPort: Int?, pac: @escaping @Sendable () -> String) async throws -> TunnelProxy {
-        try await TunnelProxy.start(on: link.live().client, socksPort: socksPort, httpPort: httpPort, pac: pac)
+        // NIO keeps ports as UInt16 and stops the app on anything larger.
+        for port in [socksPort] + (httpPort.map { [$0] } ?? []) where !(0...65535).contains(port) {
+            throw ProviderError.io(String(localized: "프록시 포트 \(port)은(는) 쓸 수 없습니다. 0–65535 사이로 고치십시오."))
+        }
+        return try await TunnelProxy.start(on: link.live().client, socksPort: socksPort, httpPort: httpPort, pac: pac)
     }
 }
 

@@ -76,7 +76,10 @@ final class TerminalModel {
         type(Data((command + "\n").utf8))
     }
 
+    /// The terminal view reports a size as it lays out, including the
+    /// nonsense of a view not sized yet (zero or less); only real ones count.
     func resize(columns: Int, rows: Int) {
+        guard columns > 0, rows > 0, (columns, rows) != size else { return }
         size = (columns, rows)
         session?.resize(columns: columns, rows: rows)
     }

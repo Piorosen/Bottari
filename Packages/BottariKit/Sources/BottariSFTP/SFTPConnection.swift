@@ -105,6 +105,8 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     /// The ProxyCommand could not start, or ended before the server answered.
     case proxyCommandFailed(command: String, reason: String)
     case unreachable(String)
+    /// The port is outside 1–65535.
+    case invalidPort(host: String, port: Int)
 
     /// `error` as an `SFTPConnectError`, naming `endpoint` when the network was the problem.
     static func wrap(_ error: any Error, dialling endpoint: SFTPEndpoint? = nil) -> any Error {
@@ -191,6 +193,8 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "ProxyCommand로 서버에 닿지 못했습니다: \(ProxyCommand.program(of: command))") + (reason.isEmpty ? "" : "\n\(reason)")
         case .unreachable(let reason):
             String(localized: "서버에 연결할 수 없습니다: \(reason)")
+        case .invalidPort(let host, let port):
+            String(localized: "\(host)의 포트 \(port)은(는) 쓸 수 없습니다. 연결 관리에서 1–65535 사이로 고치십시오.")
         }
     }
 }
@@ -260,6 +264,11 @@ final class SFTPConnection: @unchecked Sendable {
         proxyCommand: String? = nil,
         timeout: TimeAmount = .seconds(15)
     ) async throws -> SFTPConnection {
+        // A port typed as 70000 or -1 would stop the app deep inside NIO,
+        // which keeps ports as UInt16.
+        for target in hops.map(\.endpoint) + [endpoint] where !(1...65535).contains(target.port) {
+            throw SFTPConnectError.invalidPort(host: target.host, port: target.port)
+        }
         let route = hops.isEmpty
             ? (proxyCommand.map { " (ProxyCommand: \(ProxyCommand.program(of: $0)))" } ?? "")
             : String(localized: " (경유: ") + hops.map { "\($0.endpoint.username)@\($0.endpoint.hostKeyID)" }.joined(separator: " → ") + ")"
