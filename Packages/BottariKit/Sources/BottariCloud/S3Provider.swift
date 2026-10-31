@@ -50,15 +50,31 @@ public struct S3Provider: FileProvider {
     public let displayName: String
     let signer: AWSSigner
     let session: URLSession
+    /// Objects bigger than this are copied in parts; S3 copies at most 5 GiB in one request.
+    let largestSingleCopy: Int64
 
     /// Bytes per ranged read and per uploaded part (S3 parts must be at least 5 MB).
     static let chunkSize = 8 * 1024 * 1024
+    /// Bytes per part when copying a big object in parts.
+    static let copyPartSize: Int64 = 512 * 1024 * 1024
 
-    public init(configuration: S3Configuration, secretKey: String, displayName: String? = nil, session: URLSession = .shared) {
+    public init(configuration: S3Configuration, secretKey: String, displayName: String? = nil, session: URLSession = .shared, largestSingleCopy: Int64 = 5 * 1024 * 1024 * 1024) {
         self.configuration = configuration
         self.displayName = displayName ?? configuration.bucket
         self.signer = AWSSigner(accessKey: configuration.accessKey, secretKey: secretKey, region: configuration.region)
         self.session = session
+        self.largestSingleCopy = largestSingleCopy
+    }
+
+    /// The size of upload part `number` (from 1). An upload may have 10,000
+    /// parts and its size is not known up front, so parts grow as it goes on:
+    /// 8 MiB up to 8 GiB, 64 MiB up to 264 GiB, then 256 MiB, about 1.5 TiB in all.
+    static func partSize(_ number: Int) -> Int {
+        switch number {
+        case ...1000: chunkSize
+        case ...5000: 8 * chunkSize
+        default: 32 * chunkSize
+        }
     }
 
     public var locationID: String { "s3://\(configuration.bucket)@\(configuration.url(for: "").host() ?? "")" }
@@ -70,14 +86,22 @@ public struct S3Provider: FileProvider {
 
     // MARK: - Reading
 
+    /// Keys whose name here is empty, "." or ".." (from "a//b" or "a/../b")
+    /// cannot be a path and are left out; they would read as this folder or
+    /// its parent, and walking them would never end.
     public func list(_ path: RemotePath) async throws -> [FileItem] {
         let prefix = Self.prefix(path)
         let page = try await listAll(prefix: prefix, delimiter: "/")
-        var items = page.folders.map { folder in
-            FileItem(path: RemotePath("/" + folder), kind: .directory)
+        func name(_ key: String) -> String? {
+            var rest = key.dropFirst(prefix.count)
+            if rest.hasSuffix("/") { rest = rest.dropLast() }
+            return ["", ".", ".."].contains(rest) || rest.contains("/") ? nil : String(rest)
         }
-        items += page.objects.filter { $0.key != prefix }.map { object in
-            FileItem(path: RemotePath("/" + object.key), kind: .file, size: object.size, modified: object.modified)
+        var items = page.folders.compactMap { folder in
+            name(folder).map { FileItem(path: path.appending($0), kind: .directory) }
+        }
+        items += page.objects.filter { $0.key != prefix }.compactMap { object in
+            name(object.key).map { FileItem(path: path.appending($0), kind: .file, size: object.size, modified: object.modified) }
         }
         return items.sorted(by: FileItem.finderOrder)
     }
@@ -130,9 +154,9 @@ public struct S3Provider: FileProvider {
         do {
             for try await chunk in data {
                 buffer.append(chunk)
-                while buffer.count >= Self.chunkSize {
+                while buffer.count >= Self.partSize(parts.count + 1) {
                     if uploadID == nil { uploadID = try await startMultipart(key, path: path) }
-                    let part = buffer.prefix(Self.chunkSize)
+                    let part = buffer.prefix(Self.partSize(parts.count + 1))
                     buffer.removeFirst(part.count)
                     parts.append((parts.count + 1, try await uploadPart(key, uploadID: uploadID!, number: parts.count + 1, data: Data(part), path: path)))
                 }
@@ -147,19 +171,39 @@ public struct S3Provider: FileProvider {
             if !buffer.isEmpty || parts.isEmpty {
                 parts.append((parts.count + 1, try await uploadPart(key, uploadID: uploadID, number: parts.count + 1, data: buffer, path: path)))
             }
-            let body = "<CompleteMultipartUpload>" + parts.map { "<Part><PartNumber>\($0.0)</PartNumber><ETag>\($0.1)</ETag></Part>" }.joined() + "</CompleteMultipartUpload>"
-            var request = URLRequest(url: configuration.url(for: key, query: [("uploadId", uploadID)]))
-            request.httpMethod = "POST"
-            request.httpBody = Data(body.utf8)
-            _ = try await send(&request, path: path, payload: request.httpBody!)
+            try await completeMultipart(key, uploadID: uploadID, parts: parts, path: path)
         } catch {
-            if let uploadID {
-                var abort = URLRequest(url: configuration.url(for: key, query: [("uploadId", uploadID)]))
-                abort.httpMethod = "DELETE"
-                _ = try? await send(&abort, path: path, allowing: [404])
-            }
+            if let uploadID { await abortMultipart(key, uploadID: uploadID, path: path) }
             throw error
         }
+    }
+
+    /// S3 can answer 200 and still have failed, with the error in the body.
+    private func completeMultipart(_ key: String, uploadID: String, parts: [(Int, String)], path: RemotePath) async throws {
+        let body = "<CompleteMultipartUpload>" + parts.map { "<Part><PartNumber>\($0.0)</PartNumber><ETag>\($0.1)</ETag></Part>" }.joined() + "</CompleteMultipartUpload>"
+        var request = URLRequest(url: configuration.url(for: key, query: [("uploadId", uploadID)]))
+        request.httpMethod = "POST"
+        request.httpBody = Data(body.utf8)
+        let (data, _) = try await send(&request, path: path, payload: request.httpBody!)
+        try Self.checkForError(in: data, path: path)
+    }
+
+    /// Throws away the parts sent so far, which would otherwise stay (and be
+    /// billed) unseen. The upload may have stopped because its task was
+    /// cancelled, so this runs in a task of its own that is not.
+    private func abortMultipart(_ key: String, uploadID: String, path: RemotePath) async {
+        await Task.detached { [self] in
+            var abort = URLRequest(url: configuration.url(for: key, query: [("uploadId", uploadID)]))
+            abort.httpMethod = "DELETE"
+            _ = try? await send(&abort, path: path, allowing: [404])
+        }.value
+    }
+
+    static func checkForError(in data: Data, path: RemotePath) throws {
+        let reply = S3XML.parse(data)
+        guard reply.root == "Error" else { return }
+        let message = reply.values["Message"]?.first ?? reply.values["Code"]?.first ?? ""
+        throw ProviderError.io(String(localized: "S3 오류: \(message)"))
     }
 
     private func startMultipart(_ key: String, path: RemotePath) async throws -> String {
@@ -197,11 +241,48 @@ public struct S3Provider: FileProvider {
             marker.httpBody = Data()
             _ = try await send(&marker, path: to, payload: Data())
         }
-        for (old, new) in try await keys(of: source, movingTo: to) where !(source.isDirectory && old == Self.prefix(from)) {
-            var request = URLRequest(url: configuration.url(for: new))
-            request.httpMethod = "PUT"
-            request.setValue("/\(configuration.bucket)/\(AWSSigner.encode(old, keepingSlashes: true))", forHTTPHeaderField: "x-amz-copy-source")
-            _ = try await send(&request, path: from)
+        for (old, new, size) in try await keys(of: source, movingTo: to) where !(source.isDirectory && old == Self.prefix(from)) {
+            if let size, size > largestSingleCopy {
+                try await copyInParts(old, to: new, size: size, path: from)
+            } else {
+                var request = URLRequest(url: configuration.url(for: new))
+                request.httpMethod = "PUT"
+                request.setValue(copySource(old), forHTTPHeaderField: "x-amz-copy-source")
+                let (data, _) = try await send(&request, path: from)
+                // A copy can fail after S3 has already answered 200; moving on
+                // would let `move` delete the only copy.
+                try Self.checkForError(in: data, path: from)
+            }
+        }
+    }
+
+    private func copySource(_ key: String) -> String {
+        "/\(configuration.bucket)/\(AWSSigner.encode(key, keepingSlashes: true))"
+    }
+
+    /// A multipart upload whose parts are ranges of the original, copied by S3.
+    private func copyInParts(_ old: String, to new: String, size: Int64, path: RemotePath) async throws {
+        let uploadID = try await startMultipart(new, path: path)
+        do {
+            var parts: [(Int, String)] = []
+            var offset: Int64 = 0
+            while offset < size {
+                let end = min(offset + Self.copyPartSize, size) - 1
+                let number = parts.count + 1
+                var request = URLRequest(url: configuration.url(for: new, query: [("partNumber", String(number)), ("uploadId", uploadID)]))
+                request.httpMethod = "PUT"
+                request.setValue(copySource(old), forHTTPHeaderField: "x-amz-copy-source")
+                request.setValue("bytes=\(offset)-\(end)", forHTTPHeaderField: "x-amz-copy-source-range")
+                let (data, _) = try await send(&request, path: path)
+                try Self.checkForError(in: data, path: path)
+                guard let tag = S3XML.parse(data).values["ETag"]?.first else { throw ProviderError.io(String(localized: "S3 복사 응답이 올바르지 않습니다")) }
+                parts.append((number, tag))
+                offset = end + 1
+            }
+            try await completeMultipart(new, uploadID: uploadID, parts: parts, path: path)
+        } catch {
+            await abortMultipart(new, uploadID: uploadID, path: path)
+            throw error
         }
     }
 
@@ -213,7 +294,7 @@ public struct S3Provider: FileProvider {
 
     public func delete(_ path: RemotePath) async throws {
         let item = try await stat(path)
-        for (key, _) in try await keys(of: item, movingTo: path) {
+        for (key, _, _) in try await keys(of: item, movingTo: path) {
             var request = URLRequest(url: configuration.url(for: key))
             request.httpMethod = "DELETE"
             _ = try await send(&request, path: path, allowing: [404])
@@ -221,12 +302,13 @@ public struct S3Provider: FileProvider {
     }
 
     /// Every object under `item` (itself for a file; for a folder its contents
-    /// and its marker, if it has one) paired with where it lands below `destination`.
-    private func keys(of item: FileItem, movingTo destination: RemotePath) async throws -> [(String, String)] {
-        guard item.isDirectory else { return [(Self.key(item.path), Self.key(destination))] }
+    /// and its marker, if it has one) paired with where it lands below
+    /// `destination`, and its size.
+    private func keys(of item: FileItem, movingTo destination: RemotePath) async throws -> [(String, String, Int64?)] {
+        guard item.isDirectory else { return [(Self.key(item.path), Self.key(destination), item.size)] }
         let prefix = Self.prefix(item.path)
         let newPrefix = Self.prefix(destination)
-        return try await listAll(prefix: prefix, delimiter: nil).objects.map { ($0.key, newPrefix + $0.key.dropFirst(prefix.count)) }
+        return try await listAll(prefix: prefix, delimiter: nil).objects.map { ($0.key, newPrefix + $0.key.dropFirst(prefix.count), $0.size) }
     }
 
     // MARK: - Requests
@@ -261,7 +343,13 @@ public struct S3Provider: FileProvider {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ProviderError.io(String(localized: "S3 응답이 올바르지 않습니다")) }
         if (200..<300).contains(http.statusCode) || allowed.contains(http.statusCode) { return (data, http) }
-        let message = S3XML.parse(data).values["Message"]?.first ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+        let reply = S3XML.parse(data)
+        let message = reply.values["Message"]?.first ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+        // The bucket lives in another region than the one saved: say which.
+        if let region = http.value(forHTTPHeaderField: "x-amz-bucket-region") ?? reply.values["Region"]?.first,
+           region != configuration.region, [301, 307, 400].contains(http.statusCode) {
+            throw ProviderError.io(String(localized: "‘\(configuration.bucket)’ 버킷은 \(region) 리전에 있습니다. 연결 관리에서 리전을 \(region)(으)로 바꾸십시오."))
+        }
         switch http.statusCode {
         case 404: throw ProviderError.notFound(path)
         case 403: throw ProviderError.permissionDenied(path)
@@ -312,6 +400,8 @@ final class RangeReader: @unchecked Sendable {
 
 /// Just enough of S3's XML: every element's text by name, and the objects of a listing.
 struct S3XML {
+    /// The outermost element, e.g. "Error".
+    var root: String?
     var values: [String: [String]] = [:]
     var objects: [(key: String, size: Int64?, modified: Date?)] = []
 
@@ -330,6 +420,7 @@ struct S3XML {
 
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
             text = ""
+            if result.root == nil { result.root = name }
             if name == "Contents" { object = [:] }
         }
 

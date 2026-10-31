@@ -92,6 +92,32 @@ import Testing
         await #expect(throws: ProviderError.alreadyExists("/v3")) { try await provider.copy("/v3", to: "/v3") }
     }
 
+    @Test func aCopyThatFailsAfterAnsweringKeepsTheOriginal() async throws {
+        let provider = provider
+        try await provider.write("/only.txt", data: Data("precious".utf8))
+        FakeS3.failCopies(in: bucket, true)
+        await #expect(throws: ProviderError.self) { try await provider.move("/only.txt", to: "/moved.txt") }
+        FakeS3.failCopies(in: bucket, false)
+        #expect(try await provider.readData("/only.txt") == Data("precious".utf8))
+    }
+
+    @Test func bigObjectsAreCopiedInParts() async throws {
+        let small = S3Provider(configuration: S3Configuration(bucket: bucket, accessKey: FakeS3.signer.accessKey), secretKey: "bottari-secret", session: FakeS3.session(), largestSingleCopy: 10)
+        let payload = Data((0..<(Int(S3Provider.copyPartSize) / 1024 / 1024 + 37)).map { UInt8(truncatingIfNeeded: $0) })
+        try await small.write("/big.bin", data: payload)
+        try await small.copy("/big.bin", to: "/copy.bin")
+        #expect(try await small.readData("/copy.bin") == payload)
+        #expect(FakeS3.bucket(bucket).log.contains("PUT copy.bin?partNumber&uploadId"))
+    }
+
+    @Test func keysThatAreNotPathsAreLeftOut() async throws {
+        FakeS3.put("a//x.txt", Data("x".utf8), in: bucket)
+        FakeS3.put("a/./y.txt", Data("y".utf8), in: bucket)
+        FakeS3.put("a/z.txt", Data("z".utf8), in: bucket)
+        // "/a" must not list itself, or walking it would never end.
+        #expect(try await provider.list("/a").map(\.name) == ["z.txt"])
+    }
+
     @Test func aWrongSecretIsRefused() async throws {
         let wrong = S3Provider(configuration: S3Configuration(bucket: bucket, accessKey: FakeS3.signer.accessKey), secretKey: "nope", session: FakeS3.session())
         await #expect(throws: ProviderError.permissionDenied(.root)) { try await wrong.list(.root) }

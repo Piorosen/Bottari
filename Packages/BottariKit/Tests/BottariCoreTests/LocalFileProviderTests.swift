@@ -20,6 +20,21 @@ import Testing
         try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: path.string)
     }
 
+    @Test func renamingOnlyTheCaseWorksWhereTheDiskIgnoresIt() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        try await provider.write(dir.appending("readme.txt"), data: Data("x".utf8))
+        try await provider.write(dir.appending("other.txt"), data: Data("y".utf8))
+        guard provider.nameMatching(in: dir) == .ignoringCaseAndNormalization else { return }
+
+        try await provider.move(dir.appending("readme.txt"), to: dir.appending("README.txt"))
+        #expect(try await provider.list(dir).map(\.name).contains("README.txt"))
+        // Still refused onto a different file that only looks the same.
+        await #expect(throws: ProviderError.alreadyExists(dir.appending("OTHER.txt"))) {
+            try await provider.move(dir.appending("README.txt"), to: dir.appending("OTHER.txt"))
+        }
+    }
+
     @Test func listsDirectoriesFirstInFinderOrder() async throws {
         let dir = try makeTempDirectory()
         defer { cleanUp(dir) }

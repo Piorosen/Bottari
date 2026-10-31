@@ -20,13 +20,14 @@ public enum FileNames {
 extension RemotePath {
     /// `name` with " 2", " 3" … added before the extension until it is not in
     /// `taken`, the way Finder's "keep both" names things.
-    public static func freeName(for name: String, isDirectory: Bool, taken: Set<String>) -> String {
+    /// `key` says which spellings count as the same name (see `NameMatching`).
+    public static func freeName(for name: String, isDirectory: Bool, taken: Set<String>, key: (String) -> String = { $0 }) -> String {
         let ext = isDirectory ? "" : RemotePath("/" + name).pathExtension
         let base = ext.isEmpty ? name : String(name.dropLast(ext.count + 1))
         var number = 2
         while true {
             let candidate = ext.isEmpty ? "\(base) \(number)" : "\(base) \(number).\(ext)"
-            if !taken.contains(candidate) { return candidate }
+            if !taken.contains(key(candidate)) { return candidate }
             number += 1
         }
     }

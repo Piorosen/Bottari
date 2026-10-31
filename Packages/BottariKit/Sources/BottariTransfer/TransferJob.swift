@@ -75,7 +75,9 @@ public final class TransferJob: Identifiable {
     @ObservationIgnored var running: [UUID: (work: WorkItem, counter: ByteCounter, task: Task<Void, Never>)] = [:]
     @ObservationIgnored var retryable: [UUID: WorkItem] = [:]
     /// Destination folder listings, by folder, so each folder is listed once.
+    /// Names are keyed by `nameMatching`, so Report.txt finds report.txt on a Mac.
     @ObservationIgnored var listings: [RemotePath: [String: FileItem]] = [:]
+    @ObservationIgnored lazy var nameMatching = destination.provider.nameMatching(in: destinationFolder)
     /// Free names handed out for "keep both" that are not written yet.
     @ObservationIgnored var reserved: Set<RemotePath> = []
     /// Source folders a move emptied, to remove at the end.
@@ -90,6 +92,7 @@ public final class TransferJob: Identifiable {
     /// From a saved record: files already done, and files cut off midway.
     @ObservationIgnored var resumedDone: Set<RemotePath> = []
     @ObservationIgnored var resumedUnfinished: Set<RemotePath> = []
+    @ObservationIgnored var resumedVersions: [RemotePath: TransferRecord.FileVersion] = [:]
 
     struct Question {
         let conflict: TransferConflict
@@ -141,6 +144,7 @@ public final class TransferJob: Identifiable {
             verifiesChecksums: verifiesChecksums,
             done: done.union(resumedDone).sorted { $0.string < $1.string },
             unfinished: cutOff.filter { $0.action == .stream }.map(\.source.path),
+            unfinishedVersions: cutOff.filter { $0.action == .stream }.map { .init(path: $0.source.path, size: $0.source.size, modified: $0.source.modified) },
             totalFiles: totalFiles,
             totalBytes: totalBytes,
             transferredBytes: transferredBytes,

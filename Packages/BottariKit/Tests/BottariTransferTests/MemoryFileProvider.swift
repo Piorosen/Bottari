@@ -24,6 +24,10 @@ final class MemoryFileProvider: FileProvider {
         var readOffsets: [Int64] = []
         /// Names whose checksum comes out wrong, as if the copy were damaged.
         var damagedChecksums: Set<String> = []
+        /// Names that cannot be deleted.
+        var failingDeletes: Set<String> = []
+        /// How names count as the same, e.g. like the Mac's disk.
+        var matching = NameMatching.exact
     }
 
     let displayName: String
@@ -199,9 +203,14 @@ final class MemoryFileProvider: FileProvider {
         }
     }
 
+    func nameMatching(in folder: RemotePath) -> NameMatching {
+        state.withLock { $0.matching }
+    }
+
     func delete(_ path: RemotePath) async throws {
         try state.withLock { state in
             guard state.entries[path] != nil else { throw ProviderError.notFound(path) }
+            guard !state.failingDeletes.contains(path.name) else { throw ProviderError.permissionDenied(path) }
             for key in state.entries.keys where key == path || path.isAncestor(of: key) {
                 state.entries[key] = nil
             }

@@ -30,6 +30,8 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
         var uploads: [String: Upload] = [:]
         var log: [String] = []
         var counter = 0
+        /// Requests still to be refused with "rate limit exceeded".
+        var throttled = 0
     }
 
     static let state = Mutex<[String: Drive]>([:])
@@ -56,6 +58,10 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
         }
     }
 
+    static func throttle(_ drive: String, times: Int) {
+        state.withLock { $0[drive, default: Drive()].throttled = times }
+    }
+
     static func drive(_ name: String) -> Drive {
         state.withLock { $0[name] ?? Drive() }
     }
@@ -75,6 +81,14 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
         let body = request.httpBody ?? Self.read(request.httpBodyStream)
         let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
         Self.state.withLock { $0[token, default: Drive()].log.append("\(method) \(path)") }
+        let throttled = Self.state.withLock { state in
+            guard state[token, default: Drive()].throttled > 0 else { return false }
+            state[token]!.throttled -= 1
+            return true
+        }
+        if throttled {
+            return respond(403, json: ["error": ["message": "Rate Limit Exceeded", "errors": [["reason": "userRateLimitExceeded"]]]])
+        }
         let parts = path.split(separator: "/").map(String.init)
 
         if let uploadID = query["upload_id"], method == "PUT" {

@@ -91,6 +91,7 @@ public final class TransferQueue {
         job.verifiesChecksums = record.verifiesChecksums
         job.resumedDone = Set(record.done)
         job.resumedUnfinished = Set(record.unfinished)
+        job.resumedVersions = Dictionary((record.unfinishedVersions ?? []).map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         Log.transfer.info("\(job.logName): 지난번에 끝나지 않은 전송을 이어서 시작 (완료 \(record.done.count)개, 이어받을 파일 \(record.unfinished.count)개)")
         for path in gone where record.kind == .copy {
             job.failures.append(TransferFailure(path: path, message: String(localized: "원본을 찾을 수 없습니다: \(path.string)")))
@@ -209,6 +210,9 @@ public final class TransferQueue {
 
     public func remove(_ job: TransferJob) {
         guard job.state.hasEnded, job.running.isEmpty else { return }
+        // Nothing will resume the failed files' partial copies now.
+        discardPartials(of: Array(job.retryable.values) + job.pending, in: job)
+        job.retryable = [:]
         jobs.removeAll { $0 === job }
         onJobsChanged?()
         onCheckpoint?()
@@ -300,7 +304,14 @@ public final class TransferQueue {
                 // also why it does not count as a clash with itself.
                 var work = WorkItem(source: item, destination: destination, action: wholeItem)
                 if job.resumedUnfinished.contains(item.path) {
-                    work.mayHavePartial = true
+                    // A source edited since (a growing log, a re-exported video)
+                    // starts over; its old beginning is no use.
+                    if let version = job.resumedVersions[item.path], !version.matches(item) {
+                        Log.transfer.info("\(job.logName): 원본이 바뀌어 처음부터 다시 보냄: \(item.path.string)")
+                        await job.destination.provider.discardPartialWrite(to: destination)
+                    } else {
+                        work.mayHavePartial = true
+                    }
                 }
                 add(work, in: job)
             }
@@ -357,6 +368,15 @@ public final class TransferQueue {
         pump()
     }
 
+    /// Takes back what `add` counted for `work`, which is about to be planned
+    /// again (and counted again) as the items it turned out to be.
+    private func uncount(_ work: WorkItem, in job: TransferJob) {
+        job.totalFiles -= 1
+        if !work.source.isDirectory {
+            job.totalBytes -= work.source.size ?? 0
+        }
+    }
+
     private func fail(_ item: FileItem, _ message: String, retry: WorkItem?, in job: TransferJob) {
         let failure = TransferFailure(path: item.path, message: message)
         job.failures.append(failure)
@@ -369,25 +389,27 @@ public final class TransferQueue {
         if job.listings[parent] == nil {
             let listing = try await job.destination.provider.list(parent)
             if job.listings[parent] == nil {
-                job.listings[parent] = Dictionary(listing.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+                let matching = job.nameMatching
+                job.listings[parent] = Dictionary(listing.map { (matching.key($0.name), $0) }, uniquingKeysWith: { first, _ in first })
             }
         }
-        return job.listings[parent]?[path.name]
+        return job.listings[parent]?[job.nameMatching.key(path.name)]
     }
 
     /// A name next to `path` that nothing uses or has claimed, claimed for the caller.
     private func freePath(for path: RemotePath, isDirectory: Bool, in job: TransferJob) async throws -> RemotePath {
         guard let parent = path.parent else { return path }
         _ = try await existingItem(at: path, in: job)
-        let taken = Set(job.listings[parent, default: [:]].keys).union(job.reserved.filter { $0.parent == parent }.map(\.name))
-        let free = parent.appending(RemotePath.freeName(for: path.name, isDirectory: isDirectory, taken: taken))
+        let matching = job.nameMatching
+        let taken = Set(job.listings[parent, default: [:]].keys).union(job.reserved.filter { $0.parent == parent }.map { matching.key($0.name) })
+        let free = parent.appending(RemotePath.freeName(for: path.name, isDirectory: isDirectory, taken: taken, key: matching.key))
         job.reserved.insert(free)
         return free
     }
 
     private func remember(_ item: FileItem, in job: TransferJob) {
         guard let parent = item.path.parent else { return }
-        job.listings[parent]?[item.name] = item
+        job.listings[parent]?[job.nameMatching.key(item.name)] = item
         job.reserved.remove(item.path)
     }
 
@@ -434,9 +456,15 @@ public final class TransferQueue {
             return .planned
         }
         do {
+            if work.copied {
+                // The copy is in place; trying again means deleting the original.
+                try await job.source.provider.delete(work.source.path)
+                return .done(bytes: work.source.size ?? 0, verified: false)
+            }
             if work.settled == nil, let existing = try await existingItem(at: work.destination, in: job) {
                 if work.source.isDirectory, existing.isDirectory {
                     // The folder appeared since planning: merge into it instead.
+                    uncount(work, in: job)
                     await plan(work.source, to: work.destination, in: job)
                     return .planned
                 }
@@ -464,6 +492,7 @@ public final class TransferQueue {
                 // (the job says so from now on), or this is a renamed copy, which
                 // tar on the server cannot make: stream it instead.
                 if directRoute == nil { job.route = .viaMac }
+                uncount(work, in: job)
                 await plan(work.source, to: work.destination, in: job, throughMac: true)
                 return .planned
             }
@@ -478,17 +507,13 @@ public final class TransferQueue {
                         try await destination.write(work.destination, from: source.read(work.source.path, range: nil).counted(by: counter))
                     }
                 } catch {
-                    // Whatever reached the destination waits in its partial file.
-                    work.mayHavePartial = work.mayHavePartial || resumedFrom > 0 || counter.total > 0
+                    // Whatever reached the destination waits in its partial file,
+                    // which exists (perhaps empty) as soon as the write began.
+                    work.mayHavePartial = true
                     throw error
                 }
                 work.mayHavePartial = false
-                if job.verifiesChecksums, source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) {
-                    let sentPath = work.source.path
-                    let receivedPath = work.destination
-                    async let sent = source.checksum(sentPath)
-                    async let received = destination.checksum(receivedPath)
-                    let (expected, actual) = try await (sent, received)
+                if job.verifiesChecksums, let (expected, actual) = try await checksums(of: work.source.path, on: source, and: work.destination, on: destination) {
                     guard expected == actual else {
                         // A retry must replace the bad copy, not trip over it as a clash.
                         work.settled = .overwrite
@@ -518,15 +543,11 @@ public final class TransferQueue {
                     // this item and everything after it.
                     Log.transfer.error("\(job.logName): 서버 간 직접 전송 불가, Mac 경유로 전환: \(unavailable.reason)")
                     job.route = .viaMac
+                    uncount(work, in: job)
                     await plan(work.source, to: work.destination, in: job, throughMac: true)
                     return .planned
                 }
-                if !work.source.isDirectory, job.verifiesChecksums, source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) {
-                    let sentPath = work.source.path
-                    let receivedPath = work.destination
-                    async let sent = source.checksum(sentPath)
-                    async let received = destination.checksum(receivedPath)
-                    let (expected, actual) = try await (sent, received)
+                if !work.source.isDirectory, job.verifiesChecksums, let (expected, actual) = try await checksums(of: work.source.path, on: source, and: work.destination, on: destination) {
                     guard expected == actual else {
                         work.settled = .overwrite
                         return .failed(String(localized: "체크섬이 일치하지 않습니다 (원본 \(expected.prefix(12))…, 대상 \(actual.prefix(12))…)"), work)
@@ -541,6 +562,7 @@ public final class TransferQueue {
                 do {
                     try await source.delete(work.source.path)
                 } catch {
+                    work.copied = true
                     return .failed(String(localized: "복사했으나 원본을 삭제할 수 없습니다: \(error.localizedDescription)"), work)
                 }
             }
@@ -551,6 +573,19 @@ public final class TransferQueue {
                 return .interrupted(work)
             }
             return .failed(error.localizedDescription, work)
+        }
+    }
+
+    /// Both sides' SHA-256, or nil when either side has none to give for this
+    /// file (a converted Google Doc has none), which leaves it unverified.
+    private func checksums(of sent: RemotePath, on source: any FileProvider, and received: RemotePath, on destination: any FileProvider) async throws -> (String, String)? {
+        guard source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) else { return nil }
+        do {
+            async let expected = source.checksum(sent)
+            async let actual = destination.checksum(received)
+            return try await (expected, actual)
+        } catch ProviderError.unsupported {
+            return nil
         }
     }
 
@@ -568,7 +603,7 @@ public final class TransferQueue {
         if work.mayHavePartial {
             written = try? await destination.stat(partial).size
         } else if job.verifiesChecksums, source.capabilities.contains(.checksum), destination.capabilities.contains(.checksum) {
-            written = job.listings[partial.parent ?? .root]?[partial.name]?.size
+            written = job.listings[partial.parent ?? .root]?[job.nameMatching.key(partial.name)]?.size
         } else {
             written = nil
         }

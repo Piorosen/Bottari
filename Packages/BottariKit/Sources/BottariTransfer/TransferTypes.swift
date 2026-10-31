@@ -43,6 +43,32 @@ public struct TransferRecord: Codable, Identifiable, Hashable, Sendable {
     public var done: [RemotePath]
     /// Source files cut off midway, whose partial copies a resumed job continues.
     public var unfinished: [RemotePath]
+    /// The size and date each unfinished file had, so one changed since is
+    /// sent again from the start instead of glued onto the old beginning.
+    /// Missing in records saved before it was kept.
+    public var unfinishedVersions: [FileVersion]?
+
+    public struct FileVersion: Codable, Hashable, Sendable {
+        public var path: RemotePath
+        public var size: Int64?
+        public var modified: Date?
+
+        public init(path: RemotePath, size: Int64?, modified: Date?) {
+            self.path = path
+            self.size = size
+            self.modified = modified
+        }
+
+        /// Whether `item` still looks like the file this was taken from.
+        public func matches(_ item: FileItem) -> Bool {
+            guard item.size == size else { return false }
+            switch (item.modified, modified) {
+            case let (now?, then?): return abs(now.timeIntervalSince(then)) < 1
+            case (nil, nil): return true
+            default: return false
+            }
+        }
+    }
     public var totalFiles: Int
     public var totalBytes: Int64
     public var transferredBytes: Int64
@@ -59,6 +85,7 @@ public struct TransferRecord: Codable, Identifiable, Hashable, Sendable {
         verifiesChecksums: Bool,
         done: [RemotePath],
         unfinished: [RemotePath],
+        unfinishedVersions: [FileVersion]? = nil,
         totalFiles: Int,
         totalBytes: Int64,
         transferredBytes: Int64,
@@ -74,6 +101,7 @@ public struct TransferRecord: Codable, Identifiable, Hashable, Sendable {
         self.verifiesChecksums = verifiesChecksums
         self.done = done
         self.unfinished = unfinished
+        self.unfinishedVersions = unfinishedVersions
         self.totalFiles = totalFiles
         self.totalBytes = totalBytes
         self.transferredBytes = transferredBytes
@@ -182,6 +210,8 @@ struct WorkItem: Sendable {
     var settled: ConflictAnswer?
     /// An earlier attempt in this job wrote part of the file, which may be resumed.
     var mayHavePartial = false
+    /// A move copied it already and only deleting the original is left.
+    var copied = false
 }
 
 /// Bytes streamed so far by one transfer, written by the stream and read by the

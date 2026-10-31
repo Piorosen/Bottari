@@ -97,6 +97,9 @@ import Testing
         #expect(backup.text("/one.txt") == "1" && backup.text("/two.txt") == "2")
         // Only the first item tried the direct route.
         #expect(sent.withLock { $0.paths } == ["/one.txt"])
+        // Planned again through the Mac, but counted once.
+        #expect(job.totalFiles == 2 && job.completedFiles == 2)
+        #expect(job.totalBytes == 2 && job.fractionCompleted == 1)
     }
 
     @Test func anExistingFolderIsMergedItemByItem() async throws {

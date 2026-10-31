@@ -140,7 +140,9 @@ public final class MPVPlayer: @unchecked Sendable {
         lock.unlock()
         state = PlayerState()
         publish()
-        var options = "force-media-title=\(item.name)"
+        // In mpv's option list "," and "[" are syntax; %<bytes>% quotes the
+        // name whatever it holds ("[SubsPlease] Show - 01.mkv", "Movie, Part 1").
+        var options = "force-media-title=%\(item.name.utf8.count)%\(item.name)"
         if seconds > 0 { options += ",start=\(seconds)" }
         command("loadfile", "bottari://\(token)", "replace", "-1", options)
     }

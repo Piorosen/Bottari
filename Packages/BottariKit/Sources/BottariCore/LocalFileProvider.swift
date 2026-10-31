@@ -174,6 +174,11 @@ public struct LocalFileProvider: FileProvider {
 
     public func move(_ from: RemotePath, to: RemotePath) async throws {
         try requireAbsent(to, source: from)
+        if isRespelling(from, as: to) {
+            // Only the spelling changes; rename(2) does that in place.
+            guard rename(from.string, to.string) == 0 else { throw ProviderError.io(String(cString: strerror(errno))) }
+            return
+        }
         try mapErrors(from) { try FileManager.default.moveItem(atPath: from.string, toPath: to.string) }
     }
 
@@ -200,7 +205,7 @@ public struct LocalFileProvider: FileProvider {
     /// folder stays `.other`, since looking at its target would make macOS ask the user.
     private func item(at path: RemotePath, followingGuardedLinks: Bool) throws -> FileItem {
         let fm = FileManager.default
-        let attributes = try fm.attributesOfItem(atPath: path.string)
+        var attributes = try fm.attributesOfItem(atPath: path.string)
         let type = attributes[.type] as? FileAttributeType
         let isLink = type == .typeSymbolicLink
         var kind: FileItem.Kind = switch type {
@@ -209,10 +214,15 @@ public struct LocalFileProvider: FileProvider {
         default: .other
         }
         if isLink, followingGuardedLinks || !linksIntoGuardedFolder(path) {
-            // Describe what the link points at, so a link to a folder opens like one.
+            // Describe what the link points at, so a link to a folder opens like
+            // one and a linked video reports the video's size, not the link's.
             var isDirectory: ObjCBool = false
             if fm.fileExists(atPath: path.string, isDirectory: &isDirectory) {
                 kind = isDirectory.boolValue ? .directory : .file
+                if let target = try? fm.attributesOfItem(atPath: (path.string as NSString).resolvingSymlinksInPath) {
+                    attributes[.size] = target[.size]
+                    attributes[.modificationDate] = target[.modificationDate]
+                }
             }
         }
         return FileItem(
@@ -278,11 +288,32 @@ public struct LocalFileProvider: FileProvider {
         guard !isDirectory.boolValue else { throw ProviderError.isADirectory(path) }
     }
 
+    /// Fails if something is at `destination`, unless that is `source` itself
+    /// under another spelling (a.txt → A.txt on a disk that ignores case).
     private func requireAbsent(_ destination: RemotePath, source: RemotePath) throws {
         guard FileManager.default.fileExists(atPath: source.string) else { throw ProviderError.notFound(source) }
-        guard !FileManager.default.fileExists(atPath: destination.string) else {
+        guard !FileManager.default.fileExists(atPath: destination.string) || isRespelling(source, as: destination) else {
             throw ProviderError.alreadyExists(destination)
         }
+    }
+
+    /// The same item in the same folder under a name that differs only in
+    /// case or Unicode form; not merely another hard link to the same file.
+    private func isRespelling(_ a: RemotePath, as b: RemotePath) -> Bool {
+        guard a.parent == b.parent, a.name != b.name, NameMatching.ignoringCaseAndNormalization.key(a.name) == NameMatching.ignoringCaseAndNormalization.key(b.name) else { return false }
+        var first = Darwin.stat(), second = Darwin.stat()
+        guard lstat(a.string, &first) == 0, lstat(b.string, &second) == 0 else { return false }
+        return first.st_dev == second.st_dev && first.st_ino == second.st_ino
+    }
+
+    /// APFS and HFS+ always treat the two ways of typing "é" or "한" as one
+    /// name, and ignore case unless the volume was made case-sensitive.
+    public func nameMatching(in folder: RemotePath) -> NameMatching {
+        // The folder may not exist yet; its nearest existing ancestor is on the same volume.
+        var probe = folder
+        while !FileManager.default.fileExists(atPath: probe.string), let parent = probe.parent { probe = parent }
+        let values = try? url(probe).resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
+        return values?.volumeSupportsCaseSensitiveNames == true ? .ignoringNormalization : .ignoringCaseAndNormalization
     }
 
     private func mapErrors<T>(_ path: RemotePath, _ body: () throws -> T) throws -> T {

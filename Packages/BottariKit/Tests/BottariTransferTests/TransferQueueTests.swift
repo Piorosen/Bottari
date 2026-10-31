@@ -266,6 +266,36 @@ import Testing
         #expect(job.failures.isEmpty && job.completedFiles == 2)
     }
 
+    @Test func aMoveWhoseOriginalStayedOnlyDeletesItOnRetry() async throws {
+        mac.addFile("/a.txt", "a")
+        mac.state.withLock { $0.failingDeletes = ["a.txt"] }
+
+        let job = try await finished(try await transfer(.move, ["/a.txt"], from: mac, to: server, policy: .skip))
+        #expect(job.state == .failed)
+        #expect(server.text("/a.txt") == "a")
+
+        mac.state.withLock { $0.failingDeletes = [] }
+        queue.retryFailures(of: job)
+        try await eventually { job.state == .finished }
+        // Not skipped as a clash with its own copy: the original is gone.
+        #expect(!mac.exists("/a.txt"))
+        #expect(job.skippedFiles == 0 && job.completedFiles == 1)
+    }
+
+    @Test func namesThatDifferOnlyInCaseOrFormClashOnTheMac() async throws {
+        let decomposed = "한글.txt".decomposedStringWithCanonicalMapping
+        server.addFile("/report.txt", "old report")
+        server.addFile(RemotePath("/" + decomposed), "old hangul")
+        server.state.withLock { $0.matching = .ignoringCaseAndNormalization }
+        mac.addFile("/Report.txt", "new report")
+        mac.addFile(RemotePath("/" + "한글.txt".precomposedStringWithCanonicalMapping), "new hangul")
+
+        let job = try await finished(try await transfer(.copy, ["/Report.txt", RemotePath("/" + "한글.txt".precomposedStringWithCanonicalMapping)], from: mac, to: server, policy: .skip))
+        #expect(job.skippedFiles == 2)
+        #expect(server.text("/report.txt") == "old report")
+        #expect(server.text(RemotePath("/" + decomposed)) == "old hangul")
+    }
+
     @Test func failedFilesCanBeSkipped() async throws {
         mac.addFile("/bad.txt", "bad")
         server.state.withLock { $0.failingWrites = ["bad.txt"] }
@@ -358,6 +388,32 @@ import Testing
         // notes.txt was not sent again, and the movie went on from its partial copy.
         #expect(mac.state.withLock { $0.readOffsets } == [Int64(partial.count)])
         #expect(resumed.record == nil)
+    }
+
+    @Test func aResumedFileThatChangedSinceStartsOver() async throws {
+        mac.addFile("/app.log", Data(repeating: 1, count: 40_000))
+        mac.state.withLock { state in
+            state.chunkSize = 1000
+            state.chunkDelay = .milliseconds(5)
+        }
+        let job = queue.enqueue(.copy, [try await mac.stat("/app.log")], from: TransferEndpoint(mac, place: "local"), to: TransferEndpoint(server, place: "site:nas"), into: .root)
+        try await eventually { job.inFlightBytes > 0 }
+        queue.pause(job)
+        try await eventually { job.running.isEmpty }
+        let record = try JSONDecoder().decode(TransferRecord.self, from: JSONEncoder().encode(try #require(job.record)))
+
+        // The log grew while the app was closed.
+        let grown = Data(repeating: 2, count: 50_000)
+        mac.addFile("/app.log", grown, modified: Date(timeIntervalSince1970: 1_800_000_000))
+        mac.state.withLock { state in
+            state.chunkDelay = nil
+            state.readOffsets = []
+        }
+        let resumed = await TransferQueue().resume(record, from: TransferEndpoint(mac, place: "local"), to: TransferEndpoint(server, place: "site:nas"))
+        _ = try await finished(resumed)
+
+        #expect(server.data("/app.log") == grown)
+        #expect(mac.state.withLock { $0.readOffsets } == [0])
     }
 
     @Test func jobsWithoutPlacesAreNotSaved() async throws {

@@ -33,6 +33,25 @@ public struct ProviderCapabilities: OptionSet, Hashable, Sendable {
 ///
 /// Panes only ever talk to this protocol, so "server to server" is just one
 /// provider's `read` stream fed into another provider's `write`.
+/// How a place tells two names apart, for spotting a clash before writing.
+public enum NameMatching: Sendable {
+    /// Byte for byte, as most servers and clouds do.
+    case exact
+    /// Case-sensitive APFS: "é" typed two ways is still one name.
+    case ignoringNormalization
+    /// The Mac's default: neither case nor the way "é" or "한" is typed matters.
+    case ignoringCaseAndNormalization
+
+    /// What two names that count as the same have in common.
+    public func key(_ name: String) -> String {
+        switch self {
+        case .exact: name
+        case .ignoringNormalization: name.precomposedStringWithCanonicalMapping
+        case .ignoringCaseAndNormalization: name.precomposedStringWithCanonicalMapping.lowercased()
+        }
+    }
+}
+
 public protocol FileProvider: Sendable {
     var displayName: String { get }
     /// Which storage this is, e.g. `local` or `sftp://deploy@example.com`. Providers
@@ -81,6 +100,8 @@ public protocol FileProvider: Sendable {
     /// A query with `*` or `?` is a pattern; anything else matches names that
     /// contain it. Case does not matter. Stops after `limit` matches.
     func search(_ query: String, in folder: RemotePath, limit: Int) -> AsyncThrowingStream<FileItem, any Error>
+    /// How names in `folder` are told apart.
+    func nameMatching(in folder: RemotePath) -> NameMatching
 }
 
 extension FileProvider {
@@ -121,6 +142,10 @@ extension FileProvider {
 
     public func search(_ query: String, in folder: RemotePath, limit: Int) -> AsyncThrowingStream<FileItem, any Error> {
         FileSearch.walk(self, from: folder, matching: query, limit: limit)
+    }
+
+    public func nameMatching(in folder: RemotePath) -> NameMatching {
+        .exact
     }
 
     /// Reads a whole file, or a range of it, into memory. Meant for small files

@@ -25,6 +25,30 @@ import Testing
         #expect(seen.withLock { $0 } == [4])
     }
 
+    @Test func givingUpOnAPreviewStopsItsDownload() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        server.addFile("/big.mov", Data(repeating: 1, count: 400_000))
+        server.state.withLock { state in
+            state.chunkSize = 1000
+            state.chunkDelay = .milliseconds(5)
+        }
+        let cache = FileCache(directory: directory)
+        let item = try await server.stat("/big.mov")
+        let received = Mutex<Int64>(0)
+
+        let preview = Task { try await cache.localURL(for: item, from: server) { bytes in received.withLock { $0 = bytes } } }
+        while received.withLock({ $0 }) == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        preview.cancel()
+        _ = await preview.result
+        let stoppedAt = received.withLock { $0 }
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(received.withLock { $0 } < 400_000)
+        #expect(received.withLock { $0 } - stoppedAt < 50_000, "the download stopped too")
+        // Nothing half-read was kept as the file.
+        #expect(await cache.size() == 0)
+    }
+
     @Test func aChangedFileIsFetchedAgain() async throws {
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = FileCache(directory: directory)

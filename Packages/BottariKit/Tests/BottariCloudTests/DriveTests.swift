@@ -8,7 +8,7 @@ import Testing
     let drive = "token-\(UUID().uuidString)"
 
     func provider(_ format: DriveExportFormat = .office) -> GoogleDriveProvider {
-        GoogleDriveProvider(account: "me@example.com", tokens: FakeDrive.Token(value: drive), exportFormat: format, session: FakeDrive.session())
+        GoogleDriveProvider(account: "me@example.com", tokens: FakeDrive.Token(value: drive), exportFormat: format, session: FakeDrive.session(), retryDelay: .milliseconds(1))
     }
 
     @Test func writesListsAndReads() async throws {
@@ -90,6 +90,74 @@ import Testing
         #expect(try await drive.list("/a2").isEmpty)
         try await drive.delete("/b")
         #expect(try await drive.list(.root).map(\.name) == ["a", "a2"])
+    }
+
+    @Test func namesAPathCannotHoldStayOneItem() async throws {
+        let folder = FakeDrive.add(drive, name: "docs", mimeType: GoogleDriveProvider.folderType)
+        FakeDrive.add(drive, name: "TCP/IP.pdf", in: folder, data: Data("tcp".utf8))
+        FakeDrive.add(drive, name: "..", in: folder, data: Data("dots".utf8))
+        let drive = provider()
+
+        let names = try await drive.list("/docs").map(\.name)
+        #expect(names.sorted() == ["TCP\u{2215}IP.pdf", "\u{2025}"].sorted())
+        #expect(try await drive.readData(RemotePath("/docs/TCP\u{2215}IP.pdf")) == Data("tcp".utf8))
+        // Deleting the item called ".." leaves its folder alone.
+        try await drive.delete(RemotePath("/docs/\u{2025}"))
+        #expect(try await drive.list("/docs").map(\.name) == ["TCP\u{2215}IP.pdf"])
+        // Moving keeps the real name, slash and all.
+        try await drive.move(RemotePath("/docs/TCP\u{2215}IP.pdf"), to: RemotePath("/TCP\u{2215}IP.pdf"))
+        #expect(FakeDrive.drive(self.drive).files.values.contains { $0.name == "TCP/IP.pdf" && $0.parents == ["root"] })
+    }
+
+    @Test func googleDocsKeepTheirNameWhenMovedOrRenamed() async throws {
+        FakeDrive.add(drive, name: "계획", mimeType: "application/vnd.google-apps.document")
+        let drive = provider()
+        try await drive.makeDirectory("/보관")
+
+        try await drive.move("/계획.docx", to: "/보관/계획.docx")
+        try await drive.move("/보관/계획.docx", to: "/보관/새 계획.docx")
+        #expect(FakeDrive.drive(self.drive).files.values.contains { $0.name == "새 계획" })
+        #expect(try await drive.list("/보관").map(\.name) == ["새 계획.docx"])
+    }
+
+    @Test func repeatsSkipNamesAlreadyTaken() async throws {
+        FakeDrive.add(drive, name: "x (2)", data: Data("real".utf8))
+        FakeDrive.add(drive, name: "x", data: Data("first".utf8))
+        FakeDrive.add(drive, name: "x", data: Data("second".utf8))
+        let drive = provider()
+        #expect(try await drive.list(.root).map(\.name).sorted() == ["x", "x (2)", "x (3)"])
+        #expect(try await drive.readData("/x (2)") == Data("real".utf8))
+    }
+
+    @Test func refreshingShowsChangesMadeElsewhere() async throws {
+        let drive = provider()
+        try await drive.write("/a.txt", data: Data("a".utf8))
+        #expect(try await drive.list(.root).map(\.name) == ["a.txt"])
+        FakeDrive.add(self.drive, name: "b.txt", data: Data("b".utf8))
+        #expect(try await drive.list(.root).map(\.name) == ["a.txt", "b.txt"])
+    }
+
+    @Test func manyUploadsIntoOneFolderListItOnce() async throws {
+        let drive = provider()
+        try await drive.makeDirectory("/photos")
+        for index in 0..<20 {
+            try await drive.write(RemotePath("/photos/\(index).jpg"), data: Data([UInt8(index)]))
+        }
+        let listings = FakeDrive.drive(self.drive).log.filter { $0 == "GET /drive/v3/files" }.count
+        // The root once, then the folder (two per page in the fake) once.
+        #expect(listings <= 3)
+        #expect(try await drive.list("/photos").count == 20)
+    }
+
+    @Test func rateLimitsAreWaitedOut() async throws {
+        let drive = provider()
+        FakeDrive.throttle(self.drive, times: 3)
+        try await drive.write("/a.txt", data: Data("a".utf8))
+        #expect(try await drive.readData("/a.txt") == Data("a".utf8))
+
+        FakeDrive.throttle(self.drive, times: 99)
+        await #expect(throws: ProviderError.io("Drive 오류 403: Rate Limit Exceeded")) { try await drive.list(.root) }
+        FakeDrive.throttle(self.drive, times: 0)
     }
 
     @Test func anExpiredTokenIsRefused() async throws {

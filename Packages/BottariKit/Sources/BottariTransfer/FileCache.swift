@@ -10,7 +10,14 @@ import Foundation
 public actor FileCache {
     public let directory: URL
     public let limit: Int64
-    private var inFlight: [String: Task<URL, any Error>] = [:]
+    /// A download and the callers waiting for it; the last one to give up stops it.
+    private struct Download {
+        let id = UUID()
+        let task: Task<URL, any Error>
+        var waiters: Set<UUID> = []
+    }
+
+    private var inFlight: [String: Download] = [:]
 
     public init(directory: URL, limit: Int64 = 2 << 30) {
         self.directory = directory
@@ -32,17 +39,39 @@ public actor FileCache {
             try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: target.path)
             return target
         }
-        if let running = inFlight[key] {
-            return try await running.value
+        if inFlight[key] == nil {
+            let task = Task { [directory] in
+                try await Self.download(item, from: provider, to: target, scratch: directory, progress: progress)
+            }
+            inFlight[key] = Download(task: task)
         }
-        let task = Task { [directory] in
-            try await Self.download(item, from: provider, to: target, scratch: directory, progress: progress)
+        let download = inFlight[key]!
+        let waiter = UUID()
+        inFlight[key]?.waiters.insert(waiter)
+        defer { finished(download.id, key: key) }
+        let url = try await withTaskCancellationHandler {
+            try await download.task.value
+        } onCancel: {
+            Task { await self.giveUp(waiter, key: key) }
         }
-        inFlight[key] = task
-        defer { inFlight[key] = nil }
-        let url = try await task.value
         prune(keeping: key)
         return url
+    }
+
+    /// A caller stopped waiting (Esc on a preview); with nobody left, the download stops.
+    private func giveUp(_ waiter: UUID, key: String) {
+        guard var download = inFlight[key], download.waiters.remove(waiter) != nil else { return }
+        if download.waiters.isEmpty {
+            download.task.cancel()
+            inFlight[key] = nil
+        } else {
+            inFlight[key] = download
+        }
+    }
+
+    /// The download ended one way or another; the next caller finds the file or starts again.
+    private func finished(_ id: UUID, key: String) {
+        if inFlight[key]?.id == id { inFlight[key] = nil }
     }
 
     /// Drops every copy, e.g. from settings.
@@ -80,6 +109,8 @@ public actor FileCache {
                 received += Int64(chunk.count)
                 progress?(received)
             }
+            // A cancelled read just ends; what arrived is not the whole file.
+            try Task.checkCancellation()
             try handle.close()
             try? fm.removeItem(at: target)
             try fm.moveItem(at: temp, to: target)

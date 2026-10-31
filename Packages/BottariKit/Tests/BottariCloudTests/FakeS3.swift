@@ -10,6 +10,8 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
         var objects: [String: (data: Data, modified: Date)] = [:]
         var uploads: [String: [Int: Data]] = [:]
         var log: [String] = []
+        /// Copies answer 200 with an error in the body, as S3 sometimes does.
+        var copiesFail = false
     }
 
     static let state = Mutex<[String: Bucket]>([:])
@@ -19,6 +21,14 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [FakeS3.self]
         return URLSession(configuration: configuration)
+    }
+
+    static func failCopies(in bucket: String, _ fail: Bool) {
+        state.withLock { $0[bucket, default: Bucket()].copiesFail = fail }
+    }
+
+    static func put(_ key: String, _ data: Data, in bucket: String) {
+        state.withLock { $0[bucket, default: Bucket()].objects[key] = (data, Date()) }
     }
 
     static func bucket(_ name: String) -> Bucket {
@@ -72,6 +82,14 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
                 // "/bucket/key/with/slashes"
                 let sourceKey = source.drop { $0 == "/" }.split(separator: "/", maxSplits: 1).last.map { String($0).removingPercentEncoding ?? String($0) } ?? ""
                 guard let object = Self.bucket(bucket).objects[sourceKey] else { return respond(404) }
+                if Self.bucket(bucket).copiesFail {
+                    return respond(200, xml: "<Error><Code>InternalError</Code><Message>We encountered an internal error. Please try again.</Message></Error>")
+                }
+                if let part = query["partNumber"].flatMap(Int.init), let upload = query["uploadId"],
+                   let range = request.value(forHTTPHeaderField: "x-amz-copy-source-range")?.dropFirst(6).split(separator: "-").compactMap({ Int($0) }), range.count == 2 {
+                    Self.state.withLock { $0[bucket]!.uploads[upload]?[part] = object.data.subdata(in: range[0]..<range[1] + 1) }
+                    return respond(200, xml: "<CopyPartResult><ETag>\"part-\(part)\"</ETag></CopyPartResult>")
+                }
                 Self.state.withLock { $0[bucket]!.objects[key] = (object.data, Date()) }
                 respond(200, xml: "<CopyObjectResult><ETag>\"x\"</ETag></CopyObjectResult>")
             } else if let part = query["partNumber"].flatMap(Int.init), let upload = query["uploadId"] {

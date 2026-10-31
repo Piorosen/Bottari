@@ -1441,6 +1441,16 @@
         }
       }
     },
+    "S3 복사 응답이 올바르지 않습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S3 sent an unexpected answer to a copy"
+          }
+        }
+      }
+    },
     "S3 업로드를 시작할 수 없습니다": {
       "localizations": {
         "en": {
@@ -1457,6 +1467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "S3 error %lld: %@"
+          }
+        }
+      }
+    },
+    "S3 오류: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S3 error: %@"
           }
         }
       }
@@ -2239,6 +2259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%2$@ for ‘%1$@’"
+          }
+        }
+      }
+    },
+    "‘%@’ 버킷은 %@ 리전에 있습니다. 연결 관리에서 리전을 %@(으)로 바꾸십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bucket “%1$@” is in the %2$@ region. Change the region to %3$@ in Connections."
           }
         }
       }
