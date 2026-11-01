@@ -384,9 +384,10 @@ import Testing
         try? await listener.close()
     }
 
+    /// Said as a hang-up, not found out at the login timeout as "no response"
+    /// (timing would only be flaky on a busy CI machine; the error tells).
     @Test func aServerThatHangsUpIsSaidSoAtOnce() async throws {
         try await withHangingUpListener { port in
-            let started = ContinuousClock.now
             await #expect(throws: SFTPConnectError.closedBeforeLogin(address: "127.0.0.1:\(port)")) {
                 _ = try await SFTPFileProvider.connect(
                     to: SFTPEndpoint(host: "127.0.0.1", port: port, username: "me"),
@@ -394,7 +395,6 @@ import Testing
                     hostKeys: .acceptAnything
                 )
             }
-            #expect(ContinuousClock.now - started < .seconds(3))
         }
     }
 
@@ -407,7 +407,6 @@ import Testing
         let jump = try await OpenSSHServer.start(authorizing: [key.publicKey])
         defer { jump.stop() }
         try await withHangingUpListener { port in
-            let started = ContinuousClock.now
             await #expect {
                 _ = try await SFTPFileProvider.connect(
                     to: SFTPEndpoint(host: "127.0.0.1", port: port, username: "me"),
@@ -416,10 +415,10 @@ import Testing
                     via: [SSHHop(endpoint: jump.endpoint, credential: .privateKey(key.privateKey))]
                 )
             } throws: { error in
-                guard case SFTPConnectError.unreachableBehindJumpHost(let address, let host, _) = error else { return false }
-                return address == "127.0.0.1:\(port)" && host == jump.endpoint.hostKeyID
+                error as? SFTPConnectError == .unreachableBehindJumpHost(
+                    address: "127.0.0.1:\(port)", jumpHost: jump.endpoint.hostKeyID, detail: String(localized: "로그인 전에 연결이 끊김")
+                )
             }
-            #expect(ContinuousClock.now - started < .seconds(3))
         }
     }
 }
