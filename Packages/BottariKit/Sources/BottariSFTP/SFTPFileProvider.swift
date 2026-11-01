@@ -641,7 +641,7 @@ public struct SFTPFileProvider: FileProvider {
         case let failure as SFTPConnectError:
             // Reconnecting failed: a network problem may pass, a refused key will not.
             switch failure {
-            case .noResponse, .refused, .unknownHost, .noRoute, .unreachable, .jumpHostFailed:
+            case .noResponse, .refused, .unknownHost, .noRoute, .unreachable, .jumpHostFailed, .unreachableBehindJumpHost:
                 return ProviderError.disconnected(failure.localizedDescription)
             default:
                 return ProviderError.io(failure.localizedDescription)

@@ -94,6 +94,9 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case agentHasNoUsableKeys
     /// A jump host on the way failed; `reason` says how.
     case jumpHostFailed(host: String, reason: String)
+    /// The jump host `jumpHost` could not reach `address` behind it, e.g. a
+    /// machine that is off or a reverse tunnel (`ssh -R`) that has gone.
+    case unreachableBehindJumpHost(address: String, jumpHost: String, detail: String)
     /// Nothing answered at the address before the timeout.
     case noResponse(address: String, seconds: Int)
     /// Something answered, but nothing takes connections on that port.
@@ -108,9 +111,10 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     /// The port is outside 1–65535.
     case invalidPort(host: String, port: Int)
 
-    /// `error` as an `SFTPConnectError`, naming `endpoint` when the network was the problem.
-    static func wrap(_ error: any Error, dialling endpoint: SFTPEndpoint? = nil) -> any Error {
-        if let endpoint, let failure = networkFailure(error, dialling: endpoint) {
+    /// `error` as an `SFTPConnectError`, naming `endpoint` (and the jump host
+    /// it was dialled from) when the network was the problem.
+    static func wrap(_ error: any Error, dialling endpoint: SFTPEndpoint? = nil, behind jumpHost: SFTPEndpoint? = nil) -> any Error {
+        if let endpoint, let failure = networkFailure(error, dialling: endpoint, behind: jumpHost) {
             return failure
         }
         switch error {
@@ -131,8 +135,20 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     }
 
     /// What NIO's socket errors mean for someone trying to reach `endpoint`.
-    static func networkFailure(_ error: any Error, dialling endpoint: SFTPEndpoint) -> SFTPConnectError? {
+    static func networkFailure(_ error: any Error, dialling endpoint: SFTPEndpoint, behind jumpHost: SFTPEndpoint? = nil) -> SFTPConnectError? {
         let address = endpoint.port == 22 ? endpoint.host : "\(endpoint.host):\(endpoint.port)"
+        if let jumpHost {
+            // No socket of ours here: the jump host dials, and says how it went.
+            let detail: String? = switch error {
+            case ChannelError.connectTimeout(let timeout):
+                String(localized: "\(Int(timeout.nanoseconds / 1_000_000_000))초 동안 응답 없음")
+            case let error as NIOSSHError where error.type == .channelSetupRejected:
+                rejectionDetail(String(describing: error))
+            default:
+                nil
+            }
+            return detail.map { .unreachableBehindJumpHost(address: address, jumpHost: jumpHost.hostKeyID, detail: $0) }
+        }
         func failure(errno code: CInt) -> SFTPConnectError? {
             switch code {
             case ECONNREFUSED: .refused(address: address)
@@ -152,6 +168,22 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
             return failure(errno: error.errnoCode)
         default:
             return nil
+        }
+    }
+
+    /// Why a jump host would not open the way on, from NIOSSH's description of
+    /// its refusal ("… Reason: 2 Connection refused").
+    static func rejectionDetail(_ description: String) -> String {
+        guard let start = description.range(of: "Reason: ") else { return String(localized: "연결 실패") }
+        let words = description[start.upperBound...].split(separator: " ", maxSplits: 1)
+        let text = words.count > 1 ? String(words[1]) : ""
+        switch words.first.flatMap({ UInt32($0) }) {
+        case 1: // SSH_OPEN_ADMINISTRATIVELY_PROHIBITED
+            return String(localized: "점프 호스트의 sshd가 포트 전달을 막음(AllowTcpForwarding)")
+        case 2 where text.localizedCaseInsensitiveContains("refused"):
+            return String(localized: "연결 거부")
+        default:
+            return text.isEmpty ? String(localized: "연결 실패") : text
         }
     }
 }
@@ -183,6 +215,8 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "SSH 에이전트에 사용할 수 있는 키가 없습니다. 에이전트의 키가 인증서나 보안 키(sk-)뿐이라면 일반 키를 ssh-add로 추가하거나 연결 관리에서 키 파일을 선택하십시오.")
         case .jumpHostFailed(let host, let reason):
             String(localized: "점프 호스트 \(host)에서 연결에 실패했습니다. \(reason)")
+        case .unreachableBehindJumpHost(let address, let jumpHost, let detail):
+            String(localized: "점프 호스트 \(jumpHost)에서 \(address)에 닿지 못했습니다(\(detail)). 그 컴퓨터가 켜져 있는지, 리버스 터널(ssh -R)로 들어간다면 그 터널이 열려 있는지 확인하십시오.")
         case .noResponse(let address, let seconds):
             String(localized: "\(address)에서 \(seconds)초 동안 응답이 없습니다. 서버가 꺼져 있거나, 방화벽 또는 VPN 때문에 이 네트워크에서는 닿지 않을 수 있습니다.")
         case .refused(let address):
@@ -278,9 +312,10 @@ final class SFTPConnection: @unchecked Sendable {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         var chain: [SSHClient] = []
         do {
-            for hop in hops {
+            for (index, hop) in hops.enumerated() {
                 do {
-                    chain.append(try await connect(hop, through: chain.last, hostKeys: hostKeys, group: group, timeout: timeout).client)
+                    let previous = index > 0 ? hops[index - 1].endpoint : nil
+                    chain.append(try await connect(hop, through: chain.last, behind: previous, hostKeys: hostKeys, group: group, timeout: timeout).client)
                 } catch let error as SFTPConnectError {
                     switch error {
                     case .hostKeyChanged, .hostKeyChangedInKnownHosts, .hostKeyRevoked, .hostKeyNotListed: throw error
@@ -292,6 +327,7 @@ final class SFTPConnection: @unchecked Sendable {
             let (destination, channel, heartbeat) = try await connect(
                 SSHHop(endpoint: endpoint, credential: credential, proxyCommand: proxyCommand),
                 through: chain.last,
+                behind: hops.last?.endpoint,
                 hostKeys: hostKeys,
                 group: group,
                 timeout: timeout
@@ -324,12 +360,14 @@ final class SFTPConnection: @unchecked Sendable {
     }
 
     /// Opens one SSH session, over TCP or inside a direct-tcpip channel of
-    /// `previous`, trying each authentication attempt the credential offers.
-    /// Bottari opens the channel itself either way, so it can hear every byte
-    /// the server sends and tell a quiet connection from a dead one.
+    /// `previous` (the session with `jumpHost`), trying each authentication
+    /// attempt the credential offers. Bottari opens the channel itself either
+    /// way, so it can hear every byte the server sends and tell a quiet
+    /// connection from a dead one.
     private static func connect(
         _ hop: SSHHop,
         through previous: SSHClient?,
+        behind jumpHost: SFTPEndpoint?,
         hostKeys: HostKeyTrust,
         group: MultiThreadedEventLoopGroup,
         timeout: TimeAmount
@@ -366,7 +404,7 @@ final class SFTPConnection: @unchecked Sendable {
                 }
             } catch {
                 try? await opened?.close()
-                let reason = SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error, dialling: hop.endpoint)
+                let reason = SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error, dialling: hop.endpoint, behind: jumpHost)
                 if case SFTPConnectError.authenticationFailed = reason {
                     Log.connection.info("\(hop.endpoint.hostKeyID): 인증 방법 \(index + 1)/\(attempts.count) 거부됨")
                     continue
@@ -495,12 +533,37 @@ final class SFTPConnection: @unchecked Sendable {
             await group.next()
             group.cancelAll()
         }
-        try? await sftp.close()
-        try? await client.close()
-        for jump in jumps.reversed() {
-            try? await jump.close()
+        // Each side is asked to close, but not waited on for long: a server
+        // that has stopped answering never confirms, and behind a jump host
+        // nothing underneath fails either, as the jump host itself is fine.
+        // Requests still waiting on such a server would wait for ever.
+        await Self.waitAtMost(.seconds(2)) {
+            try? await self.sftp.close()
+            try? await self.client.close()
+            for jump in self.jumps.reversed() {
+                try? await jump.close()
+            }
         }
+        // The outermost connection is this Mac's own socket or pipe, which
+        // closes at once and takes every channel inside it down with it.
+        try? await (jumps.first ?? client).close()
         try? await group.shutdownGracefully()
+    }
+
+    /// Waits for `operation`, but no longer than `limit`; it carries on alone after that.
+    private static func waitAtMost(_ limit: Duration, for operation: @escaping @Sendable () async -> Void) async {
+        let outcome = FirstAnswer()
+        _ = await withCheckedContinuation { continuation in
+            outcome.wait(with: continuation)
+            Task {
+                await operation()
+                outcome.give(true)
+            }
+            Task {
+                try? await Task.sleep(for: limit)
+                outcome.give(false)
+            }
+        }
     }
 }
 

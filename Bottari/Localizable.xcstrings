@@ -763,6 +763,16 @@
         }
       }
     },
+    "%lld초 동안 응답 없음": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no answer for %lld seconds"
+          }
+        }
+      }
+    },
     "%lld회": {
       "localizations": {
         "en": {
@@ -6459,6 +6469,16 @@
         }
       }
     },
+    "연결 거부": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "connection refused"
+          }
+        }
+      }
+    },
     "연결 관리": {
       "localizations": {
         "en": {
@@ -6585,6 +6605,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connected"
+          }
+        }
+      }
+    },
+    "연결 실패": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "connection failed"
           }
         }
       }
@@ -8461,6 +8491,16 @@
         }
       }
     },
+    "점프 호스트 %@에서 %@에 닿지 못했습니다(%@). 그 컴퓨터가 켜져 있는지, 리버스 터널(ssh -R)로 들어간다면 그 터널이 열려 있는지 확인하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The jump host %@ could not reach %@ (%@). Check that the machine is on and, if you reach it through a reverse tunnel (ssh -R), that the tunnel is open."
+          }
+        }
+      }
+    },
     "점프 호스트 %@에서 연결에 실패했습니다. %@": {
       "localizations": {
         "en": {
@@ -8487,6 +8527,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The jump hosts refer to each other: %@"
+          }
+        }
+      }
+    },
+    "점프 호스트의 sshd가 포트 전달을 막음(AllowTcpForwarding)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the jump host's sshd does not allow forwarding (AllowTcpForwarding)"
           }
         }
       }
