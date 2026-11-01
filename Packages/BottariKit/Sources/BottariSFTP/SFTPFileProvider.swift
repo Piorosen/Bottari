@@ -48,11 +48,10 @@ public struct SFTPFileProvider: FileProvider {
         credential: SFTPCredential,
         hostKeys: HostKeyTrust,
         via hops: [SSHHop] = [],
-        proxyCommand: String? = nil,
         displayName: String? = nil
     ) async throws -> SFTPFileProvider {
         let reopen: @Sendable () async throws -> SFTPConnection = {
-            try await SFTPConnection.open(to: endpoint, credential: credential, hostKeys: hostKeys, via: hops, proxyCommand: proxyCommand)
+            try await SFTPConnection.open(to: endpoint, credential: credential, hostKeys: hostKeys, via: hops)
         }
         let connection = try await reopen()
         do {
@@ -64,7 +63,7 @@ public struct SFTPFileProvider: FileProvider {
                 jumps: hops.map(\.endpoint),
                 canRunCommands: await probeCommands(on: connection),
                 link: SFTPLink(connection, reopen: reopen),
-                directReach: proxyCommand == nil ? DirectReach(endpoint: endpoint, credential: credential, hops: hops, hostKeys: hostKeys) : nil
+                directReach: DirectReach(endpoint: endpoint, credential: credential, hops: hops, hostKeys: hostKeys)
             )
         } catch {
             await connection.close()

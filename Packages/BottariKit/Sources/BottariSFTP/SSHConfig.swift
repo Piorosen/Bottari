@@ -22,10 +22,8 @@ public struct SSHConfig: Sendable {
         public var identityFiles: [String]
         /// Jump hosts to go through, first hop first, as written (`alias` or `user@host:port`).
         public var proxyJump: [String]
-        /// Agent socket from IdentityAgent, e.g. 1Password's; nil means `SSH_AUTH_SOCK`.
-        public var identityAgent: String?
-        /// A command whose standard input and output carry the connection, with
-        /// `%h`, `%p`, `%r` and `%n` left for `ProxyCommandLine` to fill in.
+        /// A command whose standard input and output carry the connection, as
+        /// written. Bottari runs none, but reads `ssh -W %h:%p jump` as a jump host.
         public var proxyCommand: String?
 
         public init(
@@ -35,7 +33,6 @@ public struct SSHConfig: Sendable {
             port: Int = 22,
             identityFiles: [String] = [],
             proxyJump: [String] = [],
-            identityAgent: String? = nil,
             proxyCommand: String? = nil
         ) {
             self.alias = alias
@@ -44,7 +41,6 @@ public struct SSHConfig: Sendable {
             self.port = port
             self.identityFiles = identityFiles
             self.proxyJump = proxyJump
-            self.identityAgent = identityAgent
             self.proxyCommand = proxyCommand
         }
     }
@@ -177,13 +173,6 @@ public struct SSHConfig: Sendable {
         let jumps = values["proxyjump"].map { value in
             value.lowercased() == "none" ? [] : value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         } ?? []
-        let agent = values["identityagent"].flatMap { value -> String? in
-            switch value {
-            case "none": "none"
-            case "SSH_AUTH_SOCK": nil
-            default: expand(value.hasPrefix("$") ? (ProcessInfo.processInfo.environment[String(value.dropFirst())] ?? value) : value)
-            }
-        }
         return Host(
             alias: alias,
             hostName: hostName,
@@ -191,7 +180,6 @@ public struct SSHConfig: Sendable {
             port: values["port"].flatMap(Int.init) ?? 22,
             identityFiles: identityFiles.map(expand),
             proxyJump: jumps,
-            identityAgent: agent,
             proxyCommand: values["proxycommand"].flatMap { $0.lowercased() == "none" ? nil : $0 }
         )
     }

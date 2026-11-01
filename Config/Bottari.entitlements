@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<!-- The Mac App Store edition (target "Bottari App Store"), which runs in the
-     App Sandbox. The edition from GitHub is not sandboxed and has none of these. -->
+<!-- Bottari runs in the App Sandbox, as the Mac App Store requires. -->
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>

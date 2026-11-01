@@ -29,7 +29,7 @@ jobs:
           path: Packages/BottariKit/.build
           key: spm-test-${{ runner.os }}-${{ hashFiles('Packages/BottariKit/Package.resolved') }}
           restore-keys: spm-test-${{ runner.os }}-
-      # The suite also runs sshd, ssh-agent and ssh-keygen from macOS itself.
+      # The suite also runs sshd and ssh-keygen from macOS itself.
       - name: swift test
         run: swift test --package-path Packages/BottariKit
 
@@ -53,10 +53,13 @@ jobs:
             -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
             -skipPackagePluginValidation -skipMacroValidation -quiet build
       # Debug builds draw each screen with sample data and check themselves;
-      # any FAIL line fails the job. The pictures are kept for review.
+      # any FAIL line fails the job. The pictures are kept for review. The app
+      # runs in the App Sandbox, so it writes them inside its container.
       - name: Render snapshots
         run: |
-          open -n -W .build/xcode/Build/Products/Debug/Bottari.app --args -renderSnapshots "$RUNNER_TEMP/snapshots"
+          shots="$HOME/Library/Containers/io.github.piorosen.bottari.appstore/Data/tmp/snapshots"
+          open -n -W .build/xcode/Build/Products/Debug/Bottari.app --args -renderSnapshots "$shots"
+          cp -R "$shots" "$RUNNER_TEMP/snapshots"
           cat "$RUNNER_TEMP"/snapshots/*-check.txt
           ! grep -h '^FAIL' "$RUNNER_TEMP"/snapshots/*-check.txt
       # Release leaves out the Debug-only code (snapshots, the showcase), so
@@ -64,12 +67,6 @@ jobs:
       - name: Build (Release, ad-hoc signed)
         run: |
           xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Release \
-            -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
-            -skipPackagePluginValidation -skipMacroValidation -quiet build
-      # The App Store edition: App Sandbox, no Sparkle.
-      - name: Build App Store edition (Release, ad-hoc signed)
-        run: |
-          xcodebuild -project Bottari.xcodeproj -scheme "Bottari App Store" -configuration Release \
             -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath .build/xcode \
             -skipPackagePluginValidation -skipMacroValidation -quiet build
       - uses: actions/upload-artifact@v4

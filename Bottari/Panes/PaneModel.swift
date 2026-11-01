@@ -14,7 +14,7 @@ final class PaneModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     /// The folder shown, if it is one of this Mac's that the App Sandbox keeps
-    /// Bottari out of until the user allows it (App Store edition).
+    /// Bottari out of until the user allows it.
     private(set) var lockedFolder: RemotePath?
     /// The saved site being connected to from the pane's menu.
     private(set) var connectingSite: SavedSite?

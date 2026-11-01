@@ -4,9 +4,8 @@ import Foundation
 import NIOCore
 import NIOSSH
 
-/// A kind of key Bottari offers through its own NIOSSH key type: any key an
-/// agent holds, and RSA keys, which NIOSSH does not know and Citadel only
-/// signs with SHA-1.
+/// A kind of key Bottari offers through its own NIOSSH key type, needed for
+/// RSA keys, which NIOSSH does not know and Citadel only signs with SHA-1.
 protocol OfferedKeyKind: Sendable {
     /// The algorithm name. NIOSSH writes it as the request's algorithm and as
     /// the type at the start of the public key blob.
@@ -16,7 +15,7 @@ protocol OfferedKeyKind: Sendable {
     static func isValid(signature: Data, for data: Data, publicKey body: Data) -> Bool
 }
 
-/// A key Bottari signs with itself or has an agent sign with.
+/// A key Bottari signs with itself.
 struct OfferedPrivateKey<Kind: OfferedKeyKind>: NIOSSHPrivateKeyProtocol {
     static var keyPrefix: String { Kind.name }
 
@@ -92,8 +91,6 @@ enum Ed25519Kind: OfferedKeyKind {
 /// server that does not is offered `ssh-rsa` next.
 enum RSASHA512Kind: OfferedKeyKind {
     static let name = "rsa-sha2-512"
-    /// SSH_AGENT_RSA_SHA2_512.
-    static let agentFlags: UInt32 = 4
 
     static func isValid(signature: Data, for data: Data, publicKey body: Data) -> Bool {
         RSAKeyBody(body)?.isValid(signature: signature, for: SHA512.hash(data: data)) ?? false
@@ -103,7 +100,6 @@ enum RSASHA512Kind: OfferedKeyKind {
 /// RSA signed with SHA-1, for servers older than OpenSSH 7.2.
 enum RSASHA1Kind: OfferedKeyKind {
     static let name = "ssh-rsa"
-    static let agentFlags: UInt32 = 0
 
     static func isValid(signature: Data, for data: Data, publicKey body: Data) -> Bool {
         RSAKeyBody(body)?.isValid(signature: signature, for: Insecure.SHA1.hash(data: data)) ?? false

@@ -15,9 +15,12 @@ import Testing
         Host nas
           HostName nas.local
           Port 2222
-        Host secure
-          HostName secure.example.com
-          IdentityAgent ~/agent.sock
+        Host relayed
+          HostName relayed.example.com
+          ProxyCommand ssh -W %h:%p bastion
+        Host piped
+          HostName piped.example.com
+          ProxyCommand cloudflared access ssh --hostname %h
         """,
         directory: "/Users/me/.ssh",
         home: "/Users/me",
@@ -32,7 +35,7 @@ import Testing
         #expect(SavedSite.jumpHost(inProxyCommand: "ssh -W %h:%p bastion") == "bastion")
         #expect(SavedSite.jumpHost(inProxyCommand: "/usr/bin/ssh -q -W %h:%p deploy@bastion.example.com") == "deploy@bastion.example.com")
         #expect(SavedSite.jumpHost(inProxyCommand: "ssh bastion -W %h:%p") == "bastion")
-        // Anything more than a plain relay needs the command itself.
+        // Anything more than a plain relay needs the command itself, which Bottari does not run.
         #expect(SavedSite.jumpHost(inProxyCommand: "ssh -i ~/.ssh/other -W %h:%p bastion") == nil)
         #expect(SavedSite.jumpHost(inProxyCommand: "ssh -W %h:%p %r@bastion") == nil)
         #expect(SavedSite.jumpHost(inProxyCommand: "nc -X 5 -x proxy:1080 %h %p") == nil)
@@ -42,7 +45,7 @@ import Testing
     @Test func importPicksAuthenticationLikeSsh() {
         let (sites, added) = SiteStore.importing(config, into: [], defaultUser: "me", fileExists: fileExists)
 
-        #expect(added.map(\.name) == ["prod-web", "nas", "secure"])
+        #expect(added.map(\.name) == ["prod-web", "nas", "relayed", "piped"])
         #expect(sites == added)
         let prod = added[0]
         #expect(prod.endpoint == SFTPEndpoint(host: "203.0.113.10", username: "deploy"))
@@ -50,8 +53,10 @@ import Testing
         #expect(prod.proxyJump == ["bastion"])
         #expect(prod.sshConfigAlias == "prod-web")
         #expect(added[1].endpoint == SFTPEndpoint(host: "nas.local", port: 2222, username: "me"))
-        #expect(added[1].authentication == .agent(socket: nil))
-        #expect(added[2].authentication == .agent(socket: "/Users/me/agent.sock"))
+        #expect(added[1].authentication == .defaultKeys)
+        // `ssh -W` through a jump host becomes that jump host; other commands are left out.
+        #expect(added[2].proxyJump == ["bastion"])
+        #expect(added[3].proxyJump.isEmpty)
     }
 
     @Test func importingAgainKeepsEditsAndAddsOnlyNewHosts() {
@@ -72,7 +77,7 @@ import Testing
         #expect(try store.load().isEmpty)
 
         let sites = [
-            SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "203.0.113.10", username: "deploy"), authentication: .agent(socket: nil), tag: .prod),
+            SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "203.0.113.10", username: "deploy"), authentication: .defaultKeys, tag: .prod),
             SavedSite(name: "nas", endpoint: SFTPEndpoint(host: "nas.local", port: 2222, username: "admin"), authentication: .password, startPath: "/volume1", readOnly: true,
                       remoteScreen: .init(kind: .appleScreenSharing)),
         ]
@@ -94,6 +99,19 @@ import Testing
         #expect(sites.first?.confirmsWrites == true)
         #expect(sites.first?.remoteScreen == nil)
         #expect(sites.first?.isSFTP == true)
+    }
+
+    /// Sites saved while Bottari asked an SSH agent first load as default keys,
+    /// and default keys are saved under that old name, so copies on either side read them.
+    @Test func agentSitesLoadAsDefaultKeys() throws {
+        let json = """
+        [{"id":"8C9F4C0A-3E69-4B0B-9F6B-2C1E5B9A7D10","name":"old","endpoint":{"host":"h","port":22,"username":"u"},
+          "authentication":{"agent":{"socket":"/tmp/agent.sock"}},"proxyCommand":"nc %h %p"}]
+        """
+        let site = try #require(try JSONDecoder().decode([SavedSite].self, from: Data(json.utf8)).first)
+        #expect(site.authentication == .defaultKeys)
+        let saved = try String(decoding: JSONEncoder().encode(site.authentication), as: UTF8.self)
+        #expect(saved == #"{"agent":{}}"#)
     }
 
     @Test func cloudSitesRoundTrip() throws {

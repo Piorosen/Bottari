@@ -14,19 +14,10 @@
 		B0771A0000000000000000A5 /* BottariPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C5 /* BottariPlayer */; };
 		B0771A0000000000000000A6 /* BottariRemote in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C6 /* BottariRemote */; };
 		B0771A0000000000000000A7 /* BottariCloud in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C7 /* BottariCloud */; };
-		B0771A0000000000000000A8 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C8 /* Sparkle */; };
-		B0771A000000000000000111 /* BottariCore in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000121 /* BottariCore */; };
-		B0771A000000000000000112 /* BottariSFTP in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000122 /* BottariSFTP */; };
-		B0771A000000000000000113 /* BottariTransfer in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000123 /* BottariTransfer */; };
-		B0771A000000000000000114 /* BottariEditor in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000124 /* BottariEditor */; };
-		B0771A000000000000000115 /* BottariPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000125 /* BottariPlayer */; };
-		B0771A000000000000000116 /* BottariRemote in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000126 /* BottariRemote */; };
-		B0771A000000000000000117 /* BottariCloud in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A000000000000000127 /* BottariCloud */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		B0771A000000000000000010 /* Bottari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bottari.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B0771A000000000000000110 /* Bottari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bottari.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -49,21 +40,6 @@
 				B0771A0000000000000000A5 /* BottariPlayer in Frameworks */,
 				B0771A0000000000000000A6 /* BottariRemote in Frameworks */,
 				B0771A0000000000000000A7 /* BottariCloud in Frameworks */,
-				B0771A0000000000000000A8 /* Sparkle in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B0771A000000000000000130 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				B0771A000000000000000111 /* BottariCore in Frameworks */,
-				B0771A000000000000000112 /* BottariSFTP in Frameworks */,
-				B0771A000000000000000113 /* BottariTransfer in Frameworks */,
-				B0771A000000000000000114 /* BottariEditor in Frameworks */,
-				B0771A000000000000000115 /* BottariPlayer in Frameworks */,
-				B0771A000000000000000116 /* BottariRemote in Frameworks */,
-				B0771A000000000000000117 /* BottariCloud in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,7 +58,6 @@
 			isa = PBXGroup;
 			children = (
 				B0771A000000000000000010 /* Bottari.app */,
-				B0771A000000000000000110 /* Bottari.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -97,6 +72,7 @@
 				B0771A000000000000000041 /* Sources */,
 				B0771A000000000000000030 /* Frameworks */,
 				B0771A000000000000000042 /* Resources */,
+				B0771A000000000000000143 /* Unsign resource bundles */,
 			);
 			buildRules = (
 			);
@@ -114,40 +90,9 @@
 				B0771A0000000000000000C5 /* BottariPlayer */,
 				B0771A0000000000000000C6 /* BottariRemote */,
 				B0771A0000000000000000C7 /* BottariCloud */,
-				B0771A0000000000000000C8 /* Sparkle */,
 			);
 			productName = Bottari;
 			productReference = B0771A000000000000000010 /* Bottari.app */;
-			productType = "com.apple.product-type.application";
-		};
-		B0771A000000000000000140 /* Bottari App Store */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = B0771A000000000000000160 /* Build configuration list for PBXNativeTarget "Bottari App Store" */;
-			buildPhases = (
-				B0771A000000000000000141 /* Sources */,
-				B0771A000000000000000130 /* Frameworks */,
-				B0771A000000000000000142 /* Resources */,
-				B0771A000000000000000143 /* Unsign resource bundles */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				B0771A000000000000000020 /* Bottari */,
-			);
-			name = "Bottari App Store";
-			packageProductDependencies = (
-				B0771A000000000000000121 /* BottariCore */,
-				B0771A000000000000000122 /* BottariSFTP */,
-				B0771A000000000000000123 /* BottariTransfer */,
-				B0771A000000000000000124 /* BottariEditor */,
-				B0771A000000000000000125 /* BottariPlayer */,
-				B0771A000000000000000126 /* BottariRemote */,
-				B0771A000000000000000127 /* BottariCloud */,
-			);
-			productName = Bottari;
-			productReference = B0771A000000000000000110 /* Bottari.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -161,9 +106,6 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					B0771A000000000000000040 = {
-						CreatedOnToolsVersion = 27.0;
-					};
-					B0771A000000000000000140 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -180,7 +122,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				B0771A0000000000000000B1 /* XCLocalSwiftPackageReference "Packages/BottariKit" */,
-				B0771A0000000000000000B2 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B0771A000000000000000002 /* Products */;
@@ -188,20 +129,12 @@
 			projectRoot = "";
 			targets = (
 				B0771A000000000000000040 /* Bottari */,
-				B0771A000000000000000140 /* Bottari App Store */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		B0771A000000000000000042 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B0771A000000000000000142 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -234,13 +167,6 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		B0771A000000000000000041 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B0771A000000000000000141 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -303,17 +229,17 @@
 		B0771A000000000000000061 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BOTTARI_GOOGLE_CLIENT_ID = "";
 				BOTTARI_GOOGLE_CLIENT_SECRET = "";
-				BOTTARI_SPARKLE_PUBLIC_KEY = "";
-				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
+				CODE_SIGN_ENTITLEMENTS = Config/Bottari.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -326,7 +252,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari.appstore;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -338,17 +264,17 @@
 		B0771A000000000000000062 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				BOTTARI_GOOGLE_CLIENT_ID = "";
 				BOTTARI_GOOGLE_CLIENT_SECRET = "";
-				BOTTARI_SPARKLE_PUBLIC_KEY = "";
-				BOTTARI_UPDATE_FEED_URL = "https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml";
+				CODE_SIGN_ENTITLEMENTS = Config/Bottari.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -361,84 +287,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari.appstore;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Release;
-		};
-		B0771A000000000000000161 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				BOTTARI_GOOGLE_CLIENT_ID = "";
-				BOTTARI_GOOGLE_CLIENT_SECRET = "";
-				BOTTARI_SPARKLE_PUBLIC_KEY = "";
-				BOTTARI_UPDATE_FEED_URL = "";
-				CODE_SIGN_ENTITLEMENTS = Config/AppStore.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Bottari;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 JooHyoung Cha";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari.appstore;
-				PRODUCT_NAME = Bottari;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "APP_STORE $(inherited)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Debug;
-		};
-		B0771A000000000000000162 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				BOTTARI_GOOGLE_CLIENT_ID = "";
-				BOTTARI_GOOGLE_CLIENT_SECRET = "";
-				BOTTARI_SPARKLE_PUBLIC_KEY = "";
-				BOTTARI_UPDATE_FEED_URL = "";
-				CODE_SIGN_ENTITLEMENTS = Config/AppStore.entitlements;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Bottari;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 JooHyoung Cha";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari.appstore;
-				PRODUCT_NAME = Bottari;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "APP_STORE $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -467,15 +317,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B0771A000000000000000160 /* Build configuration list for PBXNativeTarget "Bottari App Store" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				B0771A000000000000000161 /* Debug */,
-				B0771A000000000000000162 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -484,17 +325,6 @@
 			relativePath = Packages/BottariKit;
 		};
 /* End XCLocalSwiftPackageReference section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		B0771A0000000000000000B2 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.7.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		B0771A0000000000000000C1 /* BottariCore */ = {
@@ -522,39 +352,6 @@
 			productName = BottariRemote;
 		};
 		B0771A0000000000000000C7 /* BottariCloud */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariCloud;
-		};
-		B0771A0000000000000000C8 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B0771A0000000000000000B2 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-		B0771A000000000000000121 /* BottariCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariCore;
-		};
-		B0771A000000000000000122 /* BottariSFTP */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariSFTP;
-		};
-		B0771A000000000000000123 /* BottariTransfer */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariTransfer;
-		};
-		B0771A000000000000000124 /* BottariEditor */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariEditor;
-		};
-		B0771A000000000000000125 /* BottariPlayer */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariPlayer;
-		};
-		B0771A000000000000000126 /* BottariRemote */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BottariRemote;
-		};
-		B0771A000000000000000127 /* BottariCloud */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BottariCloud;
 		};

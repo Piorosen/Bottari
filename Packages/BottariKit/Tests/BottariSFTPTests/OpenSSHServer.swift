@@ -4,15 +4,13 @@ import NIOPosix
 
 /// The Mac's own OpenSSH tools, for checking Bottari against the real thing
 /// rather than Citadel's test server: `sshd` running as the current user on a
-/// free port, `ssh-keygen` for keys and `ssh-agent` for an agent.
+/// free port and `ssh-keygen` for keys.
 enum OpenSSH {
     static let sshd = "/usr/sbin/sshd"
     static let keygen = "/usr/bin/ssh-keygen"
-    static let agent = "/usr/bin/ssh-agent"
-    static let add = "/usr/bin/ssh-add"
 
     static var isAvailable: Bool {
-        [sshd, keygen, agent, add].allSatisfy(FileManager.default.isExecutableFile(atPath:))
+        [sshd, keygen].allSatisfy(FileManager.default.isExecutableFile(atPath:))
     }
 
     /// A fresh scratch folder, with a name short enough for a Unix socket path inside.
@@ -150,38 +148,6 @@ final class OpenSSHServer {
     func stop() {
         guard !stopped else { return }
         stopped = true
-        process.stop(waitingOn: ended)
-        try? FileManager.default.removeItem(at: folder)
-    }
-}
-
-/// `ssh-agent` on a socket of its own, holding the given key files.
-final class OpenSSHAgent {
-    let socket: String
-    private let folder: URL
-    private let process: Process
-    private let ended: DispatchSemaphore
-
-    init(adding keyFiles: [URL]) throws {
-        folder = try OpenSSH.scratch()
-        socket = folder.appending(path: "agent.sock").path
-        process = Process()
-        process.executableURL = URL(fileURLWithPath: OpenSSH.agent)
-        process.arguments = ["-D", "-a", socket]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        ended = try process.start()
-        for _ in 0..<100 where !FileManager.default.fileExists(atPath: socket) {
-            usleep(20_000)
-        }
-        var environment = ProcessInfo.processInfo.environment
-        environment["SSH_AUTH_SOCK"] = socket
-        for file in keyFiles {
-            try OpenSSH.run(OpenSSH.add, ["-q", file.path], environment: environment)
-        }
-    }
-
-    func stop() {
         process.stop(waitingOn: ended)
         try? FileManager.default.removeItem(at: folder)
     }

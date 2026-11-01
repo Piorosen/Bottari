@@ -26,7 +26,7 @@
 ### 전송
 
 - 서버 사이 전송. Mac을 거쳐 스트리밍하며 임시 파일을 만들지 않음
-- 서버 간 직접 전송(전송 센터에서 켬, 기본은 꺼짐): 원본 서버가 `tar | ssh`로 대상 서버에 바로 보내 Mac을 거치지 않는다. 대상 로그인은 에이전트 포워딩으로 전송하는 동안만 빌려 준다(Mac의 ssh-agent, 또는 키 파일로 Bottari가 직접 서명. 개인 키는 Mac을 떠나지 않음). 대상의 호스트 키는 Bottari가 확인한 키로 고정한다. 원본에서 대상에 닿지 않으면 Mac 경유로 바꾼다. 비밀번호로 로그인하는 대상에는 쓸 수 없다
+- 서버 간 직접 전송(전송 센터에서 켬, 기본은 꺼짐): 원본 서버가 `tar | ssh`로 대상 서버에 바로 보내 Mac을 거치지 않는다. 대상 로그인은 에이전트 포워딩으로 전송하는 동안만 빌려 준다(키 파일로 Bottari가 직접 서명. 개인 키는 Mac을 떠나지 않음). 대상의 호스트 키는 Bottari가 확인한 키로 고정한다. 원본에서 대상에 닿지 않으면 Mac 경유로 바꾼다. 비밀번호로 로그인하는 대상에는 쓸 수 없다
 - 동시 전송 수, 같은 이름 처리 방식, 일시정지, 재시도, 이어받기. 연결이 잠깐 끊기면 파일마다 세 번까지 알아서 다시 시도한다
 - 앱을 종료해도 끝나지 않은 전송을 기억했다가 다음 실행 때 이어서 보내기. 끝난 파일은 건너뛰고, 끊긴 파일은 받은 부분부터 이어 받는다
 - 전송 후 SHA-256 비교, 수정 시각 보존
@@ -34,12 +34,12 @@
 
 ### 연결
 
-- 비밀번호(키체인 저장), ssh-agent, 키 파일, `~/.ssh/config` 가져오기
-- 에이전트와 키 파일 모두 Ed25519, ECDSA, RSA. RSA는 OpenSSH 8.8 이후 기본인 `rsa-sha2-512`로 서명한다. 키 파일은 OpenSSH 형식(암호 포함)과 PEM
-- 에이전트에 맞는 키가 없으면 `ssh`처럼 `~/.ssh`의 `id_ed25519`, `id_ecdsa`, `id_rsa`로 이어서 시도
-- 점프 호스트(ProxyJump)와 ProxyCommand를 거친 연결과 파일 전송. `~/.ssh/config`의 `Match`(host, user, localnetwork 등)도 반영한다
+- 비밀번호(키체인 저장), 키 파일, `~/.ssh`의 기본 키, `~/.ssh/config` 가져오기
+- 키는 Ed25519, ECDSA, RSA. RSA는 OpenSSH 8.8 이후 기본인 `rsa-sha2-512`로 서명한다. 키 파일은 OpenSSH 형식(암호 포함)과 PEM
+- 기본 키는 `ssh`처럼 `~/.ssh`의 `id_ed25519`, `id_ecdsa`, `id_rsa`를 차례로 시도
+- 점프 호스트(ProxyJump)를 거친 연결과 파일 전송. `~/.ssh/config`의 `Match`(host, user, localnetwork 등)도 반영하고, `ProxyCommand ssh -W %h:%p 호스트`는 점프 호스트로 바꿔 가져온다
+- 점프 호스트 너머의 컴퓨터(리버스 터널로 들어가는 VM 등)가 꺼지거나 잠들면, 연결이 멈춰 있지 않고 어느 점프 호스트에서 어디에 닿지 못했는지 알려 준다
 - 호스트 키 확인. `~/.ssh/known_hosts`(해시된 이름 포함)에 있는 키는 바로 믿고, 다르거나 `@revoked`인 키는 거부한다. known_hosts에 다른 종류의 키만 있으면 지문을 보여 주고 확인을 받는다
-- 다른 Mac에서 동기화된 연결의 ProxyCommand는 이 Mac에서 한 번 허락해야 실행된다
 - 서버가 조용하면 주기적으로 확인하고, 잠자기나 네트워크 변경으로 끊긴 연결은 다음 요청 때 자동으로 다시 연다
 - PROD 태그: 패인 위 경고 띠, 쓰기 전 확인, 읽기 전용 열기
 
@@ -54,16 +54,26 @@
 
 - SSH 터미널(SwiftTerm). 스니펫, 여러 서버에 동시 입력
 - VNC와 macOS 화면 공유(RoyalVNCKit). SSH 터널을 거쳐 연결. 서버 패인의 화면 버튼으로 그 자리에서 켜며, 켜기 전에 서버의 화면 포트가 응답하는지와 SSH 포워딩이 막혀 있지 않은지 확인한다
-- SSH를 거치는 SOCKS/HTTP 프록시 터널
+- SSH를 거치는 SOCKS/HTTP 프록시 터널. Mac 전체에 쓰려면 시스템 설정의 자동 프록시 구성에 터널의 PAC 주소를 넣는다
 
 ### 설정 (⌘,)
 
 | 탭 | 내용 |
 | --- | --- |
-| 일반 | 전송 기본값, 업데이트 |
+| 일반 | 전송 기본값, 버전 |
 | 모양 | 테마(시스템, 종이, 먹, 쪽빛 밤, 모시, 고대비), 강조색, 밀도, 글꼴, 서버 태그 색. 테마는 JSON으로 가져오고 내보낸다(`~/Library/Application Support/Bottari/themes/`) |
 | 단축키 | Finder식, Commander식(F5 복사, F6 이동, F7 새 폴더, F8 삭제). 키를 직접 눌러 지정하고 겹치는 키를 표시 |
 | iCloud 동기화 | 연결 목록, 즐겨찾기, 테마, 단축키, 보따리 프리셋을 `iCloud Drive/Bottari/`에 JSON으로 두고 Mac끼리 병합. 양쪽에서 다르게 바뀐 항목은 어느 쪽을 쓸지 직접 고른다. 비밀번호는 파일에 쓰지 않는다. 기본은 꺼짐 |
+
+### macOS 샌드박스
+
+Bottari는 Mac App Store 앱처럼 앱 샌드박스 안에서 실행된다.
+
+- 이 Mac의 폴더는 사용자가 허용한 것만 연다. 처음에는 패인이 홈 폴더 대신 "허용" 안내를 보여 주고, 허용한 폴더는 보안 범위 북마크로 다음 실행에도 기억한다(설정 › 폴더 접근). 다운로드 폴더는 처음부터 열린다.
+- `~/.ssh`(config, known_hosts, 키)는 홈 폴더나 `~/.ssh`를 허용해야 읽는다.
+- SSH 에이전트(ssh-agent, 1Password)에는 연결하지 않는다. 샌드박스는 허용한 폴더 안의 소켓도 막는다. 기본 키나 고른 키 파일로 로그인한다.
+- ProxyCommand는 실행하지 않는다. 명령을 실행해야 하는 연결은 점프 호스트로 바꾼다.
+- iCloud Drive 패인과 설정 동기화는 iCloud Drive 폴더를 허용해야 쓴다.
 
 ### 언어와 진단
 
@@ -108,8 +118,10 @@ Xcode에서 테스트하려면 `Packages/BottariKit/Package.swift`를 열고 ⌘
 Debug 빌드는 창을 띄우지 않고 샘플 데이터로 각 화면을 PNG로 그릴 수 있다. 편집기, 플레이어, VNC, 설정, 동기화는 스스로 점검한 결과를 `*-check.txt`에 PASS/FAIL로 남긴다. 사용자의 테마, 단축키, 연결 목록, 전송 기록은 건드리지 않는다.
 
 ```sh
-make snapshots SHOTS=/tmp/bottari-shots
+make snapshots   # ~/Library/Containers/io.github.piorosen.bottari.appstore/Data/tmp/bottari-shots
 ```
+
+앱 샌드박스 안에서 실행되므로 결과는 앱 컨테이너 안에만 쓸 수 있다.
 
 애니메이션은 쇼케이스로 본다. 샘플 데이터의 메인 창을 실제로 띄우고 아무것도 저장하지 않는다. `-showcaseScript`를 붙이면 미리보기 열고 닫기, 패인 전환, 검색, 오류 띠, 명령 팔레트, 패인 바꾸기를 3초 간격으로 차례로 실행한다. `-slowMotion 6`은 모든 애니메이션을 6배 느리게 재생한다.
 
@@ -129,56 +141,22 @@ swift scripts/glyphs.swift Bottari/Assets.xcassets/Glyphs
 
 ## 배포
 
-같은 코드에서 두 가지 판을 만든다.
-
-- **GitHub 판** (타깃 `Bottari`): 앱 샌드박스 없이 Developer ID로 서명하고 공증한 DMG. 업데이트는 Sparkle로 받는다. 모든 기능이 들어 있다.
-- **App Store 판** (타깃 `Bottari App Store`, `APP_STORE` 플래그): 앱 샌드박스 안에서 실행되고 Sparkle이 없다. 아래 [App Store 판](#app-store-판)을 본다.
-
-### GitHub 판
-
-처음 한 번:
-
-1. Developer ID Application 인증서를 키체인에 설치한다.
-2. 공증 프로필을 만든다: `xcrun notarytool store-credentials bottari-notary --apple-id … --team-id …`
-3. Sparkle 키를 만든다: `scripts/sparkle-keys.sh`. 개인 키는 로그인 키체인에 저장되고, 출력된 공개 키는 다음 단계에서 쓴다.
-4. `cp Config/release.env.example Config/release.env` 후 `TEAM_ID`, `SPARKLE_PUBLIC_KEY`를 채운다. 이 파일은 커밋하지 않는다.
-5. (선택) Google Cloud에서 "데스크톱 앱" 유형의 OAuth 클라이언트를 만들어 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 넣으면, 사용자가 클라이언트를 따로 만들지 않고 Google Drive에 로그인할 수 있다. 동의 화면을 게시하지 않으면 7일마다 다시 로그인해야 한다.
-
-릴리스마다:
-
-```sh
-make release   # .build/release/에 Bottari-<버전>.dmg, .zip, appcast.xml 생성
-gh release create v0.1.0 .build/release/Bottari-0.1.0.dmg .build/release/Bottari-0.1.0.zip .build/release/appcast.xml
-```
-
-앱은 `https://github.com/Piorosen/Bottari/releases/latest/download/appcast.xml`에서 업데이트를 확인한다. 공개 키가 없는 빌드(Debug, `make package`)는 업데이트를 확인하지 않는다. `make package`는 서명 없이 같은 과정을 실행해 파이프라인만 점검한다.
-
-### App Store 판
-
-샌드박스 때문에 GitHub 판과 다르게 동작하는 부분:
-
-- 이 Mac의 폴더는 사용자가 허용한 것만 연다. 처음에는 패인이 홈 폴더 대신 "허용" 안내를 보여 주고, 허용한 폴더는 보안 범위 북마크로 다음 실행에도 기억한다(설정 › 폴더 접근). 다운로드 폴더는 처음부터 열린다.
-- `~/.ssh`(config, known_hosts, 키)는 홈 폴더나 `~/.ssh`를 허용해야 읽는다.
-- SSH 에이전트(ssh-agent, 1Password)에는 연결할 수 없다. 샌드박스는 허용한 폴더 안의 소켓도 막는다. 에이전트 대신 `~/.ssh`의 기본 키나 고른 키 파일로 로그인한다.
-- ProxyCommand는 실행하지 않는다. `~/.ssh/config`의 `ssh -W %h:%p 호스트`는 가져올 때 점프 호스트로 바꾼다.
-- 터널의 "Mac 전체(sshuttle)"와 시스템 프록시 자동 적용은 없다. 앱별 SOCKS/HTTP 프록시와 "Bottari만"은 그대로 쓴다.
-- iCloud Drive 패인과 설정 동기화는 iCloud Drive 폴더를 허용해야 쓴다.
-- 데이터(연결 목록, 설정, 키체인 항목)는 앱 컨테이너에 따로 저장되어 GitHub 판과 공유하지 않는다.
+TestFlight로만 배포한다. App Store Connect의 앱(번들 ID `io.github.piorosen.bottari.appstore`)에 빌드를 올리면, 처리가 끝난 뒤 TestFlight 내부 테스트 그룹에 자동으로 들어간다. 테스터는 Mac의 TestFlight 앱에서 설치하고 업데이트한다.
 
 처음 한 번:
 
 1. App Store Connect › 사용자 및 액세스 › 통합 › 키에서 API 키(앱 관리 또는 관리자 역할)를 만들고, `.p8` 파일을 `~/.appstoreconnect/private_keys/`에 둔다.
-2. App Store Connect에서 앱을 만든다. 번들 ID는 `io.github.piorosen.bottari.appstore`(다르게 하려면 `BUNDLE_ID`).
-3. `cp Config/appstore.env.example Config/appstore.env` 후 `TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`를 채운다. 이 파일은 커밋하지 않는다.
+2. `cp Config/appstore.env.example Config/appstore.env` 후 `TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`를 채운다. 이 파일은 커밋하지 않는다.
+3. (선택) Google Cloud에서 "데스크톱 앱" 유형의 OAuth 클라이언트를 만들어 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 넣으면, 사용자가 클라이언트를 따로 만들지 않고 Google Drive에 로그인할 수 있다. 동의 화면을 게시하지 않으면 7일마다 다시 로그인해야 한다.
 
 올릴 때마다:
 
 ```sh
-make appstore          # .build/appstore/에 서명된 .pkg 생성 (인증서와 프로필은 Xcode가 API 키로 만든다)
-make appstore-upload   # 같은 빌드를 App Store Connect에 올린다
+make testflight   # 보관, 서명(인증서와 프로필은 Xcode가 API 키로 만든다), App Store Connect에 업로드
+make archive      # 올리지 않고 .build/appstore/에 서명된 .pkg만 만든다
 ```
 
-빌드 번호는 올릴 때의 시각(`YYYYMMDDhhmm`)이다. 버전은 `MARKETING_VERSION`을 따른다.
+빌드 번호는 올릴 때의 시각(`YYYYMMDDhhmm`)이다. 버전은 `MARKETING_VERSION`을 따른다. 수출 규정(암호화) 답은 `Config/Info.plist`의 `ITSAppUsesNonExemptEncryption`에 있어 빌드마다 묻지 않는다.
 
 ## 구조
 
@@ -201,8 +179,8 @@ Packages/BottariKit/    앱과 분리한 핵심 로직
   BottariPlayer         libmpv(MPVKit) 스트리밍
   BottariRemote         SwiftTerm, RoyalVNCKit
   BottariCloud          S3(SigV4), Google Drive(AppAuth)
-Config/                 Info.plist 추가 키, App Store 판 권한(AppStore.entitlements), 릴리스 설정 예시
-scripts/                release.sh, appstore.sh, sparkle-keys.sh, app-icon.swift, glyphs.swift
+Config/                 Info.plist 추가 키, 샌드박스 권한(Bottari.entitlements), App Store Connect 설정 예시
+scripts/                testflight.sh, app-icon.swift, glyphs.swift
 docs/                   README 이미지
 ```
 

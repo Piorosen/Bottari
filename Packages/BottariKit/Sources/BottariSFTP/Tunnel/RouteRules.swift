@@ -58,19 +58,6 @@ public struct RouteRules: Equatable, Sendable {
         }
     }
 
-    /// The networks for sshuttle, which routes IP ranges only.
-    public var subnets: [String] {
-        rules.compactMap { rule in
-            switch rule {
-            case .everything: "0/0"
-            case .ipv4Range(let address, let prefix): "\(IPv4.format(address))/\(prefix)"
-            case .ipv6Range(let address, let prefix): "\(IPv6.format(address))/\(prefix)"
-            case .host(let name): name
-            case .domain: nil
-            }
-        }
-    }
-
     /// A proxy auto-configuration file: matching hosts use the SOCKS proxy (and
     /// the HTTP one for apps without SOCKS), everything else goes direct.
     public func pacFile(socksPort: Int, httpPort: Int?, fallBackToDirect: Bool) -> String {

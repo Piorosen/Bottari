@@ -239,7 +239,7 @@ final class SettingsSync {
             return
         }
         guard FolderAccess.shared.covers(RemotePath(folder.path)) else {
-            errors = [String(localized: "App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다. 위의 ‘iCloud Drive 허용…’을 누르십시오.")]
+            errors = [String(localized: "iCloud Drive 폴더를 허용해야 동기화할 수 있습니다. 위의 ‘iCloud Drive 허용…’을 누르십시오.")]
             return
         }
         guard !isSyncing else {

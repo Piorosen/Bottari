@@ -15,7 +15,7 @@ ifneq ($(DEV_TEAM),)
 SIGNING := CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM=$(DEV_TEAM)
 endif
 
-.PHONY: build test run open clean release package snapshots appstore appstore-upload
+.PHONY: build test run open clean snapshots archive testflight
 
 # Build the app (Debug) without opening Xcode.
 build:
@@ -29,7 +29,8 @@ run: build
 	open "$(APP)"
 
 # Every screen drawn with sample data into SHOTS, with self-checks in *-check.txt.
-SHOTS ?= $(TMPDIR)bottari-shots
+# The app runs in the App Sandbox, which lets it write only inside its container.
+SHOTS ?= $(HOME)/Library/Containers/io.github.piorosen.bottari.appstore/Data/tmp/bottari-shots
 snapshots: build
 	rm -rf "$(SHOTS)"
 	open -n -g -j -W "$(APP)" --args -renderSnapshots "$(SHOTS)"
@@ -38,21 +39,13 @@ snapshots: build
 open:
 	open $(PROJECT)
 
-# Signed, notarized DMG plus the Sparkle zip and appcast (see Config/release.env.example).
-release:
-	scripts/release.sh
+# Signed for the App Store, into .build/appstore (see Config/appstore.env.example).
+archive:
+	scripts/testflight.sh
 
-# The same steps without signing, to try the pipeline.
-package:
-	scripts/release.sh --unsigned
-
-# The Mac App Store edition, signed for the store (see Config/appstore.env.example).
-appstore:
-	scripts/appstore.sh
-
-# The same, uploaded to App Store Connect.
-appstore-upload:
-	scripts/appstore.sh --upload
+# The same, uploaded to App Store Connect for TestFlight. The only way Bottari ships.
+testflight:
+	scripts/testflight.sh --upload
 
 clean:
 	rm -rf .build Packages/BottariKit/.build "$(DERIVED)"

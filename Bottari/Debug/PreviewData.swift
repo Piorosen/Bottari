@@ -43,7 +43,7 @@ extension SavedSite {
         SavedSite(
             name: "prod-web",
             endpoint: SFTPEndpoint(host: "203.0.113.10", username: "deploy"),
-            authentication: .agent(socket: nil),
+            authentication: .defaultKeys,
             proxyJump: ["bastion"],
             tag: .prod,
             startPath: "/var/www/site"

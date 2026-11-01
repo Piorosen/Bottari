@@ -189,7 +189,7 @@ struct SiteManagerSheet: View {
                 .font(.themeMono(.caption))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-            Text("ProxyJump, ProxyCommand, IdentityFile, Match 설정 포함")
+            Text("ProxyJump, IdentityFile, Match 설정 포함")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
             Button("가져오기") {
@@ -435,13 +435,13 @@ private struct SiteRow: View {
 }
 
 private enum AuthKind: CaseIterable, Identifiable {
-    case agent, keyFile, password
+    case defaultKeys, keyFile, password
 
     var id: Self { self }
 
     var label: String {
         switch self {
-        case .agent: FolderAccess.isSandboxed ? String(localized: "~/.ssh 기본 키") : String(localized: "SSH 에이전트")
+        case .defaultKeys: String(localized: "~/.ssh 기본 키")
         case .keyFile: String(localized: "키 파일")
         case .password: String(localized: "비밀번호")
         }
@@ -449,9 +449,7 @@ private enum AuthKind: CaseIterable, Identifiable {
 
     var hint: String {
         switch self {
-        case .agent: FolderAccess.isSandboxed
-            ? String(localized: "App Store 판은 SSH 에이전트에 연결할 수 없어, ~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함")
-            : String(localized: "ssh-agent 또는 1Password 에이전트의 키 사용, 맞는 키가 없으면 ~/.ssh의 id_ed25519, id_ecdsa, id_rsa 시도")
+        case .defaultKeys: String(localized: "~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함")
         case .keyFile: String(localized: "OpenSSH 형식 개인 키(Ed25519, RSA). 키 암호는 키체인에 저장됨")
         case .password: String(localized: "키체인에 저장됨")
         }
@@ -461,7 +459,7 @@ private enum AuthKind: CaseIterable, Identifiable {
 private extension SavedSite.Authentication {
     var kind: AuthKind {
         switch self {
-        case .agent: .agent
+        case .defaultKeys: .defaultKeys
         case .keyFile: .keyFile
         case .password: .password
         }
@@ -695,10 +693,8 @@ private struct SiteForm: View {
                 }
             }
             switch site.authentication {
-            case .agent:
-                if !FolderAccess.isSandboxed {
-                    TextField("에이전트 소켓", text: agentSocket, prompt: Text(verbatim: "$SSH_AUTH_SOCK")).designField(mono: true)
-                }
+            case .defaultKeys:
+                EmptyView()
             case .keyFile:
                 HStack {
                     TextField("키 파일", text: keyPath, prompt: Text("~/.ssh/id_ed25519")).designField(mono: true)
@@ -718,14 +714,6 @@ private struct SiteForm: View {
         LabeledField(String(localized: "점프 호스트 (ProxyJump)"), hint: String(localized: "저장된 연결 이름, ~/.ssh/config 별칭 또는 user@host:port. 쉼표로 구분하면 순서대로 경유")) {
             JumpHostField(site: $site, candidates: jumpHostNames)
                 .id(site.id)
-        }
-        // The App Store edition cannot run one; it shows one only to say so.
-        if site.proxyJump.isEmpty, !FolderAccess.isSandboxed || site.proxyCommand != nil {
-            LabeledField(String(localized: "프록시 명령 (ProxyCommand)"), hint: FolderAccess.isSandboxed
-                ? String(localized: "App Store 판은 macOS 샌드박스 때문에 명령을 실행할 수 없습니다. 지우고 점프 호스트를 쓰십시오.")
-                : String(localized: "표준 입출력으로 SSH를 전달하는 명령. %h 호스트, %p 포트, %r 사용자로 바뀜")) {
-                TextField("프록시 명령", text: proxyCommand, prompt: Text(verbatim: "cloudflared access ssh --hostname %h")).designField(mono: true)
-            }
         }
         VStack(alignment: .leading, spacing: 10) {
             Text("원격 제어").font(.ui(.body, weight: .semibold))
@@ -816,29 +804,11 @@ private struct SiteForm: View {
                 guard kind != site.authentication.kind else { return }
                 authenticationsSetAside[site.authentication.kind] = site.authentication
                 let fresh: SavedSite.Authentication = switch kind {
-                case .agent: .agent(socket: nil)
+                case .defaultKeys: .defaultKeys
                 case .keyFile: .keyFile(path: "~/.ssh/id_ed25519")
                 case .password: .password
                 }
                 site.authentication = authenticationsSetAside[kind] ?? fresh
-            }
-        )
-    }
-
-    private var agentSocket: Binding<String> {
-        Binding(
-            get: { if case .agent(let socket) = site.authentication { socket ?? "" } else { "" } },
-            set: { site.authentication = .agent(socket: $0.isEmpty ? nil : $0) }
-        )
-    }
-
-    private var proxyCommand: Binding<String> {
-        Binding(
-            get: { site.proxyCommand ?? "" },
-            set: {
-                site.proxyCommand = $0.isEmpty ? nil : $0
-                // Typed here, so it may run here.
-                if !$0.isEmpty { SiteLibrary.allowProxyCommand($0.trimmingCharacters(in: .whitespaces), for: site.id) }
             }
         )
     }

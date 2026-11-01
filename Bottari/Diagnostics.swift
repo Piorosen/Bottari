@@ -74,13 +74,12 @@ enum Diagnostics {
             return "\(site.name): Google Drive"
         case .sftp:
             let auth = switch site.authentication {
-            case .agent: String(localized: "에이전트")
+            case .defaultKeys: String(localized: "기본 키")
             case .keyFile: String(localized: "키 파일")
             case .password: String(localized: "비밀번호")
             }
             var parts = ["\(site.name): SFTP \(site.endpoint.username)@\(site.endpoint.hostKeyID)", auth]
             if !site.proxyJump.isEmpty { parts.append(String(localized: "경유 \(site.proxyJump.joined(separator: " → "))")) }
-            if site.proxyCommand != nil { parts.append(String(localized: "ProxyCommand 사용")) }
             if site.readOnly { parts.append(String(localized: "읽기 전용")) }
             return parts.joined(separator: ", ")
         }

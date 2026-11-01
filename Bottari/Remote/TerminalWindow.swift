@@ -296,7 +296,7 @@ private struct TerminalScreen: View {
 
     private func auth(_ site: SavedSite) -> String {
         switch site.authentication {
-        case .agent: "ssh-agent"
+        case .defaultKeys: String(localized: "기본 키")
         case .keyFile(let path): (path as NSString).lastPathComponent
         case .password: String(localized: "비밀번호")
         }

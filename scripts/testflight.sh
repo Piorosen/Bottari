@@ -1,9 +1,9 @@
 #!/bin/bash
-# Builds the Mac App Store edition (target "Bottari App Store": App Sandbox,
-# no Sparkle) and hands it to App Store Connect:
+# Builds Bottari for the Mac App Store and hands it to App Store Connect, where
+# TestFlight gives each build to the internal testers:
 #
-#   scripts/appstore.sh           # archive and export a signed .pkg into .build/appstore/
-#   scripts/appstore.sh --upload  # the same, then upload it to App Store Connect
+#   scripts/testflight.sh           # archive and export a signed .pkg into .build/appstore/
+#   scripts/testflight.sh --upload  # the same, then upload it to App Store Connect
 #
 # Signing and upload use an App Store Connect API key (Users and Access ›
 # Integrations › Keys), so Xcode makes the Apple Distribution certificate and
@@ -19,6 +19,10 @@ upload=0
 : "${ASC_KEY_ID:?Config/appstore.env 에 ASC_KEY_ID 를 넣어 주세요}"
 : "${ASC_ISSUER_ID:?Config/appstore.env 에 ASC_ISSUER_ID 를 넣어 주세요}"
 key_path=${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8}
+# xcode-select may point at the Command Line Tools, which have no xcodebuild.
+if ! xcodebuild -version >/dev/null 2>&1 && [[ -d /Applications/Xcode.app ]]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
 [[ -f "$key_path" ]] || { echo "API 키 파일이 없어요: $key_path" >&2; exit 1; }
 
 out=.build/appstore
@@ -32,8 +36,8 @@ build_number=${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}
 
 step() { printf '\n==> %s\n' "$*"; }
 
-step "보관 (App Store, 빌드 $build_number)"
-xcodebuild -project Bottari.xcodeproj -scheme "Bottari App Store" -configuration Release \
+step "보관 (빌드 $build_number)"
+xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Release \
   -destination 'generic/platform=macOS' -derivedDataPath "$derived" -quiet \
   archive -archivePath "$archive" "${auth[@]}" \
   DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" CURRENT_PROJECT_VERSION="$build_number" \
@@ -58,7 +62,7 @@ xcodebuild -exportArchive -archivePath "$archive" -exportPath "$out" -exportOpti
 
 step "끝"
 if (( upload )); then
-  echo "App Store Connect에 올렸어요. 처리가 끝나면 TestFlight와 앱 심사에 쓸 수 있어요."
+  echo "App Store Connect에 올렸어요. 처리가 끝나면 TestFlight 내부 테스트 그룹에 자동으로 배포돼요."
 else
   ls -lh "$out"/*.pkg
 fi

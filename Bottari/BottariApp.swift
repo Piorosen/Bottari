@@ -7,7 +7,7 @@ struct BottariApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
     init() {
-        // Folders allowed in an earlier run (App Store edition), before any pane lists one.
+        // Folders allowed in an earlier run, before any pane lists one.
         FolderAccess.shared.restore()
         BundledFonts.register()
         TableRowLook.hideSeparators()
@@ -34,11 +34,6 @@ struct BottariApp: App {
                 Button("진단 정보 저장…") { Diagnostics.save() }
                 Button("로그 폴더 열기") {
                     NSWorkspace.shared.open(Diagnostics.logFile.deletingLastPathComponent())
-                }
-            }
-            if Updates.shared.isAvailable {
-                CommandGroup(after: .appInfo) {
-                    Button("업데이트 확인…") { Updates.shared.checkForUpdates() }
                 }
             }
         }
@@ -133,7 +128,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Diagnostics.startLogging()
         ThemeStore.shared.applyAppearance()
         SettingsSync.shared.start()
-        _ = Updates.shared
         _ = AppServices.transferRecords
     }
 
@@ -164,14 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: String(localized: "취소"))
             guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
         }
-        // A proxy setting left pointing at a tunnel that is gone would cut
-        // the Mac off from the web.
-        guard TunnelStore.shared.changedSystemProxy else { return .terminateNow }
-        Task {
-            await TunnelStore.shared.restoreSystemProxies()
-            sender.reply(toApplicationShouldTerminate: true)
-        }
-        return .terminateLater
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {

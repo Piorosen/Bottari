@@ -51,10 +51,6 @@ final class SiteLibrary {
         let result = SiteStore.importing(sshConfig, into: sites)
         sites = result.sites
         recentlyImported = Set(result.added.map(\.id))
-        // From this Mac's own ~/.ssh/config, so its commands are this Mac's too.
-        for site in result.added {
-            if let command = site.proxyCommand { Self.allowProxyCommand(command, for: site.id) }
-        }
         importableHosts = []
         persist()
         return result.added
@@ -70,7 +66,7 @@ final class SiteLibrary {
     func add(_ site: SavedSite = SavedSite(
         name: String(localized: "새 서버"),
         endpoint: SFTPEndpoint(host: "", username: NSUserName()),
-        authentication: .agent(socket: nil)
+        authentication: .defaultKeys
     )) -> SavedSite {
         sites.append(site)
         persist()
@@ -229,7 +225,6 @@ final class SiteLibrary {
         let sshConfig = sshConfig
         let stored = secrets
         let detour = takingDetours ? TunnelStore.shared.detour(for: site) : nil
-        try confirmProxyCommands(on: [site] + (detour.map { [$0] } ?? []))
         // Key files and the Keychain are read off the main thread: the Keychain
         // may stop to ask the user for permission.
         var plan = try await Task.detached {
@@ -246,7 +241,6 @@ final class SiteLibrary {
             credential: plan.credential,
             hostKeys: .knownHosts(AppServices.knownHosts),
             via: plan.hops,
-            proxyCommand: plan.proxyCommand,
             displayName: site.name
         )
         if keepingTypedSecrets, !typedSecrets.isEmpty {
@@ -261,45 +255,6 @@ final class SiteLibrary {
             }.value
         }
         return provider
-    }
-
-    // MARK: - ProxyCommands from elsewhere
-
-    /// ProxyCommands run as shell commands on this Mac, and sites arrive
-    /// from other Macs through iCloud. A command runs only once it was typed
-    /// or allowed here; this list stays on this Mac.
-    private static let allowedProxyCommandsKey = "sites.allowedProxyCommands"
-
-    static func allowProxyCommand(_ command: String, for site: SavedSite.ID) {
-        var allowed = UserDefaults.standard.dictionary(forKey: allowedProxyCommandsKey) as? [String: String] ?? [:]
-        allowed[site.uuidString] = command
-        UserDefaults.standard.set(allowed, forKey: allowedProxyCommandsKey)
-    }
-
-    private static func isAllowed(_ command: String, for site: SavedSite.ID) -> Bool {
-        (UserDefaults.standard.dictionary(forKey: allowedProxyCommandsKey) as? [String: String])?[site.uuidString] == command
-    }
-
-    /// Asks before running a ProxyCommand this Mac has not seen, for `sites`
-    /// and the saved jump hosts they go through.
-    private func confirmProxyCommands(on start: [SavedSite]) throws {
-        var queue = start
-        var seen = Set<SavedSite.ID>()
-        while let next = queue.popLast() {
-            guard seen.insert(next.id).inserted else { continue }
-            queue += next.proxyJump.compactMap { name in sites.first { $0.name == name } }
-            guard let command = next.proxyCommand?.trimmingCharacters(in: .whitespaces), !command.isEmpty,
-                  !Self.isAllowed(command, for: next.id) else { continue }
-            let alert = NSAlert()
-            alert.messageText = String(localized: "‘\(next.name)’에 연결하려면 이 Mac에서 명령을 실행합니다")
-            alert.informativeText = String(localized: "이 ProxyCommand는 이 Mac에서 입력한 것이 아닙니다(다른 Mac에서 동기화됨). 아는 명령일 때만 허락하십시오.") + "\n\n" + command
-            alert.addButton(withTitle: String(localized: "취소"))
-            alert.addButton(withTitle: String(localized: "허락하고 연결"))
-            guard alert.runModal() == .alertSecondButtonReturn else {
-                throw CloudConnectError(String(localized: "ProxyCommand 실행을 허락하지 않아 연결하지 않았습니다."))
-            }
-            Self.allowProxyCommand(command, for: next.id)
-        }
     }
 
     private func persist() {
@@ -333,7 +288,7 @@ struct CloudConnectError: LocalizedError {
     var errorDescription: String? { message }
 }
 
-/// The Google Cloud OAuth client a release build carries (Config/release.env),
+/// The Google Cloud OAuth client a TestFlight build carries (Config/appstore.env),
 /// so Google Drive works without each user making a client of their own.
 enum GoogleClient {
     static let builtIn: (id: String, secret: String?)? = {

@@ -51,16 +51,16 @@ import Testing
         // Keys still work; the unreadable passphrase or fallback password is left out.
         #expect(try site("prod", .keyFile(path: "/keys/prod")).credential(secrets: RefusingSecrets(), readFile: readFile)
             == .privateKey("PROD KEY", passphrase: nil))
-        #expect(try site("box", .agent(socket: "/tmp/agent.sock")).credential(secrets: RefusingSecrets()) == .agent(socket: "/tmp/agent.sock"))
+        #expect(try site("box", .defaultKeys).credential(secrets: RefusingSecrets()) == .defaultKeys([]))
     }
 
     @Test func keySitesWithAPasswordTryTheKeysFirst() throws {
-        let nas = site("nas", .agent(socket: "/tmp/agent.sock"))
+        let nas = site("nas", .defaultKeys)
         let prod = site("prod", .keyFile(path: "/keys/prod"))
 
-        #expect(try nas.credential(secrets: InMemorySecretStore()) == .agent(socket: "/tmp/agent.sock"))
+        #expect(try nas.credential(secrets: InMemorySecretStore()) == .defaultKeys([]))
         #expect(try nas.credential(secrets: InMemorySecretStore([nas.passwordKey: "stored"]))
-            == .fallback(.agent(socket: "/tmp/agent.sock"), then: .password("stored")))
+            == .fallback(.defaultKeys([]), then: .password("stored")))
         #expect(try prod.credential(secrets: InMemorySecretStore(), password: "typed", readFile: readFile)
             == .fallback(.privateKey("PROD KEY", passphrase: nil), then: .password("typed")))
     }
@@ -85,7 +85,7 @@ import Testing
     }
 
     @Test func jumpHostsResolveThroughSitesConfigAndRawAddresses() throws {
-        let relay = site("relay", .agent(socket: nil), via: ["bastion"])
+        let relay = site("relay", .defaultKeys, via: ["bastion"])
         let target = site("prod", .keyFile(path: "/keys/prod"), via: ["relay", "admin@edge.example.com:2200"])
 
         let plan = try target.connectionPlan(
@@ -98,50 +98,37 @@ import Testing
 
         #expect(plan.endpoint == target.endpoint)
         #expect(plan.credential == .privateKey("PROD KEY", passphrase: nil))
-        // Agent hops also carry the default key file, as `ssh` would try it.
+        // Hops without a key of their own try the default key file, as `ssh` would.
         #expect(plan.hops == [
             SSHHop(endpoint: SFTPEndpoint(host: "bastion.example.com", username: "me"), credential: .privateKey("BASTION KEY", passphrase: nil)),
-            SSHHop(endpoint: relay.endpoint, credential: .agent(socket: nil, fallbackKeys: ["BASTION KEY"])),
-            SSHHop(endpoint: SFTPEndpoint(host: "edge.example.com", port: 2200, username: "admin"), credential: .agent(socket: nil, fallbackKeys: ["BASTION KEY"])),
+            SSHHop(endpoint: relay.endpoint, credential: .defaultKeys(["BASTION KEY"])),
+            SSHHop(endpoint: SFTPEndpoint(host: "edge.example.com", port: 2200, username: "admin"), credential: .defaultKeys(["BASTION KEY"])),
         ])
     }
 
-    @Test func proxyCommandsApplyOnlyToTheServerDialledFirst() throws {
-        var tunnelled = site("prod", .keyFile(path: "/keys/prod"))
-        tunnelled.proxyCommand = "cloudflared access ssh --hostname %h --port %p --user %r # %n %%"
-        let direct = try tunnelled.connectionPlan(sites: [tunnelled], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: readFile)
-        #expect(direct.hops.isEmpty)
-        #expect(direct.proxyCommand == "cloudflared access ssh --hostname prod.example.com --port 22 --user deploy # prod %")
-
-        // Behind a jump host whose own ProxyCommand reaches it, the target's no longer applies.
-        var gateway = site("gateway", .keyFile(path: "/keys/prod"))
-        gateway.proxyCommand = "nc -X 5 -x proxy:1080 %h %p"
-        var behind = tunnelled
-        behind.proxyJump = ["gateway", "bastion"]
-        let plan = try behind.connectionPlan(sites: [gateway, behind], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: readFile)
-        #expect(plan.proxyCommand == nil)
-        #expect(plan.hops.map(\.proxyCommand) == ["nc -X 5 -x proxy:1080 gateway.example.com 22", nil])
-
-        // A tunnel's server put in front becomes the first hop, with its ProxyCommand.
-        let detoured = direct.through(try gateway.connectionPlan(sites: [gateway], sshConfig: config, secrets: InMemorySecretStore(), readFile: readFile))
-        #expect(detoured.proxyCommand == nil)
-        #expect(detoured.hops.map(\.proxyCommand) == ["nc -X 5 -x proxy:1080 gateway.example.com 22"])
+    @Test func aTunnelsServerGoesInFrontAsTheFirstHop() throws {
+        let target = site("prod", .keyFile(path: "/keys/prod"), via: ["bastion"])
+        let gateway = site("gateway", .keyFile(path: "/keys/prod"))
+        let plan = try target.connectionPlan(sites: [gateway, target], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: readFile)
+        let detoured = plan.through(try gateway.connectionPlan(sites: [gateway], sshConfig: config, secrets: InMemorySecretStore(), readFile: readFile))
+        #expect(detoured.hops.map(\.endpoint) == [gateway.endpoint, SFTPEndpoint(host: "bastion.example.com", username: "me")])
     }
 
-    @Test func agentFallsBackToTheDefaultKeyFiles() throws {
-        let nas = site("nas", .agent(socket: "/tmp/agent.sock"))
+    @Test func defaultKeysAreTheKeyFilesSshTries() throws {
+        let nas = site("nas", .defaultKeys)
         let files = ["/Users/me/.ssh/id_rsa": "RSA KEY", "/Users/me/.ssh/id_ed25519": "ED25519 KEY"]
 
         #expect(try nas.credential(secrets: InMemorySecretStore(), sshDirectory: "/Users/me/.ssh", readFile: { files[$0] })
-            == .agent(socket: "/tmp/agent.sock", fallbackKeys: ["ED25519 KEY", "RSA KEY"]))
-        #expect(try nas.credential(secrets: InMemorySecretStore(), sshDirectory: "/Users/me/.ssh", readFile: { _ in nil })
-            == .agent(socket: "/tmp/agent.sock"))
-        #expect(try nas.credential(secrets: InMemorySecretStore(), readFile: { files[$0] }) == .agent(socket: "/tmp/agent.sock"))
+            == .defaultKeys(["ED25519 KEY", "RSA KEY"]))
+        #expect(try nas.credential(secrets: InMemorySecretStore(), sshDirectory: "/Users/me/.ssh", readFile: { _ in nil }) == .defaultKeys([]))
+        #expect(try nas.credential(secrets: InMemorySecretStore(), readFile: { files[$0] }) == .defaultKeys([]))
+        // With nothing to offer, the connection says where the keys should be.
+        #expect(throws: SFTPConnectError.noDefaultKeys) { try SFTPCredential.defaultKeys([]).authenticationAttempts(username: "me") }
     }
 
     @Test func jumpLoopsAreRefused() {
-        let a = site("a", .agent(socket: nil), via: ["b"])
-        let b = site("b", .agent(socket: nil), via: ["a"])
+        let a = site("a", .defaultKeys, via: ["b"])
+        let b = site("b", .defaultKeys, via: ["a"])
         #expect(throws: SiteConnectError.jumpLoop("a")) {
             try a.connectionPlan(sites: [a, b], sshConfig: config, secrets: InMemorySecretStore(), readFile: readFile)
         }
@@ -202,31 +189,6 @@ import Testing
             #expect(knownHosts.trustedKey(for: target.endpoint) != nil)
             #expect(knownHosts.trustedKey(for: jump.endpoint) != knownHosts.trustedKey(for: target.endpoint))
             await provider.disconnect()
-        }
-    }
-
-    @Test func connectsThroughAProxyCommand() async throws {
-        try await withJumpAndTarget { _, target in
-            try target.makeFile("/piped.txt", "through nc")
-            let provider = try await SFTPFileProvider.connect(
-                to: target.endpoint,
-                credential: .password(TestSFTPServer.password),
-                hostKeys: .acceptAnything,
-                proxyCommand: "/usr/bin/nc 127.0.0.1 \(target.port)"
-            )
-            #expect(try await provider.readData("/piped.txt") == Data("through nc".utf8))
-            await provider.disconnect()
-        }
-    }
-
-    @Test func aFailingProxyCommandSaysWhatItPrinted() async throws {
-        await #expect(throws: SFTPConnectError.proxyCommandFailed(command: "echo 'no route to db' >&2; exit 1", reason: "no route to db")) {
-            _ = try await SFTPFileProvider.connect(
-                to: SFTPEndpoint(host: "db.internal", username: "me"),
-                credential: .password("pw"),
-                hostKeys: .acceptAnything,
-                proxyCommand: "echo 'no route to db' >&2; exit 1"
-            )
         }
     }
 

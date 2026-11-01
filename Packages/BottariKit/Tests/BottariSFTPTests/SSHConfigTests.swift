@@ -86,12 +86,10 @@ import Testing
         Host=quoted
           HostName="203.0.113.5" # trailing comment
           IdentityFile "~/Library/My Keys/id_ed25519"
-          IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
         """)
         let host = parsed.resolve("quoted")
         #expect(host.hostName == "203.0.113.5")
         #expect(host.identityFiles == ["/Users/me/Library/My Keys/id_ed25519"])
-        #expect(host.identityAgent == "/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock")
     }
 
     @Test func anEqualsSignWithSpacesAroundIt() {

@@ -31,12 +31,10 @@ public enum SFTPCredential: Equatable, Sendable {
     /// A private key file's text: OpenSSH format (Ed25519, ECDSA or RSA, with
     /// or without a passphrase) or unencrypted PEM.
     case privateKey(String, passphrase: String? = nil)
-    /// Keys held by an SSH agent such as ssh-agent or 1Password; `socket` nil
-    /// means `SSH_AUTH_SOCK`. `fallbackKeys` (private key files' text, e.g.
-    /// `~/.ssh/id_ed25519`) are tried after the agent's, the way `ssh` falls
-    /// back to its default key files; ones that need a passphrase or are of an
+    /// The key files `ssh` tries when a host names none (`~/.ssh/id_ed25519`
+    /// and the like), as their text. Ones that need a passphrase or are of an
     /// unsupported kind are skipped.
-    case agent(socket: String? = nil, fallbackKeys: [String] = [])
+    case defaultKeys([String])
     /// Tries `first`, then `then` if the server refuses it or it has nothing
     /// to offer: keys first and a password after, as `ssh` does.
     indirect case fallback(SFTPCredential, then: SFTPCredential)
@@ -52,20 +50,11 @@ public enum SFTPCredential: Equatable, Sendable {
             return [.passwordBased(username: username, password: password)]
         case .privateKey(let text, let passphrase):
             return try PrivateKeyFile(text, passphrase: passphrase).attempts(username: username)
-        case .agent(let socket, let fallbackKeys):
-            var attempts: [SSHAuthenticationMethod] = []
-            // Reported only if neither the agent nor the fallback keys leave anything to try.
-            let nothingToTry: SFTPConnectError
-            if let agent = SSHAgentClient(socket: socket), let offered = agent.attempts(username: username) {
-                attempts = offered.attempts
-                nothingToTry = offered.held == 0 ? .agentHasNoKeys : .agentHasNoUsableKeys
-            } else {
-                nothingToTry = .agentUnavailable
-            }
-            attempts += fallbackKeys.flatMap { text in
+        case .defaultKeys(let texts):
+            let attempts = texts.flatMap { text in
                 (try? PrivateKeyFile(text, passphrase: nil).attempts(username: username)) ?? []
             }
-            guard !attempts.isEmpty else { throw nothingToTry }
+            guard !attempts.isEmpty else { throw SFTPConnectError.noDefaultKeys }
             return attempts
         }
     }
@@ -87,11 +76,8 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case unsupportedKey(String)
     /// The key text could not be parsed, or the passphrase is wrong.
     case unreadableKey
-    case agentUnavailable
-    /// The agent holds no keys at all, and no fallback key file could be used.
-    case agentHasNoKeys
-    /// The agent holds keys, but none of a kind Bottari can use through it.
-    case agentHasNoUsableKeys
+    /// No default key file could be read and used without a passphrase.
+    case noDefaultKeys
     /// A jump host on the way failed; `reason` says how.
     case jumpHostFailed(host: String, reason: String)
     /// The jump host `jumpHost` could not reach `address` behind it, e.g. a
@@ -105,8 +91,6 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case unknownHost(String)
     /// This network has no way to reach the host.
     case noRoute(address: String)
-    /// The ProxyCommand could not start, or ended before the server answered.
-    case proxyCommandFailed(command: String, reason: String)
     case unreachable(String)
     /// The port is outside 1–65535.
     case invalidPort(host: String, port: Int)
@@ -205,14 +189,8 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "지원하지 않는 키 형식입니다: \(type)")
         case .unreadableKey:
             String(localized: "키를 읽을 수 없습니다. 키 형식이나 암호를 확인하십시오.")
-        case .agentUnavailable where FolderAccess.isSandboxed:
-            String(localized: "App Store 판은 macOS 샌드박스 안에서 실행되어 SSH 에이전트(1Password 등)에 연결할 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용해 키 파일을 읽게 하거나, 연결 관리에서 키 파일을 선택하십시오.")
-        case .agentUnavailable:
-            String(localized: "SSH 에이전트에 연결할 수 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_ecdsa, id_rsa)도 없습니다. ssh-agent 또는 1Password 에이전트가 실행 중인지 확인하거나 연결 관리에서 키 파일을 선택하십시오.")
-        case .agentHasNoKeys:
-            String(localized: "SSH 에이전트에 키가 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_ecdsa, id_rsa)도 없습니다. ssh-add로 키를 추가하거나 연결 관리에서 키 파일을 선택하십시오.")
-        case .agentHasNoUsableKeys:
-            String(localized: "SSH 에이전트에 사용할 수 있는 키가 없습니다. 에이전트의 키가 인증서나 보안 키(sk-)뿐이라면 일반 키를 ssh-add로 추가하거나 연결 관리에서 키 파일을 선택하십시오.")
+        case .noDefaultKeys:
+            String(localized: "~/.ssh에 암호 없이 쓸 수 있는 기본 키 파일(id_ed25519, id_ecdsa, id_rsa)이 없거나 읽을 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용하거나, 연결 관리에서 키 파일을 선택하십시오.")
         case .jumpHostFailed(let host, let reason):
             String(localized: "점프 호스트 \(host)에서 연결에 실패했습니다. \(reason)")
         case .unreachableBehindJumpHost(let address, let jumpHost, let detail):
@@ -225,8 +203,6 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "\(host) 주소를 찾을 수 없습니다. 호스트 이름을 확인하고, 사내 주소라면 VPN 연결을 확인하십시오.")
         case .noRoute(let address):
             String(localized: "\(address)로 가는 경로가 없습니다. 네트워크 또는 VPN 연결을 확인하십시오.")
-        case .proxyCommandFailed(let command, let reason):
-            String(localized: "ProxyCommand로 서버에 닿지 못했습니다: \(ProxyCommand.program(of: command))") + (reason.isEmpty ? "" : "\n\(reason)")
         case .unreachable(let reason):
             String(localized: "서버에 연결할 수 없습니다: \(reason)")
         case .invalidPort(let host, let port):
@@ -239,14 +215,10 @@ extension SFTPConnectError: LocalizedError {
 public struct SSHHop: Equatable, Sendable {
     public var endpoint: SFTPEndpoint
     public var credential: SFTPCredential
-    /// How to reach this server when it is the first one dialled: a command
-    /// (tokens already filled in) whose standard input and output carry SSH.
-    public var proxyCommand: String?
 
-    public init(endpoint: SFTPEndpoint, credential: SFTPCredential, proxyCommand: String? = nil) {
+    public init(endpoint: SFTPEndpoint, credential: SFTPCredential) {
         self.endpoint = endpoint
         self.credential = credential
-        self.proxyCommand = proxyCommand
     }
 }
 
@@ -255,9 +227,8 @@ public struct SSHHop: Equatable, Sendable {
 /// `SSHClient` is not marked `Sendable`, but its state lives on its NIO event
 /// loop and we only call its async methods, which hop onto that loop.
 ///
-/// Each connection gets its own event loop thread: an agent waiting for the
-/// user to approve a signature blocks that thread, and should stall only the
-/// connection asking for it.
+/// Each connection gets its own event loop thread, so a busy connection
+/// stalls only itself.
 final class SFTPConnection: @unchecked Sendable {
     let client: SSHClient
     let sftp: SFTPClient
@@ -289,15 +260,12 @@ final class SFTPConnection: @unchecked Sendable {
         self.group = group
     }
 
-    /// Connects through `hops` in order (the first is dialled directly, or
-    /// through its ProxyCommand), then to `endpoint`; with no hops,
-    /// `proxyCommand` is how to reach `endpoint`.
+    /// Connects through `hops` in order (the first is dialled directly), then to `endpoint`.
     static func open(
         to endpoint: SFTPEndpoint,
         credential: SFTPCredential,
         hostKeys: HostKeyTrust,
         via hops: [SSHHop] = [],
-        proxyCommand: String? = nil,
         timeout: TimeAmount = .seconds(15)
     ) async throws -> SFTPConnection {
         // A port typed as 70000 or -1 would stop the app deep inside NIO,
@@ -306,7 +274,7 @@ final class SFTPConnection: @unchecked Sendable {
             throw SFTPConnectError.invalidPort(host: target.host, port: target.port)
         }
         let route = hops.isEmpty
-            ? (proxyCommand.map { " (ProxyCommand: \(ProxyCommand.program(of: $0)))" } ?? "")
+            ? ""
             : String(localized: " (경유: ") + hops.map { "\($0.endpoint.username)@\($0.endpoint.hostKeyID)" }.joined(separator: " → ") + ")"
         Log.connection.info("연결 시작: \(endpoint.username)@\(endpoint.hostKeyID)\(route)")
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -325,7 +293,7 @@ final class SFTPConnection: @unchecked Sendable {
                 }
             }
             let (destination, channel, heartbeat) = try await connect(
-                SSHHop(endpoint: endpoint, credential: credential, proxyCommand: proxyCommand),
+                SSHHop(endpoint: endpoint, credential: credential),
                 through: chain.last,
                 behind: hops.last?.endpoint,
                 hostKeys: hostKeys,
@@ -375,11 +343,9 @@ final class SFTPConnection: @unchecked Sendable {
         let attempts = try hop.credential.authenticationAttempts(username: hop.endpoint.username)
         for (index, method) in attempts.enumerated() {
             var opened: Channel?
-            var proxy: ProxyCommand?
             do {
                 let heartbeat = Heartbeat()
-                let channel: Channel
-                (channel, proxy) = try await openChannel(to: hop, through: previous, group: group, timeout: timeout, heartbeat: heartbeat)
+                let channel = try await openChannel(to: hop, through: previous, group: group, timeout: timeout, heartbeat: heartbeat)
                 opened = channel
                 let tracker = AuthenticationTracker(method, channel: channel)
                 let attempt = UncheckedSendable(SSHAuthenticationMethod.custom(tracker))
@@ -409,26 +375,21 @@ final class SFTPConnection: @unchecked Sendable {
                     Log.connection.info("\(hop.endpoint.hostKeyID): 인증 방법 \(index + 1)/\(attempts.count) 거부됨")
                     continue
                 }
-                if let proxy, case SFTPConnectError.unreachable = reason {
-                    // The command's own words say more than a closed pipe does.
-                    throw SFTPConnectError.proxyCommandFailed(command: proxy.command, reason: proxy.errorOutput)
-                }
                 throw reason
             }
         }
         throw SFTPConnectError.authenticationFailed
     }
 
-    /// A TCP connection to the hop, a channel to it through `previous`, or
-    /// its ProxyCommand's standard input and output, ready for Citadel to
-    /// start SSH on.
+    /// A TCP connection to the hop, or a channel to it through `previous`,
+    /// ready for Citadel to start SSH on.
     private static func openChannel(
         to hop: SSHHop,
         through previous: SSHClient?,
         group: MultiThreadedEventLoopGroup,
         timeout: TimeAmount,
         heartbeat: Heartbeat
-    ) async throws -> (Channel, ProxyCommand?) {
+    ) async throws -> Channel {
         let endpoint = hop.endpoint
         // Runs on the loop before any data arrives.
         let prepare: @Sendable (Channel) -> EventLoopFuture<Void> = { channel in
@@ -437,7 +398,7 @@ final class SFTPConnection: @unchecked Sendable {
             }
         }
         if let previous {
-            let channel = try await previous.createDirectTCPIPChannel(
+            return try await previous.createDirectTCPIPChannel(
                 using: .init(
                     targetHost: endpoint.host,
                     targetPort: endpoint.port,
@@ -445,19 +406,13 @@ final class SFTPConnection: @unchecked Sendable {
                 ),
                 initialize: prepare
             )
-            return (channel, nil)
         }
-        if let command = hop.proxyCommand {
-            let (channel, process) = try await ProxyCommand.start(command, group: group, prepare: prepare)
-            return (channel, process)
-        }
-        let channel = try await ClientBootstrap(group: group)
+        return try await ClientBootstrap(group: group)
             .connectTimeout(timeout)
             .channelOption(ChannelOptions.socketOption(.so_keepalive), value: 1)
             .channelInitializer(prepare)
             .connect(host: endpoint.host, port: endpoint.port)
             .get()
-        return (channel, nil)
     }
 
     /// Runs `operation` as tracked background work, or returns nil once closing has begun.
@@ -544,8 +499,8 @@ final class SFTPConnection: @unchecked Sendable {
                 try? await jump.close()
             }
         }
-        // The outermost connection is this Mac's own socket or pipe, which
-        // closes at once and takes every channel inside it down with it.
+        // The outermost connection is this Mac's own socket, which closes at
+        // once and takes every channel inside it down with it.
         try? await (jumps.first ?? client).close()
         try? await group.shutdownGracefully()
     }

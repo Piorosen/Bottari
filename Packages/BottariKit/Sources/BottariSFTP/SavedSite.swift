@@ -4,12 +4,20 @@ import Foundation
 /// A server the user saved. Secrets are not part of it; they live in a `SecretStore`.
 public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public enum Authentication: Codable, Hashable, Sendable {
-        /// Keys held by an SSH agent; `socket` nil means `SSH_AUTH_SOCK`.
-        case agent(socket: String?)
+        /// The key files `ssh` tries when a host names none: `~/.ssh/id_ed25519`,
+        /// `id_ecdsa` and `id_rsa`.
+        case defaultKeys
         /// An OpenSSH private key file. Its passphrase, if any, is in the secret store.
         case keyFile(path: String)
         /// A password kept in the secret store.
         case password
+
+        /// Saved as `agent`, its name from when Bottari asked an SSH agent
+        /// first, so sites.json reads the same in older and newer copies.
+        private enum CodingKeys: String, CodingKey {
+            case defaultKeys = "agent"
+            case keyFile, password
+        }
     }
 
     /// The colour tag from the design: PROD gets a warning band and confirmations.
@@ -75,9 +83,6 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
     public var authentication: Authentication
     /// Jump hosts, first hop first: saved-site names, `~/.ssh/config` aliases or `user@host:port`.
     public var proxyJump: [String]
-    /// A command whose standard input and output carry the connection, as
-    /// `~/.ssh/config` writes it (`%h`, `%p`, `%r`, `%n`). Unused with jump hosts.
-    public var proxyCommand: String?
     public var tag: Tag?
     public var startPath: String?
     /// The `~/.ssh/config` alias this site was imported from, so importing again skips it.
@@ -95,7 +100,6 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         endpoint: SFTPEndpoint,
         authentication: Authentication,
         proxyJump: [String] = [],
-        proxyCommand: String? = nil,
         tag: Tag? = nil,
         startPath: String? = nil,
         sshConfigAlias: String? = nil,
@@ -109,7 +113,6 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         self.endpoint = endpoint
         self.authentication = authentication
         self.proxyJump = proxyJump
-        self.proxyCommand = proxyCommand
         self.tag = tag
         self.startPath = startPath
         self.sshConfigAlias = sshConfigAlias
@@ -127,7 +130,6 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         endpoint = try values.decode(SFTPEndpoint.self, forKey: .endpoint)
         authentication = try values.decode(Authentication.self, forKey: .authentication)
         proxyJump = try values.decodeIfPresent([String].self, forKey: .proxyJump) ?? []
-        proxyCommand = try values.decodeIfPresent(String.self, forKey: .proxyCommand)
         tag = try values.decodeIfPresent(Tag.self, forKey: .tag)
         startPath = try values.decodeIfPresent(String.self, forKey: .startPath)
         sshConfigAlias = try values.decodeIfPresent(String.self, forKey: .sshConfigAlias)
@@ -141,31 +143,20 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         if case .sftp = kind { true } else { false }
     }
 
-    /// A site for an `~/.ssh/config` host: its IdentityAgent if set, otherwise its
-    /// first IdentityFile that exists, otherwise the default agent, like `ssh`.
+    /// A site for an `~/.ssh/config` host: its first IdentityFile that exists,
+    /// otherwise the default key files, like `ssh`. Bottari runs no commands,
+    /// but a ProxyCommand that is `ssh -W %h:%p jump` only goes through a jump
+    /// host, which Bottari does itself.
     public init(importing host: SSHConfig.Host, defaultUser: String, fileExists: (String) -> Bool) {
-        let authentication: Authentication
-        if let agent = host.identityAgent, agent != "none" {
-            authentication = .agent(socket: agent)
-        } else if let key = host.identityFiles.first(where: fileExists) {
-            authentication = .keyFile(path: key)
-        } else {
-            authentication = .agent(socket: nil)
-        }
         var proxyJump = host.proxyJump
-        var proxyCommand = host.proxyCommand
-        // The App Store edition cannot run commands, but `ssh -W %h:%p jump`
-        // only goes through a jump host, which Bottari can do itself.
-        if FolderAccess.isSandboxed, proxyJump.isEmpty, let command = proxyCommand, let jump = Self.jumpHost(inProxyCommand: command) {
+        if proxyJump.isEmpty, let command = host.proxyCommand, let jump = Self.jumpHost(inProxyCommand: command) {
             proxyJump = [jump]
-            proxyCommand = nil
         }
         self.init(
             name: host.alias,
             endpoint: SFTPEndpoint(host: host.hostName, port: host.port, username: host.user ?? defaultUser),
-            authentication: authentication,
+            authentication: host.identityFiles.first(where: fileExists).map { .keyFile(path: $0) } ?? .defaultKeys,
             proxyJump: proxyJump,
-            proxyCommand: proxyCommand,
             sshConfigAlias: host.alias
         )
     }
@@ -248,20 +239,11 @@ public struct ConnectionPlan: Equatable, Sendable {
     public var endpoint: SFTPEndpoint
     public var credential: SFTPCredential
     public var hops: [SSHHop]
-    /// How to reach `endpoint` when there are no hops, tokens filled in.
-    public var proxyCommand: String?
 
-    init(endpoint: SFTPEndpoint, credential: SFTPCredential, hops: [SSHHop], proxyCommand: String?) {
+    init(endpoint: SFTPEndpoint, credential: SFTPCredential, hops: [SSHHop]) {
         self.endpoint = endpoint
         self.credential = credential
-        // Only the first server is dialled itself; the rest are reached through
-        // the one before, so their own ProxyCommands do not apply.
-        self.hops = hops.enumerated().map { index, hop in
-            var hop = hop
-            if index > 0 { hop.proxyCommand = nil }
-            return hop
-        }
-        self.proxyCommand = hops.isEmpty ? proxyCommand : nil
+        self.hops = hops
     }
 
     /// This plan reached through `via`'s server, which becomes the first hop.
@@ -269,8 +251,7 @@ public struct ConnectionPlan: Equatable, Sendable {
         ConnectionPlan(
             endpoint: endpoint,
             credential: credential,
-            hops: via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential, proxyCommand: via.proxyCommand)] + hops,
-            proxyCommand: nil
+            hops: via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential)] + hops
         )
     }
 }
@@ -309,24 +290,22 @@ extension SavedSite {
     /// kinds Bottari can read, Ed25519 first.
     public static let defaultKeyFiles = ["id_ed25519", "id_ecdsa", "id_rsa"]
 
-    /// An agent credential that, like `ssh`, goes on to the default key files
-    /// in `sshDirectory` (none when it is nil or empty).
-    static func agentCredential(socket: String?, sshDirectory: String?, readFile: FileReader) -> SFTPCredential {
-        guard let sshDirectory, !sshDirectory.isEmpty else { return .agent(socket: socket) }
-        let keys = defaultKeyFiles.compactMap { readFile((sshDirectory as NSString).appendingPathComponent($0)) }
-        return .agent(socket: socket, fallbackKeys: keys)
+    /// The default key files in `sshDirectory` that could be read (none when
+    /// it is nil or empty).
+    static func defaultKeysCredential(sshDirectory: String?, readFile: FileReader) -> SFTPCredential {
+        guard let sshDirectory, !sshDirectory.isEmpty else { return .defaultKeys([]) }
+        return .defaultKeys(defaultKeyFiles.compactMap { readFile((sshDirectory as NSString).appendingPathComponent($0)) })
     }
 
     /// The site's credential, with secrets taken from `secrets`. A `password`
-    /// passed in (just typed by the user) wins over a stored one. An agent
-    /// falls back to the default key files in `sshDirectory`. A site that logs
-    /// in with keys but also has a password tries the keys first, then the
-    /// password, the way `ssh` does.
+    /// passed in (just typed by the user) wins over a stored one. Default keys
+    /// are read from `sshDirectory`. A site that logs in with keys but also has
+    /// a password tries the keys first, then the password, the way `ssh` does.
     public func credential(secrets: SecretStore, password: String? = nil, sshDirectory: String? = nil, readFile: FileReader = SavedSite.readFile) throws -> SFTPCredential {
         let keys: SFTPCredential
         switch authentication {
-        case .agent(let socket):
-            keys = Self.agentCredential(socket: socket, sshDirectory: sshDirectory, readFile: readFile)
+        case .defaultKeys:
+            keys = Self.defaultKeysCredential(sshDirectory: sshDirectory, readFile: readFile)
         case .keyFile(let path):
             guard let text = readFile(UserHome.expand(path)) else {
                 throw SiteConnectError.keyFileUnreadable(path: path)
@@ -351,8 +330,7 @@ extension SavedSite {
 
     /// The endpoint, credential and jump hosts to connect to this site. Each
     /// ProxyJump name is looked up among `sites`, then in `sshConfig`, and is
-    /// otherwise read as `[user@]host[:port]` and tried with the default agent
-    /// and key files.
+    /// otherwise read as `[user@]host[:port]` and tried with the default key files.
     public func connectionPlan(
         sites: [SavedSite],
         sshConfig: SSHConfig,
@@ -365,15 +343,8 @@ extension SavedSite {
         return ConnectionPlan(
             endpoint: endpoint,
             credential: try credential(secrets: secrets, password: password, sshDirectory: sshConfig.directory, readFile: readFile),
-            hops: try resolver.hops(for: proxyJump, visiting: [name]),
-            proxyCommand: expandedProxyCommand
+            hops: try resolver.hops(for: proxyJump, visiting: [name])
         )
-    }
-
-    /// The ProxyCommand with its tokens filled in for this site, if it has one.
-    var expandedProxyCommand: String? {
-        guard let command = proxyCommand?.trimmingCharacters(in: .whitespaces), !command.isEmpty else { return nil }
-        return ProxyCommand.expand(command, for: endpoint, alias: sshConfigAlias ?? name)
     }
 
     /// `[user@]host[:port]`, as ProxyJump writes a hop. An IPv6 address
@@ -419,11 +390,10 @@ private struct HopResolver {
                 hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
                 hops.append(SSHHop(
                     endpoint: site.endpoint,
-                    credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile),
-                    proxyCommand: site.expandedProxyCommand
+                    credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile)
                 ))
             } else {
-                let credential = SavedSite.agentCredential(socket: nil, sshDirectory: sshConfig.directory, readFile: readFile)
+                let credential = SavedSite.defaultKeysCredential(sshDirectory: sshConfig.directory, readFile: readFile)
                 hops.append(SSHHop(endpoint: SavedSite.endpoint(parsingHop: name, defaultUser: defaultUser), credential: credential))
             }
         }

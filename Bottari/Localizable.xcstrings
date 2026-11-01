@@ -41,32 +41,12 @@
         }
       }
     },
-    " · 시스템 프록시에 PAC 적용": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " · PAC applied to the system proxy"
-          }
-        }
-      }
-    },
     " 외 %lld개": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": " and %lld more"
-          }
-        }
-      }
-    },
-    "#!/bin/zsh\n# Bottari: %@\necho '%@ · Ctrl-C로 종료하면 방화벽 규칙도 복원됩니다'\n%@\n": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "#!/bin/zsh\n# Bottari: %@\necho '%@ · Stopping with Ctrl-C also restores the firewall rules'\n%@\n"
           }
         }
       }
@@ -117,16 +97,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · %lld files"
-          }
-        }
-      }
-    },
-    "%@ · Ctrl-C로 종료하면 방화벽 규칙도 복원됩니다": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · Press Ctrl-C to stop; the firewall rules are restored too"
           }
         }
       }
@@ -801,16 +771,6 @@
         }
       }
     },
-    ", DNS도 서버에서 조회": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": ", DNS looked up on the server too"
-          }
-        }
-      }
-    },
     "- %@: %@ → %@, %@, 파일 %lld/%lld, 실패 %lld": {
       "localizations": {
         "en": {
@@ -837,116 +797,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "S3-compatible storage such as AWS, Cloudflare R2 and MinIO"
-          }
-        }
-      }
-    },
-    "App Store 판 Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 한 번 허용하면 다음에도 기억합니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bottari from the App Store runs in the macOS sandbox, so it can open only the folders you allow. It remembers what you allow."
-          }
-        }
-      }
-    },
-    "App Store 판 Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더와 ~/.ssh의 설정, 키도 함께 쓸 수 있습니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bottari from the App Store runs in the macOS sandbox, so it can open only the folders you allow. Allow your home folder and it can use every folder in it, along with the settings and keys in ~/.ssh."
-          }
-        }
-      }
-    },
-    "App Store 판에서는 Mac 전체 터널(sshuttle)을 쓸 수 없습니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition can’t run whole-Mac tunnels (sshuttle)."
-          }
-        }
-      }
-    },
-    "App Store 판은 SSH 에이전트에 연결할 수 없어, ~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition can’t reach SSH agents, so it logs in with id_ed25519, id_ecdsa or id_rsa from ~/.ssh (without a passphrase). Allow ~/.ssh in Settings › Folder Access"
-          }
-        }
-      }
-    },
-    "App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition can sync only after you allow the iCloud Drive folder."
-          }
-        }
-      }
-    },
-    "App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다. 위의 ‘iCloud Drive 허용…’을 누르십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition can sync only after you allow the iCloud Drive folder. Click “Allow iCloud Drive…” above."
-          }
-        }
-      }
-    },
-    "App Store 판은 macOS 샌드박스 때문에 명령을 실행할 수 없습니다. 지우고 점프 호스트를 쓰십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition can’t run commands because of the macOS sandbox. Clear this and use a jump host."
-          }
-        }
-      }
-    },
-    "App Store 판은 macOS 샌드박스 안에서 실행되어 ProxyCommand를 쓸 수 없습니다. 연결 관리에서 점프 호스트(ProxyJump)로 바꾸십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition runs in the macOS sandbox and can’t use ProxyCommand. Use a jump host (ProxyJump) in the connection manager instead."
-          }
-        }
-      }
-    },
-    "App Store 판은 macOS 샌드박스 안에서 실행되어 SSH 에이전트(1Password 등)에 연결할 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용해 키 파일을 읽게 하거나, 연결 관리에서 키 파일을 선택하십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition runs in the macOS sandbox and can’t reach SSH agents (such as 1Password). Allow your home folder or ~/.ssh in Settings › Folder Access so Bottari can read your key files, or choose a key file in the connection manager."
-          }
-        }
-      }
-    },
-    "App Store 판은 macOS 샌드박스 안에서 실행되어, 여기 있는 폴더와 다운로드 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더를 쓸 수 있습니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The App Store edition runs in the macOS sandbox and can open only the folders listed here and Downloads. Allow your home folder to use every folder in it."
-          }
-        }
-      }
-    },
-    "App Store에서 업데이트됩니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Updates come from the App Store."
           }
         }
       }
@@ -1051,6 +901,36 @@
         }
       }
     },
+    "Bottari는 macOS 샌드박스 안에서 실행되어, 여기 있는 폴더와 다운로드 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더를 쓸 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari runs in the macOS sandbox and can open only the folders listed here and your Downloads folder. Allow your home folder to use every folder in it."
+          }
+        }
+      }
+    },
+    "Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 한 번 허용하면 다음에도 기억합니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari runs in the macOS sandbox and can open only folders you allow. Once allowed, it remembers them."
+          }
+        }
+      }
+    },
+    "Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더와 ~/.ssh의 설정, 키도 함께 쓸 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari runs in the macOS sandbox and can open only folders you allow. Allow your home folder to use every folder in it, along with the settings and keys in ~/.ssh."
+          }
+        }
+      }
+    },
     "Bottari만": {
       "localizations": {
         "en": {
@@ -1117,16 +997,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Database tools (JDBC)"
-          }
-        }
-      }
-    },
-    "DNS도 터널로": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DNS through the tunnel too"
           }
         }
       }
@@ -1441,16 +1311,6 @@
         }
       }
     },
-    "Mac 전체 (sshuttle)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Whole Mac (sshuttle)"
-          }
-        }
-      }
-    },
     "Mac 전체 (시스템 설정)": {
       "localizations": {
         "en": {
@@ -1477,16 +1337,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read on the Mac and uploaded directly"
-          }
-        }
-      }
-    },
-    "Mac의 모든 TCP 연결 해당": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Every TCP connection on the Mac"
           }
         }
       }
@@ -1591,42 +1441,12 @@
         }
       }
     },
-    "ProxyCommand 사용": {
+    "ProxyJump, IdentityFile, Match 설정 포함": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "uses ProxyCommand"
-          }
-        }
-      }
-    },
-    "ProxyCommand 실행을 허락하지 않아 연결하지 않았습니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The ProxyCommand wasn’t allowed to run, so Bottari didn’t connect."
-          }
-        }
-      }
-    },
-    "ProxyCommand로 서버에 닿지 못했습니다: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t reach the server through ProxyCommand: %@"
-          }
-        }
-      }
-    },
-    "ProxyJump, ProxyCommand, IdentityFile, Match 설정 포함": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Including ProxyJump, ProxyCommand, IdentityFile and Match settings"
+            "value": "Includes ProxyJump, IdentityFile and Match settings"
           }
         }
       }
@@ -1807,36 +1627,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "SSH agent"
-          }
-        }
-      }
-    },
-    "SSH 에이전트에 사용할 수 있는 키가 없습니다. 에이전트의 키가 인증서나 보안 키(sk-)뿐이라면 일반 키를 ssh-add로 추가하거나 연결 관리에서 키 파일을 선택하십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The SSH agent has no keys Bottari can use. If it holds only certificates or security keys (sk-), add a regular key with ssh-add or choose a key file in Connections."
-          }
-        }
-      }
-    },
-    "SSH 에이전트에 연결할 수 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_ecdsa, id_rsa)도 없습니다. ssh-agent 또는 1Password 에이전트가 실행 중인지 확인하거나 연결 관리에서 키 파일을 선택하십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Can’t reach the SSH agent, and ~/.ssh has no key file usable without a passphrase (id_ed25519, id_ecdsa, id_rsa). Check that ssh-agent or the 1Password agent is running, or choose a key file in Connections."
-          }
-        }
-      }
-    },
-    "SSH 에이전트에 키가 없고, ~/.ssh에 암호 없이 사용할 수 있는 키 파일(id_ed25519, id_ecdsa, id_rsa)도 없습니다. ssh-add로 키를 추가하거나 연결 관리에서 키 파일을 선택하십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The SSH agent holds no keys, and ~/.ssh has no key file usable without a passphrase (id_ed25519, id_ecdsa, id_rsa). Add a key with ssh-add or choose a key file in Connections."
           }
         }
       }
@@ -2115,6 +1905,26 @@
         }
       }
     },
+    "iCloud Drive 폴더를 허용해야 동기화할 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the iCloud Drive folder to sync."
+          }
+        }
+      }
+    },
+    "iCloud Drive 폴더를 허용해야 동기화할 수 있습니다. 위의 ‘iCloud Drive 허용…’을 누르십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the iCloud Drive folder to sync. Click “Allow iCloud Drive…” above."
+          }
+        }
+      }
+    },
     "iCloud Drive 허용…": {
       "localizations": {
         "en": {
@@ -2335,66 +2145,6 @@
         }
       }
     },
-    "ssh-agent 또는 1Password 에이전트의 키 사용, 맞는 키가 없으면 ~/.ssh의 id_ed25519, id_ecdsa, id_rsa 시도": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uses keys from ssh-agent or the 1Password agent, then tries id_ed25519, id_ecdsa and id_rsa in ~/.ssh"
-          }
-        }
-      }
-    },
-    "sshuttle 실행됨": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "sshuttle is running"
-          }
-        }
-      }
-    },
-    "sshuttle 종료됨": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "sshuttle stopped"
-          }
-        }
-      }
-    },
-    "sshuttle, sudo, 서버의 Python 3 필요 (UDP 제외)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Needs sshuttle, sudo and Python 3 on the server (no UDP)"
-          }
-        }
-      }
-    },
-    "sshuttle이 시작되지 않았습니다": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "sshuttle didn’t start"
-          }
-        }
-      }
-    },
-    "sudo가 필요해 터미널에서 실행합니다. 비밀번호는 macOS가 직접 요청하며 Bottari로 전달되지 않습니다. sshuttle은 *.도메인 규칙을 지원하지 않으므로 IP 대역으로 입력하십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This needs sudo, so it runs in Terminal. macOS asks for the password itself; it never reaches Bottari. sshuttle does not support *.domain rules, so enter IP ranges."
-          }
-        }
-      }
-    },
     "transfers queue 전송": {
       "localizations": {
         "en": {
@@ -2513,12 +2263,42 @@
         }
       }
     },
+    "~/.ssh에 암호 없이 쓸 수 있는 기본 키 파일(id_ed25519, id_ecdsa, id_rsa)이 없거나 읽을 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용하거나, 연결 관리에서 키 파일을 선택하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are no default key files without a passphrase in ~/.ssh (id_ed25519, id_ecdsa, id_rsa), or Bottari can’t read them. Allow your home folder or ~/.ssh in Settings › Folder Access, or choose a key file in Connections."
+          }
+        }
+      }
+    },
     "~/.ssh의 config, known_hosts, 개인 키를 읽으려면 홈 폴더나 ~/.ssh 폴더를 허용하십시오. App Store 판에서는 SSH 에이전트(1Password 등)와 ProxyCommand를 쓸 수 없어, 키 파일로 로그인하고 점프 호스트로 거쳐 갑니다.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "To read config, known_hosts and private keys in ~/.ssh, allow your home folder or ~/.ssh. The App Store edition can’t use SSH agents (such as 1Password) or ProxyCommand, so it logs in with key files and goes through jump hosts."
+          }
+        }
+      }
+    },
+    "~/.ssh의 config, known_hosts, 개인 키를 읽으려면 홈 폴더나 ~/.ssh 폴더를 허용하십시오. Bottari는 SSH 에이전트(1Password 등)와 ProxyCommand 대신 키 파일로 로그인하고 점프 호스트로 거쳐 갑니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow your home folder or ~/.ssh so Bottari can read the config, known_hosts and private keys there. Instead of an SSH agent (1Password and the like) and ProxyCommand, Bottari signs in with key files and goes through jump hosts."
+          }
+        }
+      }
+    },
+    "~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signs in with id_ed25519, id_ecdsa or id_rsa in ~/.ssh (without a passphrase). Needs ~/.ssh allowed in Settings › Folder Access"
           }
         }
       }
@@ -3249,6 +3029,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Layout"
+          }
+        }
+      }
+    },
+    "기본 키": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default keys"
           }
         }
       }
@@ -5109,6 +4899,16 @@
         }
       }
     },
+    "새 버전은 TestFlight에서 받습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New versions come through TestFlight."
+          }
+        }
+      }
+    },
     "새 서버": {
       "localizations": {
         "en": {
@@ -5235,16 +5035,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Servers"
-          }
-        }
-      }
-    },
-    "서버 간 SSH 에이전트 포워딩이 필요해 아직 지원하지 않음": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not supported yet: needs SSH agent forwarding between the servers"
           }
         }
       }
@@ -5485,16 +5275,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Servers have no Trash, so this can’t be undone. Folders are deleted with everything in them."
-          }
-        }
-      }
-    },
-    "서버에서 DNS 조회 (--dns). 사내 도메인에 필요": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Look up DNS on the server (--dns). Needed for internal domains"
           }
         }
       }
@@ -5899,66 +5679,6 @@
         }
       }
     },
-    "시스템 프록시 변경 실패: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t change the system proxy: %@"
-          }
-        }
-      }
-    },
-    "시스템 프록시 복원됨": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "System proxy restored"
-          }
-        }
-      }
-    },
-    "시스템 프록시 자동 적용 시 관리자 인증 필요": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Applying the system proxy needs an administrator"
-          }
-        }
-      }
-    },
-    "시스템 프록시 적용됨, Safari와 Chrome은 별도 설정 불필요": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Applied to the system proxy; Safari and Chrome need nothing more"
-          }
-        }
-      }
-    },
-    "시스템 프록시에 PAC 적용됨": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PAC applied to the system proxy"
-          }
-        }
-      }
-    },
-    "시스템 프록시에 자동 적용": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apply to the system proxy automatically"
-          }
-        }
-      }
-    },
     "시작 폴더": {
       "localizations": {
         "en": {
@@ -6269,16 +5989,6 @@
         }
       }
     },
-    "업데이트 확인…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Check for Updates…"
-          }
-        }
-      }
-    },
     "업로드": {
       "localizations": {
         "en": {
@@ -6365,16 +6075,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agent"
-          }
-        }
-      }
-    },
-    "에이전트 소켓": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Agent socket"
           }
         }
       }
@@ -7407,32 +7107,12 @@
         }
       }
     },
-    "이 ProxyCommand는 이 Mac에서 입력한 것이 아닙니다(다른 Mac에서 동기화됨). 아는 명령일 때만 허락하십시오.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This ProxyCommand wasn’t typed on this Mac (it was synced from another one). Allow it only if you know the command."
-          }
-        }
-      }
-    },
     "이 두 서버 사이에는 쓸 수 없음: 원본에서 명령을 실행할 수 없거나, 대상 로그인이 비밀번호이거나, 원본에서 대상에 닿지 않음": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Not available between these two: the source can’t run commands, the destination logs in with a password, or the source can’t reach it"
-          }
-        }
-      }
-    },
-    "이 빌드는 업데이트를 확인하지 않습니다. 서명된 릴리스(scripts/release.sh)에서만 지원됩니다.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This build doesn’t check for updates. Only signed releases (scripts/release.sh) do."
           }
         }
       }
@@ -7843,16 +7523,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reconnect automatically"
-          }
-        }
-      }
-    },
-    "자동으로 업데이트 확인": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Check for updates automatically"
           }
         }
       }
@@ -8761,16 +8431,6 @@
         }
       }
     },
-    "지금 확인": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Check Now"
-          }
-        }
-      }
-    },
     "지난번에 끝나지 않은 전송": {
       "localizations": {
         "en": {
@@ -8797,16 +8457,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unsupported key type: %@"
-          }
-        }
-      }
-    },
-    "지정한 대역의 모든 TCP 연결을 터널로 전송 (프록시 미지원 앱 포함)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sends every TCP connection to the listed ranges through the tunnel (apps without proxy support too)"
           }
         }
       }
@@ -9557,46 +9207,6 @@
         }
       }
     },
-    "터미널 창에서 Ctrl-C를 눌러 종료하십시오": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press Ctrl-C in the Terminal window to stop it"
-          }
-        }
-      }
-    },
-    "터미널 창에서 sudo 암호를 입력하십시오": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter your sudo password in the Terminal window"
-          }
-        }
-      }
-    },
-    "터미널에서 sshuttle 실행 중 (Ctrl-C로 종료)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "sshuttle is running in Terminal (Ctrl-C to stop)"
-          }
-        }
-      }
-    },
-    "터미널에서 실행: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Running in Terminal: %@"
-          }
-        }
-      }
-    },
     "터미널을 열 수 없습니다": {
       "localizations": {
         "en": {
@@ -10047,16 +9657,6 @@
         }
       }
     },
-    "표준 입출력으로 SSH를 전달하는 명령. %h 호스트, %p 포트, %r 사용자로 바뀜": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A command that carries SSH over its standard input and output. %h becomes the host, %p the port, %r the user"
-          }
-        }
-      }
-    },
     "푸른 어둠": {
       "localizations": {
         "en": {
@@ -10073,26 +9673,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extracted"
-          }
-        }
-      }
-    },
-    "프록시 명령": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proxy command"
-          }
-        }
-      }
-    },
-    "프록시 명령 (ProxyCommand)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proxy command (ProxyCommand)"
           }
         }
       }
@@ -10283,16 +9863,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Resolution"
-          }
-        }
-      }
-    },
-    "허락하고 연결": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow and Connect"
           }
         }
       }

@@ -1,9 +1,9 @@
 import Foundation
 
 /// The folders and files the user let Bottari use while it runs in the App
-/// Sandbox (the App Store edition). The sandbox lets the app into what the
-/// user picks in an open panel or drops on it; bookmarks keep that across
-/// launches. Outside the sandbox everything is reachable and nothing is kept.
+/// Sandbox. The sandbox lets the app into what the user picks in an open panel
+/// or drops on it; bookmarks keep that across launches. Outside the sandbox
+/// (the package's tests) everything is reachable and nothing is kept.
 public final class FolderAccess: @unchecked Sendable {
     public static let shared = FolderAccess()
 

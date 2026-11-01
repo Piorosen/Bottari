@@ -150,7 +150,6 @@ extension TunnelProfile.Mode {
         switch self {
         case .bottariOnly: String(localized: "Bottari만")
         case .proxy: String(localized: "프록시 사용 앱")
-        case .wholeMac: String(localized: "Mac 전체 (sshuttle)")
         }
     }
 
@@ -158,15 +157,13 @@ extension TunnelProfile.Mode {
         switch self {
         case .bottariOnly: String(localized: "Bottari의 연결만 이 서버 경유")
         case .proxy: String(localized: "Mac에 SOCKS5·HTTP 프록시를 열고, 프록시를 설정한 앱의 지정 주소만 터널로 전송")
-        case .wholeMac: String(localized: "지정한 대역의 모든 TCP 연결을 터널로 전송 (프록시 미지원 앱 포함)")
         }
     }
 
     var caveat: String {
         switch self {
         case .bottariOnly: String(localized: "다른 앱은 직접 연결")
-        case .proxy: TunnelProfile.canApplySystemProxy ? String(localized: "시스템 프록시 자동 적용 시 관리자 인증 필요") : String(localized: "쓸 앱마다 프록시를 직접 설정")
-        case .wholeMac: String(localized: "sshuttle, sudo, 서버의 Python 3 필요 (UDP 제외)")
+        case .proxy: String(localized: "쓸 앱마다 프록시를 직접 설정")
         }
     }
 
@@ -174,7 +171,6 @@ extension TunnelProfile.Mode {
         switch self {
         case .bottariOnly: "bt.bundle"
         case .proxy: "network"
-        case .wholeMac: "bt.mac"
         }
     }
 }
@@ -227,7 +223,7 @@ private struct TunnelDetail: View {
                     }
                     LabeledField(String(localized: "터널 범위")) {
                         HStack(alignment: .top, spacing: 10) {
-                            ForEach(TunnelProfile.Mode.available, id: \.self) { mode in
+                            ForEach(TunnelProfile.Mode.allCases, id: \.self) { mode in
                                 modeCard(mode)
                             }
                         }
@@ -235,27 +231,6 @@ private struct TunnelDetail: View {
                     routesField
                     if profile.mode == .proxy {
                         proxySettings
-                    }
-                    if profile.mode == .wholeMac {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Mac 전체").font(.ui(.body, weight: .semibold))
-                            SwitchRow(title: String(localized: "DNS도 터널로"), detail: String(localized: "서버에서 DNS 조회 (--dns). 사내 도메인에 필요"), isOn: $profile.remoteDNS)
-                            if let site = profile.siteID.flatMap(AppServices.sites.site) {
-                                Text(TunnelStore.sshuttleCommand(profile, site: site))
-                                    .font(.themeMono(.caption))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(10)
-                                    .background(Palette.panel, in: .rect(cornerRadius: 8))
-                                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
-                            }
-                            Text("sudo가 필요해 터미널에서 실행합니다. 비밀번호는 macOS가 직접 요청하며 Bottari로 전달되지 않습니다. sshuttle은 *.도메인 규칙을 지원하지 않으므로 IP 대역으로 입력하십시오.")
-                                .font(.ui(.caption))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(14)
-                        .well()
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         SectionLabel(String(localized: "자동 재연결"))
@@ -374,12 +349,7 @@ private struct TunnelDetail: View {
                     }
                 }
             }
-            HStack(alignment: .top, spacing: 10) {
-                SwitchRow(title: String(localized: "HTTP 프록시도 열기"), detail: String(localized: "SOCKS 미지원 앱용 (HTTP CONNECT)"), isOn: $profile.httpEnabled)
-                if profile.httpEnabled, TunnelProfile.canApplySystemProxy {
-                    SwitchRow(title: String(localized: "시스템 프록시에 자동 적용"), detail: String(localized: "터널을 끄면 원래 설정으로 복원, 관리자 인증 필요"), isOn: $profile.appliesSystemProxy)
-                }
-            }
+            SwitchRow(title: String(localized: "HTTP 프록시도 열기"), detail: String(localized: "SOCKS 미지원 앱용 (HTTP CONNECT)"), isOn: $profile.httpEnabled)
         }
         .padding(14)
         .well()
@@ -529,8 +499,7 @@ private struct TunnelDetail: View {
         let via = profile.siteID.flatMap(AppServices.sites.site)?.name ?? String(localized: "서버")
         let path = switch profile.mode {
         case .bottariOnly: String(localized: "Bottari의 연결만 해당, 다른 앱은 직접 연결")
-        case .proxy: profile.appliesSystemProxy && TunnelProfile.canApplySystemProxy ? String(localized: "시스템 프록시 적용됨, Safari와 Chrome은 별도 설정 불필요") : String(localized: "프록시를 설정한 앱만 해당")
-        case .wholeMac: String(localized: "Mac의 모든 TCP 연결 해당") + (profile.remoteDNS ? String(localized: ", DNS도 서버에서 조회") : "")
+        case .proxy: String(localized: "프록시를 설정한 앱만 해당")
         }
         return String(localized: "\(via) 경유 · \(path)") + (state.isActive ? "" : String(localized: " (터널이 꺼져 있어 현재는 직접 연결)"))
     }
@@ -538,13 +507,14 @@ private struct TunnelDetail: View {
     private var instructions: some View {
         let socks = profile.socksPort
         let http = profile.httpPort
-        // The whole Mac by hand: what "시스템 프록시에 자동 적용" would set,
-        // and the only way in the App Store edition, which may not change it.
+        // The whole Mac by hand: the App Sandbox does not let Bottari change
+        // the Mac's proxy settings itself.
         let system = (
             String(localized: "Mac 전체 (시스템 설정)"),
             profile.httpEnabled ? profile.pacURL : String(localized: "먼저 ‘HTTP 프록시도 열기’를 켜십시오.")
         )
-        var lines: [(String, String)] = [
+        let lines: [(String, String)] = [
+            system,
             ("curl", "curl --socks5-hostname 127.0.0.1:\(socks) http://gitlab.internal"),
             (String(localized: "셸 전체 (~/.zshrc)"), "export ALL_PROXY=socks5h://127.0.0.1:\(socks)"),
             (String(localized: "git (특정 저장소만)"), "git config --global http.https://gitlab.internal.proxy socks5h://127.0.0.1:\(socks)"),
@@ -553,11 +523,6 @@ private struct TunnelDetail: View {
             (String(localized: "DB 도구 (JDBC)"), String(localized: "SOCKS 프록시 127.0.0.1:\(socks) (대부분의 JDBC 도구에서 지원)")),
             ("Firefox", String(localized: "설정 › 네트워크 › SOCKS v5 127.0.0.1:\(socks) · ‘SOCKS v5 사용 시 DNS도 프록시’ 켜기")),
         ]
-        if TunnelProfile.canApplySystemProxy {
-            lines.append(system)
-        } else {
-            lines.insert(system, at: 0)
-        }
         let chosen = lines[min(instructionTab, lines.count - 1)]
         let isSystem = chosen.0 == system.0
         return VStack(alignment: .leading, spacing: 8) {

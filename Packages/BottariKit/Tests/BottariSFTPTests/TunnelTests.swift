@@ -34,11 +34,6 @@ import Testing
 
     @Test func everythingMeansEverything() {
         #expect(RouteRules.parse("0/0").rules.matches("example.com"))
-        #expect(RouteRules.parse("0/0").rules.subnets == ["0/0"])
-    }
-
-    @Test func sshuttleGetsRangesAndHosts() {
-        #expect(rules.rules.subnets == ["10.0.0.0/8", "192.168.1.5/32", "gitlab.internal", "fd00::/8"])
     }
 
     /// Runs the PAC file the way browsers do, with the standard helper functions.

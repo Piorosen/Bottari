@@ -43,8 +43,8 @@ struct FolderAccessPrompt: View {
                 .font(.ui(.headline))
                 .multilineTextAlignment(.center)
             Text(isHome
-                ? String(localized: "App Store 판 Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더와 ~/.ssh의 설정, 키도 함께 쓸 수 있습니다.")
-                : String(localized: "App Store 판 Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 한 번 허용하면 다음에도 기억합니다."))
+                ? String(localized: "Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더와 ~/.ssh의 설정, 키도 함께 쓸 수 있습니다.")
+                : String(localized: "Bottari는 macOS 샌드박스 안에서 실행되어, 직접 허용한 폴더만 열 수 있습니다. 한 번 허용하면 다음에도 기억합니다."))
                 .font(.ui(.callout))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

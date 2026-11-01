@@ -5,7 +5,7 @@ import NIOPosix
 import Testing
 @testable import BottariSFTP
 
-/// Keys as `ssh-keygen` writes them, against `sshd` and `ssh-agent` as they
+/// Keys as `ssh-keygen` writes them, against `sshd` as it
 /// ship with macOS. OpenSSH refuses RSA signed with SHA-1 since 8.8, which
 /// Citadel's own RSA support still does.
 @Suite(.enabled(if: OpenSSH.isAvailable), .timeLimit(.minutes(1)))
@@ -64,19 +64,18 @@ struct OpenSSHTests {
         }
     }
 
-    @Test func logsInWithTheAgentsRSAAndECDSAKeys() async throws {
+    /// Default keys are tried one by one until the server takes one.
+    @Test func logsInWithWhicheverDefaultKeyTheServerKnows() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
         let rsa = try OpenSSH.makeKey(in: folder, type: "rsa", bits: 2048)
         let ecdsa = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 384)
-        let agent = try OpenSSHAgent(adding: [rsa.path, ecdsa.path])
-        defer { agent.stop() }
 
         for key in [rsa, ecdsa] {
             try await withServer(authorizing: [key.publicKey]) { server in
                 let provider = try await SFTPFileProvider.connect(
                     to: server.endpoint,
-                    credential: .agent(socket: agent.socket),
+                    credential: .defaultKeys([rsa.privateKey, ecdsa.privateKey]),
                     hostKeys: .acceptAnything
                 )
                 #expect(try await provider.stat(RemotePath(NSHomeDirectory())).kind == .directory)
@@ -210,9 +209,6 @@ struct OpenSSHTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let login = try OpenSSH.makeKey(in: folder, type: "ed25519")
         let forwardedFile = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 256)
-        let forwardedRSA = try OpenSSH.makeKey(in: folder, type: "rsa", bits: 2048)
-        let agent = try OpenSSHAgent(adding: [forwardedRSA.path])
-        defer { agent.stop() }
         try await withServer(authorizing: [login.publicKey], extraConfig: ["AllowAgentForwarding yes"]) { server in
             let connection = try await SFTPConnection.open(to: server.endpoint, credential: .privateKey(login.privateKey), hostKeys: .acceptAnything)
             defer { Task { await connection.close() } }
@@ -221,11 +217,6 @@ struct OpenSSHTests {
             let listed = try await connection.run("ssh-add -L", forwarding: .keys([try PrivateKeyFile(forwardedFile.privateKey, passphrase: nil)]))
             #expect(listed.exitStatus == 0, "\(listed.errors)")
             #expect(listed.output.contains(forwardedFile.publicKey.split(separator: " ")[1]))
-
-            // The Mac's agent, relayed.
-            let relayed = try await connection.run("ssh-add -L", forwarding: .socket(agent.socket))
-            #expect(relayed.exitStatus == 0, "\(relayed.errors)")
-            #expect(relayed.output.contains(forwardedRSA.publicKey.split(separator: " ")[1]))
 
             // Without forwarding the session sees no agent.
             let none = try await connection.run("ssh-add -L; echo \"status $?\"", forwarding: .keys([]))
@@ -262,13 +253,11 @@ struct OpenSSHTests {
     // MARK: Server to server
 
     @Test(arguments: [false, true])
-    func oneServerSendsStraightToAnother(throughTheMacsAgent: Bool) async throws {
+    func oneServerSendsStraightToAnother(withDefaultKeys: Bool) async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
         let sourceLogin = try OpenSSH.makeKey(in: folder, type: "ed25519")
         let destinationLogin = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 256)
-        let agent = try OpenSSHAgent(adding: [destinationLogin.path])
-        defer { agent.stop() }
         let tree = RemotePath(folder.path)
         try FileManager.default.createDirectory(atPath: tree.appending("from/site/img").string, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(atPath: tree.appending("to").string, withIntermediateDirectories: true)
@@ -284,7 +273,7 @@ struct OpenSSHTests {
         let from = try await SFTPFileProvider.connect(to: source.endpoint, credential: .privateKey(sourceLogin.privateKey), hostKeys: .knownHosts(knownHosts))
         let to = try await SFTPFileProvider.connect(
             to: destination.endpoint,
-            credential: throughTheMacsAgent ? .agent(socket: agent.socket) : .privateKey(destinationLogin.privateKey),
+            credential: withDefaultKeys ? .defaultKeys([destinationLogin.privateKey]) : .privateKey(destinationLogin.privateKey),
             hostKeys: .knownHosts(knownHosts)
         )
         #expect(from.canSend(directlyTo: to))

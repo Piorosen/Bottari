@@ -65,6 +65,5 @@ fastlane/test_output
 .DS_Store
 .swiftpm/
 
-# Release settings (team ID, notary profile, Sparkle public key, App Store Connect key ID)
-Config/release.env
+# App Store Connect settings (team ID, API key ID)
 Config/appstore.env

@@ -13,7 +13,7 @@ struct SettingsView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsSection.shown, id: \.self) { item in
+                ForEach(SettingsSection.allCases, id: \.self) { item in
                     Button {
                         section = item
                     } label: {
@@ -53,11 +53,6 @@ struct SettingsView: View {
 enum SettingsSection: CaseIterable {
     case look, keys, sync, transfers, connections, access
 
-    /// Folder access matters only in the App Sandbox.
-    static var shown: [SettingsSection] {
-        allCases.filter { $0 != .access || FolderAccess.isSandboxed }
-    }
-
     var title: String {
         switch self {
         case .look: String(localized: "모양")
@@ -86,8 +81,7 @@ extension Notification.Name {
     static let openOnMac = Notification.Name("BottariOpenOnMac")
 }
 
-/// The folders the App Sandbox lets Bottari into because the user allowed
-/// them (App Store edition).
+/// The folders the App Sandbox lets Bottari into because the user allowed them.
 private struct FolderAccessSettings: View {
     @State private var folders = FolderAccess.shared.paths
 
@@ -96,7 +90,7 @@ private struct FolderAccessSettings: View {
             VStack(alignment: .leading, spacing: 18) {
                 SettingsGroup(
                     String(localized: "허용한 폴더"),
-                    footer: String(localized: "App Store 판은 macOS 샌드박스 안에서 실행되어, 여기 있는 폴더와 다운로드 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더를 쓸 수 있습니다.")
+                    footer: String(localized: "Bottari는 macOS 샌드박스 안에서 실행되어, 여기 있는 폴더와 다운로드 폴더만 열 수 있습니다. 홈 폴더를 허용하면 그 안의 모든 폴더를 쓸 수 있습니다.")
                 ) {
                     if folders.isEmpty {
                         Text("아직 허용한 폴더가 없습니다.")
@@ -130,7 +124,7 @@ private struct FolderAccessSettings: View {
                 }
                 SettingsGroup(
                     String(localized: "SSH 설정과 키"),
-                    footer: String(localized: "~/.ssh의 config, known_hosts, 개인 키를 읽으려면 홈 폴더나 ~/.ssh 폴더를 허용하십시오. App Store 판에서는 SSH 에이전트(1Password 등)와 ProxyCommand를 쓸 수 없어, 키 파일로 로그인하고 점프 호스트로 거쳐 갑니다.")
+                    footer: String(localized: "~/.ssh의 config, known_hosts, 개인 키를 읽으려면 홈 폴더나 ~/.ssh 폴더를 허용하십시오. Bottari는 SSH 에이전트(1Password 등)와 ProxyCommand 대신 키 파일로 로그인하고 점프 호스트로 거쳐 갑니다.")
                 ) {
                     HStack {
                         Text(FolderAccess.shared.covers(RemotePath(UserHome.path).appending(".ssh"))
@@ -252,23 +246,14 @@ struct GeneralSettings: View {
                     SettingSwitch(title: String(localized: "보낸 뒤 체크섬 비교"), detail: String(localized: "SHA-256 사용, 서버는 명령을 실행할 수 있는 경우에만 지원"), isOn: $verifiesChecksums)
                 }
                 SettingsGroup(String(localized: "업데이트")) {
-                    if Updates.shared.isAvailable {
-                        SettingSwitch(title: String(localized: "자동으로 업데이트 확인"), isOn: Binding(get: { Updates.shared.automaticallyChecks }, set: { Updates.shared.automaticallyChecks = $0 }))
-                        Button("지금 확인") { Updates.shared.checkForUpdates() }
-                            .buttonStyle(PanelButtonStyle())
-                            .fixedSize()
-                    } else {
-                        HStack {
-                            Text("버전").font(.ui(.body, weight: .medium))
-                            Spacer()
-                            Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").font(.themeMono(.body))
-                        }
-                        Text(AppEdition.isAppStore
-                            ? String(localized: "App Store에서 업데이트됩니다.")
-                            : String(localized: "이 빌드는 업데이트를 확인하지 않습니다. 서명된 릴리스(scripts/release.sh)에서만 지원됩니다."))
-                            .font(.ui(.caption))
-                            .foregroundStyle(.secondary)
+                    HStack {
+                        Text("버전").font(.ui(.body, weight: .medium))
+                        Spacer()
+                        Text(Diagnostics.version).font(.themeMono(.body))
                     }
+                    Text("새 버전은 TestFlight에서 받습니다.")
+                        .font(.ui(.caption))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -895,7 +880,7 @@ struct SyncSettings: View {
             }
             if let iCloud = LocalFileProvider.iCloudDrive, !FolderAccess.shared.covers(iCloud) {
                 HStack {
-                    Text("App Store 판은 iCloud Drive 폴더를 허용해야 동기화할 수 있습니다.")
+                    Text("iCloud Drive 폴더를 허용해야 동기화할 수 있습니다.")
                         .font(.ui(.caption))
                         .foregroundStyle(.secondary)
                     Spacer()

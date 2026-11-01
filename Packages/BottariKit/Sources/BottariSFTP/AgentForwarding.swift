@@ -8,35 +8,26 @@ import NIOPosix
 import NIOSSH
 
 /// The agent a server may use while a command runs there with agent
-/// forwarding: the Mac's own agent, or keys Bottari read from files and signs
-/// with itself. The private keys never leave the Mac either way; the server
-/// can only ask for signatures, and only while the command runs.
-enum ForwardedAgent: Sendable {
-    /// An agent's Unix socket, e.g. ssh-agent's or 1Password's.
-    case socket(String)
-    case keys([PrivateKeyFile])
+/// forwarding: keys Bottari read from files, signing with them itself. The
+/// private keys never leave the Mac; the server can only ask for signatures,
+/// and only while the command runs.
+struct ForwardedAgent: Sendable {
+    let keys: [PrivateKeyFile]
+
+    static func keys(_ keys: [PrivateKeyFile]) -> ForwardedAgent {
+        ForwardedAgent(keys: keys)
+    }
 
     /// Starts serving one agent channel the server opened.
     func attach(to channel: any Channel) -> EventLoopFuture<Void> {
-        switch self {
-        case .socket(let path):
-            return ClientBootstrap(group: channel.eventLoop)
-                .connect(unixDomainSocketPath: path)
-                .flatMap { agent in
-                    channel.pipeline.addHandlers([SSHChannelDataCodec(), Relay(to: agent)]).flatMap {
-                        agent.pipeline.addHandler(Relay(to: channel))
-                    }
-                }
-        case .keys(let keys):
-            return channel.eventLoop.makeCompletedFuture {
-                try channel.pipeline.syncOperations.addHandlers(SSHChannelDataCodec(), InProcessAgent(keys: keys))
-            }
+        channel.eventLoop.makeCompletedFuture {
+            try channel.pipeline.syncOperations.addHandlers(SSHChannelDataCodec(), InProcessAgent(keys: keys))
         }
     }
 }
 
 /// Turns an SSH channel's data messages into plain bytes and back, so byte
-/// handlers such as `Relay` work on it.
+/// handlers such as `InProcessAgent` work on it.
 final class SSHChannelDataCodec: ChannelDuplexHandler, @unchecked Sendable {
     typealias InboundIn = SSHChannelData
     typealias InboundOut = ByteBuffer

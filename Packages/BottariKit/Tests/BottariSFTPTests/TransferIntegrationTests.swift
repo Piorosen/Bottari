@@ -67,7 +67,7 @@ import Testing
     }
 
     /// The same round trip with both servers behind a jump host. The first logs
-    /// in like a site whose agent is empty and falls back to `~/.ssh/id_ed25519`.
+    /// in like a site with default keys, from `~/.ssh/id_ed25519`.
     @Test func uploadsCopiesAndMovesThroughAJumpHost() async throws {
         let jump = try await TestSFTPServer.start(forwarding: true)
         let first = try await TestSFTPServer.start()
@@ -81,8 +81,8 @@ import Testing
         }
 
         do {
-            let emptyAgent = SFTPCredential.agent(socket: "/tmp/bt-no-such-agent.sock", fallbackKeys: [first.clientKey.makeSSHRepresentation()])
-            let a = try await connect(first, via: jump, credential: emptyAgent)
+            let defaultKeys = SFTPCredential.defaultKeys([first.clientKey.makeSSHRepresentation()])
+            let a = try await connect(first, via: jump, credential: defaultKeys)
             providers.append(a)
             let b = try await connect(second, via: jump)
             providers.append(b)

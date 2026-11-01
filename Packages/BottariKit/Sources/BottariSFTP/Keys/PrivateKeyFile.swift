@@ -3,6 +3,7 @@ import Citadel
 import CommonCrypto
 import Crypto
 import Foundation
+import NIOCore
 import NIOSSH
 
 /// A private key file as `ssh-keygen` and other tools write it: OpenSSH's own
@@ -304,5 +305,32 @@ private struct DERReader {
         let (tag, value) = try next()
         guard tag == expected else { throw SFTPConnectError.unreadableKey }
         return value
+    }
+}
+
+/// Offers exactly one key. Citadel asks a custom delegate only once, so trying
+/// several keys means one connection attempt per key.
+final class SingleKeyOffer: NIOSSHClientUserAuthenticationDelegate, @unchecked Sendable {
+    let username: String
+    let key: NIOSSHPrivateKey
+
+    init(username: String, key: NIOSSHPrivateKey) {
+        self.username = username
+        self.key = key
+    }
+
+    func nextAuthenticationType(
+        availableMethods: NIOSSHAvailableUserAuthenticationMethods,
+        nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>
+    ) {
+        // NIOSSH calls delegates on the connection's event loop.
+        let promise = nextChallengePromise.assumeIsolated()
+        guard availableMethods.contains(.publicKey) else {
+            promise.succeed(nil)
+            return
+        }
+        promise.succeed(
+            NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .privateKey(.init(privateKey: key)))
+        )
     }
 }

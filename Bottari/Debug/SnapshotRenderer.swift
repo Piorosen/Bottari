@@ -318,7 +318,7 @@ enum SnapshotRenderer {
         let site = SavedSite(
             name: "test-vnc",
             endpoint: SFTPEndpoint(host: "127.0.0.1", username: "me"),
-            authentication: .agent(socket: nil),
+            authentication: .defaultKeys,
             remoteScreen: .init(kind: .vnc, port: Int(port), throughTunnel: false)
         )
         let model = ScreenModel(provider: nil, site: site, screen: site.remoteScreen!)
@@ -341,7 +341,7 @@ enum SnapshotRenderer {
     /// Turning a remote screen on, once with nothing answering on a Linux
     /// server and once with a Mac whose Screen Sharing is on.
     private static func renderScreenSetup(into directory: URL) async {
-        let site = SavedSite(name: "gpu-box", endpoint: SFTPEndpoint(host: "10.0.4.20", username: "me"), authentication: .agent(socket: nil))
+        let site = SavedSite(name: "gpu-box", endpoint: SFTPEndpoint(host: "10.0.4.20", username: "me"), authentication: .defaultKeys)
         await render(ScreenSetupView(site: site, isMac: { false }, check: { _ in .silent }) { _ in }.themed(),
                      size: CGSize(width: 400, height: 330), appearance: .aqua,
                      to: directory.appending(path: "screen-setup-light.png"))
@@ -353,14 +353,13 @@ enum SnapshotRenderer {
     /// The tunnel window with three sample tunnels.
     private static func renderTunnels(into directory: URL, library: SiteLibrary) async {
         let nas = library.sites[2]
-        var proxy = TunnelProfile(name: "집 NAS", siteID: nas.id, mode: .proxy, routes: "192.168.0.0/16\n*.home.arpa")
-        proxy.appliesSystemProxy = true
-        let office = TunnelProfile(name: "사내망", siteID: library.sites[0].id, mode: .wholeMac, routes: "10.0.0.0/8\n172.16.0.0/12")
+        let proxy = TunnelProfile(name: "집 NAS", siteID: nas.id, mode: .proxy, routes: "192.168.0.0/16\n*.home.arpa")
+        let office = TunnelProfile(name: "사내망", siteID: library.sites[0].id, mode: .proxy, routes: "10.0.0.0/8\n172.16.0.0/12")
         let gpu = TunnelProfile(name: "GPU 클러스터", siteID: library.sites[1].id, mode: .bottariOnly, routes: "10.0.4.0/24")
         TunnelStore.shared.showPreview(
             [proxy, office, gpu],
             states: [
-                proxy.id: .on("SOCKS5 :1080 · HTTP :8118" + String(localized: " · 시스템 프록시에 PAC 적용")),
+                proxy.id: .on("SOCKS5 :1080 · HTTP :8118"),
                 office.id: .off,
                 gpu.id: .on(String(localized: "Bottari 연결만 \(library.sites[1].name) 경유")),
             ],
@@ -551,8 +550,8 @@ enum SnapshotRenderer {
         func source<Value>(_ box: Box<Value>) -> SettingsSync.Source<Value> {
             .init(get: { box.value }, set: { box.value = $0 })
         }
-        let devAPI = SavedSite(name: "dev-api", endpoint: SFTPEndpoint(host: "10.0.4.12", username: "deploy"), authentication: .agent(socket: nil), tag: .dev)
-        let prodWeb = SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "web.example.com", username: "deploy"), authentication: .agent(socket: nil), tag: .prod)
+        let devAPI = SavedSite(name: "dev-api", endpoint: SFTPEndpoint(host: "10.0.4.12", username: "deploy"), authentication: .defaultKeys, tag: .dev)
+        let prodWeb = SavedSite(name: "prod-web", endpoint: SFTPEndpoint(host: "web.example.com", username: "deploy"), authentication: .defaultKeys, tag: .prod)
         let sites = Box([devAPI, prodWeb]), favorites = Box([Favorites.Favorite]()), presets = Box([BottariBundle.Preset]())
         let keys = Box(Keymap.Saved()), theme = Box(Theme.presets[1].theme), themes = Box([Theme]())
         let sync = SettingsSync(
