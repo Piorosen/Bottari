@@ -171,7 +171,7 @@ final class SiteLibrary {
     }
 
     private func forgetSecrets(of site: SavedSite) {
-        for key in [site.passwordKey, site.passphraseKey, site.screenPasswordKey, site.screenUsernameKey, site.s3SecretKey, site.googleSignInKey, site.googleClientSecretKey] {
+        for key in [site.passwordKey, site.passphraseKey, site.privateKeyKey, site.screenPasswordKey, site.screenUsernameKey, site.s3SecretKey, site.googleSignInKey, site.googleClientSecretKey] {
             try? secrets.setSecret(nil, for: key)
         }
     }
