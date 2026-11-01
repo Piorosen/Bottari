@@ -13,6 +13,10 @@
 	<string>$(BOTTARI_GOOGLE_CLIENT_ID)</string>
 	<key>BottariGoogleClientSecret</key>
 	<string>$(BOTTARI_GOOGLE_CLIENT_SECRET)</string>
+	<!-- Export compliance, as answered in App Store Connect: standard algorithms
+	     only (SSH, HTTPS), so no documents, and builds reach TestFlight without asking. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- What a drag between panes carries; only Bottari itself can read it. -->
 	<key>UTExportedTypeDeclarations</key>
 	<array>
