@@ -213,11 +213,20 @@ final class Workspace {
         }
     }
 
-    /// After a password got in, offers to put a key on the server instead, once per site.
+    /// After a password got in, offers to put a key on the server instead,
+    /// once per site: the server itself, or a jump host on the way.
     private func offerKey(for site: SavedSite, typed: [String: String], over provider: SFTPFileProvider?) {
-        guard let provider, KeySetupOffers.shouldOffer(for: site, typed: typed),
-              keyOffersShown.insert(site.id).inserted, passwordRequest == nil else { return }
-        keySetupRequest = KeySetupRequest(site: site, provider: provider, isOffer: true)
+        guard passwordRequest == nil else { return }
+        let library = pane(activeSide).library
+        for candidate in [site] + library.jumpSites(of: site).reversed()
+        where KeySetupOffers.shouldOffer(for: candidate, typed: typed) && !keyOffersShown.contains(candidate.id) {
+            keyOffersShown.insert(candidate.id)
+            // The pane's connection reaches the server itself; a jump host is connected to anew.
+            let reach = candidate.id == site.id ? provider : nil
+            guard reach != nil || candidate.id != site.id else { continue }
+            keySetupRequest = KeySetupRequest(site: candidate, provider: reach, isOffer: true, typed: typed)
+            return
+        }
     }
 
     /// Tries the connection again as it was, e.g. once the key's folder is allowed.

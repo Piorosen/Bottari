@@ -111,8 +111,25 @@ struct SiteManagerSheet: View {
             presenting: pendingDelete
         ) { site in
             Button("삭제", role: .destructive) { delete(site) }
-        } message: { _ in
-            Text("키체인에 저장된 비밀번호와 키 암호도 함께 삭제됩니다.")
+            if site.authentication == .storedKey, library.storedKey(of: site) != nil {
+                Button("서버의 authorized_keys에서도 지우고 삭제", role: .destructive) {
+                    Task {
+                        do {
+                            try await library.removeKeyFromServer(site)
+                            delete(site)
+                        } catch {
+                            outcome = .failure(
+                                String(localized: "서버에서 키를 지우지 못해 연결을 삭제하지 않았습니다: \(error.localizedDescription)"),
+                                hostKeyFix: nil, needsSecret: false
+                            )
+                        }
+                    }
+                }
+            }
+        } message: { site in
+            Text(site.authentication == .storedKey
+                ? String(localized: "키체인에 저장된 비밀번호, 키 암호와 Bottari 키도 함께 삭제됩니다. 서버의 ~/.ssh/authorized_keys에 넣은 키는 따로 지우지 않으면 남습니다.")
+                : String(localized: "키체인에 저장된 비밀번호와 키 암호도 함께 삭제됩니다."))
         }
     }
 

@@ -476,6 +476,11 @@ enum SnapshotRenderer {
             await render(CommandPalette(workspace: workspace) {}.padding(20), size: CGSize(width: 680, height: 520), appearance: appearance,
                          to: directory.appending(path: "palette-\(name).png"))
         }
+        // A path typed into ⌘K goes straight there.
+        for (file, typed) in [("palette-path", "/var/log "), ("palette-home", "~/Documents")] {
+            await render(CommandPalette(workspace: workspace, query: typed) {}.padding(20), size: CGSize(width: 680, height: 520), appearance: .aqua,
+                         to: directory.appending(path: "\(file).png"))
+        }
         BottariBundle.shared.clear()
     }
 

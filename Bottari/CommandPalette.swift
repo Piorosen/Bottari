@@ -11,6 +11,9 @@ struct PaletteCommand: Identifiable {
     let symbol: String
     /// Extra words it answers to, e.g. "ssh terminal".
     var keywords = ""
+    /// Always first, whatever the query: what the query itself asks for,
+    /// such as going to a typed path.
+    var pinned = false
     let run: () -> Void
 
     /// How well `query` matches: a prefix beats a substring beats letters in order.
@@ -35,9 +38,16 @@ struct PaletteCommand: Identifiable {
 struct CommandPalette: View {
     let workspace: Workspace
     let close: () -> Void
+
+    /// `query` already typed, for snapshots.
+    init(workspace: Workspace, query: String = "", close: @escaping () -> Void) {
+        self.workspace = workspace
+        self.close = close
+        _query = State(initialValue: query)
+    }
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
-    @State private var query = ""
+    @State private var query: String
     @State private var selected = 0
     @FocusState private var focused: Bool
 
@@ -134,7 +144,9 @@ struct CommandPalette: View {
     }
 
     private var results: [PaletteCommand] {
-        commands
+        let all = commands
+        return all.filter(\.pinned) + all
+            .filter { !$0.pinned }
             .compactMap { command in command.score(query).map { (command, $0) } }
             .sorted { $0.1 > $1.1 }
             .prefix(40)
@@ -154,7 +166,7 @@ struct CommandPalette: View {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("/") || trimmed.hasPrefix("~") {
             let path = trimmed.hasPrefix("~") ? pane.provider.home.appending(String(trimmed.dropFirst())) : RemotePath(trimmed)
-            list.append(PaletteCommand(id: "path", title: String(localized: "이 폴더로 이동: \(path.string)"), subtitle: pane.provider.displayName, symbol: "arrow.right.circle", keywords: trimmed) {
+            list.append(PaletteCommand(id: "path", title: String(localized: "이 폴더로 이동: \(path.string)"), subtitle: pane.provider.displayName, symbol: "arrow.right.circle", keywords: trimmed, pinned: true) {
                 Task { await pane.open(path) }
             })
         }

@@ -46,6 +46,17 @@ struct PasswordRequest: Identifiable {
             self.key = key
             isPassphrase = false
             reason = String(localized: "키체인에 저장된 비밀번호를 읽을 수 없습니다. 다시 입력하면 새로 저장합니다.")
+        case SFTPConnectError.jumpHostRefusedLogin(let endpoint):
+            // Only a saved jump host has somewhere to keep its password.
+            guard let jump = sites.first(where: { $0.isSFTP && $0.endpoint == endpoint }) else { return nil }
+            owner = jump
+            key = jump.passwordKey
+            isPassphrase = false
+            reason = switch (typed[key] != nil, jump.authentication) {
+            case (true, _): String(localized: "비밀번호가 맞지 않습니다.")
+            case (false, .password): String(localized: "저장된 비밀번호가 맞지 않습니다.")
+            case (false, _): String(localized: "서버가 키를 거부했습니다. 저장하면 다음부터 키가 거부될 때 이 비밀번호를 사용합니다.")
+            }
         case SFTPConnectError.authenticationFailed:
             owner = site
             key = site.passwordKey

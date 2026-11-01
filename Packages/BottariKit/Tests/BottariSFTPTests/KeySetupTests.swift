@@ -48,7 +48,15 @@ struct KeySetupTests {
         #expect(lines == [current.publicKey, fresh.publicKey])
         let withKey = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(fresh.privateKey), hostKeys: .acceptAnything)
         #expect(try await withKey.stat(RemotePath(NSHomeDirectory())).kind == .directory)
+
+        // Taken off again (a connection deleted): matched on the key, not the comment.
+        let renamed = fresh.publicKey.replacingOccurrences(of: "bottari@test", with: "someone@else")
+        try await withKey.unauthorize(publicKey: renamed, in: authorized.path)
         await withKey.disconnect()
+        #expect(try String(contentsOf: authorized, encoding: .utf8).split(separator: "\n").map(String.init) == [current.publicKey])
+        await #expect(throws: SFTPConnectError.authenticationFailed) {
+            _ = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(fresh.privateKey), hostKeys: .acceptAnything)
+        }
     }
 
     /// Some servers and appliances take RSA only with SHA-256.

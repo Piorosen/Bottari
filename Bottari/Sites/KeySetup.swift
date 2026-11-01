@@ -12,6 +12,8 @@ struct KeySetupRequest: Identifiable {
     let provider: SFTPFileProvider?
     /// Offered after a password login, rather than asked for in the connection manager.
     let isOffer: Bool
+    /// Passwords typed on the way, for connecting anew when there is no `provider`.
+    var typed: [String: String] = [:]
 }
 
 /// When to offer a key after a password login.
@@ -56,6 +58,15 @@ struct KeySetupError: LocalizedError {
 }
 
 extension SiteLibrary {
+    /// The saved sites `site` goes through on the way, outermost first.
+    func jumpSites(of site: SavedSite, visiting: Set<SavedSite.ID> = []) -> [SavedSite] {
+        site.proxyJump.flatMap { name -> [SavedSite] in
+            guard let jump = sites.first(where: { $0.name == name || $0.sshConfigAlias == name }),
+                  !visiting.contains(jump.id), jump.id != site.id else { return [] }
+            return jumpSites(of: jump, visiting: visiting.union([site.id])) + [jump]
+        }
+    }
+
     /// Makes a key of `kind`, puts it in the server's `~/.ssh/authorized_keys`
     /// over `provider` (or a new connection), checks that the key alone logs
     /// in, then keeps it in this Mac's Keychain and switches the site to it.
@@ -65,6 +76,7 @@ extension SiteLibrary {
         _ site: SavedSite,
         kind: NewSSHKey.Kind,
         over provider: SFTPFileProvider?,
+        typedSecrets: [String: String] = [:],
         forgettingPassword: Bool,
         progress: (KeySetupStep) -> Void
     ) async throws -> NewSSHKey {
@@ -78,7 +90,7 @@ extension SiteLibrary {
         } else {
             let opened: SFTPFileProvider
             do {
-                opened = try await connectSFTP(site, keepingTypedSecrets: false)
+                opened = try await connectSFTP(site, typedSecrets: typedSecrets, keepingTypedSecrets: false)
             } catch let error as SiteConnectError {
                 throw KeySetupError(message: error.localizedDescription + " " + String(localized: "먼저 비밀번호로 연결한 뒤 다시 시도하십시오."))
             }
@@ -113,6 +125,21 @@ extension SiteLibrary {
         }
         Log.connection.info("\(site.name): Bottari 키로 바꿈 (\(kind.rawValue), \(key.fingerprint))")
         return key
+    }
+
+    /// Logs in with the site's Bottari key and takes that key out of the
+    /// server's `~/.ssh/authorized_keys`, before the site is deleted.
+    func removeKeyFromServer(_ site: SavedSite) async throws {
+        guard let key = storedKey(of: site) else { return }
+        let provider = try await connectSFTP(site, keepingTypedSecrets: false)
+        do {
+            try await provider.unauthorize(publicKey: key.publicKey)
+        } catch {
+            await provider.disconnect()
+            throw error
+        }
+        await provider.disconnect()
+        Log.connection.info("\(site.name): 서버의 authorized_keys에서 Bottari 키를 지움 (\(key.fingerprint))")
     }
 
     /// The key Bottari keeps for the site on this Mac, if any.
@@ -271,7 +298,7 @@ struct KeySetupSheet: View {
         let site = site
         Task {
             do {
-                let key = try await library.switchToKey(site, kind: kind, over: request.provider, forgettingPassword: forgetsPassword) { step = $0 }
+                let key = try await library.switchToKey(site, kind: kind, over: request.provider, typedSecrets: request.typed, forgettingPassword: forgetsPassword) { step = $0 }
                 step = nil
                 made = key
                 finished(key)

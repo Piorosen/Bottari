@@ -80,6 +80,8 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case noDefaultKeys
     /// A jump host on the way failed; `reason` says how.
     case jumpHostFailed(host: String, reason: String)
+    /// A jump host on the way refused the login: its password or key.
+    case jumpHostRefusedLogin(SFTPEndpoint)
     /// The jump host `jumpHost` could not reach `address` behind it, e.g. a
     /// machine that is off or a reverse tunnel (`ssh -R`) that has gone.
     case unreachableBehindJumpHost(address: String, jumpHost: String, detail: String)
@@ -87,6 +89,9 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     case noResponse(address: String, seconds: Int)
     /// Something answered, but nothing takes connections on that port.
     case refused(address: String)
+    /// The connection was taken, then closed before the SSH login: no SSH
+    /// server on that port, or one turning connections away.
+    case closedBeforeLogin(address: String)
     /// The host name does not resolve.
     case unknownHost(String)
     /// This network has no way to reach the host.
@@ -128,6 +133,8 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
                 String(localized: "\(Int(timeout.nanoseconds / 1_000_000_000))초 동안 응답 없음")
             case let error as NIOSSHError where error.type == .channelSetupRejected:
                 rejectionDetail(String(describing: error))
+            case ChannelError.eof, ChannelError.ioOnClosedChannel:
+                String(localized: "로그인 전에 연결이 끊김")
             default:
                 nil
             }
@@ -137,12 +144,15 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
             switch code {
             case ECONNREFUSED: .refused(address: address)
             case EHOSTUNREACH, ENETUNREACH: .noRoute(address: address)
+            case ECONNRESET, EPIPE: .closedBeforeLogin(address: address)
             default: nil
             }
         }
         switch error {
         case ChannelError.connectTimeout(let timeout):
             return .noResponse(address: address, seconds: Int(timeout.nanoseconds / 1_000_000_000))
+        case ChannelError.eof, ChannelError.ioOnClosedChannel:
+            return .closedBeforeLogin(address: address)
         case let error as NIOConnectionError:
             if error.connectionErrors.isEmpty, error.dnsAError != nil || error.dnsAAAAError != nil {
                 return .unknownHost(endpoint.host)
@@ -193,12 +203,16 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "~/.ssh에 암호 없이 쓸 수 있는 기본 키 파일(id_ed25519, id_ecdsa, id_rsa)이 없거나 읽을 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용하거나, 연결 관리에서 키 파일을 선택하십시오.")
         case .jumpHostFailed(let host, let reason):
             String(localized: "점프 호스트 \(host)에서 연결에 실패했습니다. \(reason)")
+        case .jumpHostRefusedLogin(let endpoint):
+            String(localized: "점프 호스트 \(endpoint.username)@\(endpoint.hostKeyID)에 로그인할 수 없습니다. 사용자 이름과 비밀번호 또는 키를 확인하십시오.")
         case .unreachableBehindJumpHost(let address, let jumpHost, let detail):
             String(localized: "점프 호스트 \(jumpHost)에서 \(address)에 닿지 못했습니다(\(detail)). 그 컴퓨터가 켜져 있는지, 리버스 터널(ssh -R)로 들어간다면 그 터널이 열려 있는지 확인하십시오.")
         case .noResponse(let address, let seconds):
             String(localized: "\(address)에서 \(seconds)초 동안 응답이 없습니다. 서버가 꺼져 있거나, 방화벽 또는 VPN 때문에 이 네트워크에서는 닿지 않을 수 있습니다.")
         case .refused(let address):
             String(localized: "\(address)에서 연결을 거부했습니다. 포트 번호가 맞는지, 서버에서 SSH가 실행 중인지 확인하십시오.")
+        case .closedBeforeLogin(let address):
+            String(localized: "\(address)이(가) 로그인 전에 연결을 끊었습니다. 그 포트가 SSH 서버인지 확인하십시오. SSH 서버라면 접속을 막고 있을 수 있습니다(로그인에 여러 번 실패한 뒤의 PerSourcePenalties나 fail2ban, MaxStartups, AllowUsers 등).")
         case .unknownHost(let host):
             String(localized: "\(host) 주소를 찾을 수 없습니다. 호스트 이름을 확인하고, 사내 주소라면 VPN 연결을 확인하십시오.")
         case .noRoute(let address):
@@ -287,6 +301,7 @@ final class SFTPConnection: @unchecked Sendable {
                 } catch let error as SFTPConnectError {
                     switch error {
                     case .hostKeyChanged, .hostKeyChangedInKnownHosts, .hostKeyRevoked, .hostKeyNotListed: throw error
+                    case .authenticationFailed: throw SFTPConnectError.jumpHostRefusedLogin(hop.endpoint)
                     default: break
                     }
                     throw SFTPConnectError.jumpHostFailed(host: hop.endpoint.hostKeyID, reason: error.localizedDescription)
@@ -341,6 +356,7 @@ final class SFTPConnection: @unchecked Sendable {
         timeout: TimeAmount
     ) async throws -> (client: SSHClient, channel: Channel, heartbeat: Heartbeat) {
         let attempts = try hop.credential.authenticationAttempts(username: hop.endpoint.username)
+        var refused = false
         for (index, method) in attempts.enumerated() {
             var opened: Channel?
             do {
@@ -373,7 +389,15 @@ final class SFTPConnection: @unchecked Sendable {
                 let reason = SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error, dialling: hop.endpoint, behind: jumpHost)
                 if case SFTPConnectError.authenticationFailed = reason {
                     Log.connection.info("\(hop.endpoint.hostKeyID): 인증 방법 \(index + 1)/\(attempts.count) 거부됨")
+                    refused = true
                     continue
+                }
+                // A server that has refused a key may stop taking connections
+                // from here for a while (sshd's PerSourcePenalties, fail2ban):
+                // the login is what failed, not the network.
+                if refused, case SFTPConnectError.closedBeforeLogin = reason {
+                    Log.connection.info("\(hop.endpoint.hostKeyID): 키 거부 뒤 서버가 연결을 받지 않음")
+                    throw SFTPConnectError.authenticationFailed
                 }
                 throw reason
             }
@@ -394,7 +418,7 @@ final class SFTPConnection: @unchecked Sendable {
         // Runs on the loop before any data arrives.
         let prepare: @Sendable (Channel) -> EventLoopFuture<Void> = { channel in
             channel.eventLoop.makeCompletedFuture {
-                try channel.pipeline.syncOperations.addHandlers(heartbeat.listener(), HoldUntilSSHStarts())
+                try channel.pipeline.syncOperations.addHandlers(heartbeat.listener(), CloseWhenInputEnds(), HoldUntilSSHStarts())
             }
         }
         if let previous {
@@ -576,6 +600,22 @@ final class FirstAnswer: Sendable {
             return current
         }
         waiting?.resume(returning: answer)
+    }
+}
+
+/// Closes a channel once the other end stops sending. sshd passes on the
+/// machine behind a jump host hanging up as an EOF on the jump channel, which
+/// then stays half open; SSH cannot go on over it, and a login waiting on it
+/// would only time out. Closed, it fails at once.
+private final class CloseWhenInputEnds: ChannelInboundHandler, Sendable {
+    typealias InboundIn = ByteBuffer
+    typealias InboundOut = ByteBuffer
+
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let event = event as? ChannelEvent, event == .inputClosed {
+            context.close(promise: nil)
+        }
+        context.fireUserInboundEventTriggered(event)
     }
 }
 

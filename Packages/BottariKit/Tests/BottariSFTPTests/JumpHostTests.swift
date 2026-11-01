@@ -1,5 +1,7 @@
 import BottariCore
 import Foundation
+import NIOCore
+import NIOPosix
 import Testing
 @testable import BottariSFTP
 
@@ -227,8 +229,8 @@ import Testing
                     via: [SSHHop(endpoint: jump.endpoint, credential: .password("wrong"))]
                 )
             } throws: { error in
-                guard case SFTPConnectError.jumpHostFailed(let host, _) = error else { return false }
-                return host == jump.endpoint.hostKeyID
+                // A refused login, not a network problem: Bottari asks for that host's password.
+                error as? SFTPConnectError == .jumpHostRefusedLogin(jump.endpoint)
             }
         }
     }
@@ -360,5 +362,64 @@ import Testing
         }
         #expect(address == "127.0.0.1:\(port)")
         #expect(jumpHost == jump.endpoint.hostKeyID)
+    }
+}
+
+/// Something on the port that hangs up before the SSH login: no SSH server
+/// there, a server turning connections away (MaxStartups, fail2ban), or a
+/// reverse tunnel whose machine has no sshd running.
+@Suite(.timeLimit(.minutes(1))) struct EarlyHangUpTests {
+    /// A listener that closes every connection as soon as it is made.
+    func withHangingUpListener(_ body: (Int) async throws -> Void) async throws {
+        let listener = try await ServerBootstrap(group: MultiThreadedEventLoopGroup.singleton)
+            .childChannelInitializer { channel in channel.close() }
+            .bind(host: "127.0.0.1", port: 0)
+            .get()
+        do {
+            try await body(listener.localAddress!.port!)
+        } catch {
+            try? await listener.close()
+            throw error
+        }
+        try? await listener.close()
+    }
+
+    @Test func aServerThatHangsUpIsSaidSoAtOnce() async throws {
+        try await withHangingUpListener { port in
+            let started = ContinuousClock.now
+            await #expect(throws: SFTPConnectError.closedBeforeLogin(address: "127.0.0.1:\(port)")) {
+                _ = try await SFTPFileProvider.connect(
+                    to: SFTPEndpoint(host: "127.0.0.1", port: port, username: "me"),
+                    credential: .password("pw"),
+                    hostKeys: .acceptAnything
+                )
+            }
+            #expect(ContinuousClock.now - started < .seconds(3))
+        }
+    }
+
+    /// With sshd as the jump host, as in real life: it closes the channel
+    /// as soon as the far end hangs up.
+    @Test(.enabled(if: OpenSSH.isAvailable)) func behindAJumpHostTheJumpHostIsNamed() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let jump = try await OpenSSHServer.start(authorizing: [key.publicKey])
+        defer { jump.stop() }
+        try await withHangingUpListener { port in
+            let started = ContinuousClock.now
+            await #expect {
+                _ = try await SFTPFileProvider.connect(
+                    to: SFTPEndpoint(host: "127.0.0.1", port: port, username: "me"),
+                    credential: .password("pw"),
+                    hostKeys: .acceptAnything,
+                    via: [SSHHop(endpoint: jump.endpoint, credential: .privateKey(key.privateKey))]
+                )
+            } throws: { error in
+                guard case SFTPConnectError.unreachableBehindJumpHost(let address, let host, _) = error else { return false }
+                return address == "127.0.0.1:\(port)" && host == jump.endpoint.hostKeyID
+            }
+            #expect(ContinuousClock.now - started < .seconds(3))
+        }
     }
 }
