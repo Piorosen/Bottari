@@ -45,15 +45,68 @@ final class SiteLibrary {
         importableHosts = sshConfig.hosts.filter { !saved.contains($0.alias) }
     }
 
-    /// Saves every importable `~/.ssh/config` host and returns the new sites.
+    /// Saves the importable `~/.ssh/config` hosts in `aliases` (every one
+    /// when nil) and returns the new sites.
     @discardableResult
-    func importSSHConfig() -> [SavedSite] {
-        let result = SiteStore.importing(sshConfig, into: sites)
+    func importSSHConfig(only aliases: Set<String>? = nil) -> [SavedSite] {
+        let result = SiteStore.importing(sshConfig, into: sites, only: aliases)
         sites = result.sites
         recentlyImported = Set(result.added.map(\.id))
-        importableHosts = []
+        let saved = Set(sites.compactMap(\.sshConfigAlias))
+        importableHosts = sshConfig.hosts.filter { !saved.contains($0.alias) }
         persist()
         return result.added
+    }
+
+    /// The key files that `hosts` (not saved yet) and the saved sites log in
+    /// with, each with what it says about itself and who uses it.
+    func keyImportCandidates(for hosts: [SSHConfig.Host]) -> [KeyImportCandidate] {
+        var users: [String: [String]] = [:]
+        var order: [String] = []
+        func add(_ path: String, _ user: String) {
+            let path = UserHome.expand(path)
+            if users[path] == nil { order.append(path) }
+            users[path, default: []].append(user)
+        }
+        for site in sites {
+            if case .keyFile(let path) = site.authentication { add(path, site.name) }
+        }
+        for host in hosts {
+            // As importing picks it: the first IdentityFile that is there.
+            if let path = host.identityFiles.first(where: { FileManager.default.fileExists(atPath: $0) }) { add(path, host.alias) }
+        }
+        return order.map { path in
+            KeyImportCandidate(path: path, summary: SavedSite.readFile(path).flatMap { SSHKeyFileSummary(keyText: $0) }, users: users[path] ?? [])
+        }
+    }
+
+    /// Copies each key file in `paths` into the Keychain for every saved site
+    /// that logs in with it; those sites then use the copy (Bottari key), so
+    /// ~/.ssh need not be allowed again. The files themselves stay as they are.
+    /// Returns the files that could not be read.
+    @discardableResult
+    func importKeys(_ paths: Set<String>) -> [String] {
+        var unreadable: [String] = []
+        var texts: [String: String] = [:]
+        for path in paths {
+            if let text = SavedSite.readFile(path), SSHKeyFileSummary(keyText: text) != nil {
+                texts[path] = text
+            } else {
+                unreadable.append(UserHome.abbreviate(path))
+            }
+        }
+        for index in sites.indices {
+            guard case .keyFile(let path) = sites[index].authentication, let text = texts[UserHome.expand(path)] else { continue }
+            do {
+                sites[index] = try sites[index].keepingKey(text, in: secrets)
+                Log.app.info("\(sites[index].name): 키 파일을 키체인으로 가져옴 (\(UserHome.abbreviate(path)))")
+            } catch {
+                Log.app.error("\(sites[index].name): 키를 키체인에 넣지 못함: \(error.localizedDescription)")
+                unreadable.append(UserHome.abbreviate(path))
+            }
+        }
+        persist()
+        return unreadable
     }
 
     /// Names a jump host can refer to: saved sites, then `~/.ssh/config` aliases.
@@ -266,6 +319,17 @@ final class SiteLibrary {
             storageError = String(localized: "연결 목록을 저장할 수 없습니다: \(error.localizedDescription)")
         }
     }
+}
+
+/// A key file offered for the Keychain when importing from ~/.ssh.
+struct KeyImportCandidate: Identifiable {
+    var id: String { path }
+    /// Expanded, e.g. `/Users/me/.ssh/id_ed25519`.
+    let path: String
+    /// Nil when the file cannot be read (or is no key).
+    let summary: SSHKeyFileSummary?
+    /// Saved sites and not-yet-saved hosts that log in with it.
+    let users: [String]
 }
 
 /// Secrets the user just typed, in front of the stored ones.

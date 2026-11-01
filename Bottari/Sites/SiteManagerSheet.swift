@@ -43,6 +43,7 @@ struct SiteManagerSheet: View {
     @State private var lastActivity: Activity = .testing
     @State private var outcome: Outcome?
     @State private var pendingDelete: SavedSite?
+    @State private var showsImport = false
     @FocusState private var secretFocused: Bool
     @State private var isSigningIn = false
 
@@ -92,6 +93,12 @@ struct SiteManagerSheet: View {
         .onAppear {
             library.reloadSSHConfig()
             if case .failure(_, _, true) = outcome { secretFocused = true }
+        }
+        .sheet(isPresented: $showsImport) {
+            SSHImportSheet(library: library) { added in
+                if let first = added.first { selection = first.id }
+            }
+            .themed()
         }
         .onChange(of: selection) {
             password = ""
@@ -175,6 +182,13 @@ struct SiteManagerSheet: View {
                 }
                 .buttonStyle(PanelButtonStyle(dashed: true))
                 .padding(.top, 4)
+                Button {
+                    showsImport = true
+                } label: {
+                    Label("~/.ssh에서 가져오기…", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(PanelButtonStyle(dashed: true))
+                .help(String(localized: "~/.ssh/config의 호스트와 연결이 쓰는 키 파일을 골라 가져옵니다."))
             }
             .padding(12)
         }
@@ -192,10 +206,7 @@ struct SiteManagerSheet: View {
             Text("ProxyJump, IdentityFile, Match 설정 포함")
                 .font(.ui(.caption))
                 .foregroundStyle(.secondary)
-            Button("가져오기") {
-                let added = library.importSSHConfig()
-                if let first = added.first { selection = first.id }
-            }
+            Button("고르고 가져오기…") { showsImport = true }
             .buttonStyle(PanelButtonStyle(prominent: true))
             .fixedSize()
             .padding(.top, 4)

@@ -81,7 +81,7 @@ enum PrivateKeyFile {
 
     // MARK: - OpenSSH format
 
-    private static func payload(of text: String) throws -> Data {
+    static func payload(of text: String) throws -> Data {
         let base64 = text
             .split(whereSeparator: \.isNewline)
             .filter { !$0.hasPrefix("-----") }
@@ -336,5 +336,39 @@ final class SingleKeyOffer: NIOSSHClientUserAuthenticationDelegate, @unchecked S
         promise.succeed(
             NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .privateKey(.init(privateKey: key)))
         )
+    }
+}
+
+/// What a key file says about itself without its passphrase: OpenSSH keeps
+/// the public key outside the encrypted part.
+public struct SSHKeyFileSummary: Sendable, Equatable {
+    /// `ssh-ed25519`, `ecdsa-sha2-nistp256`, `ssh-rsa`; empty for an encrypted PEM key.
+    public let type: String
+    /// `SHA256:…`; empty when the file does not say.
+    public let fingerprint: String
+    public let isEncrypted: Bool
+
+    /// Nil when `text` is not a private key.
+    public init?(keyText text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("-----BEGIN OPENSSH PRIVATE KEY-----") {
+            let magic = Data("openssh-key-v1".utf8) + Data([0])
+            guard let payload = try? PrivateKeyFile.payload(of: trimmed), payload.starts(with: magic) else { return nil }
+            var wire = SSHWire(payload.dropFirst(magic.count))
+            guard let cipher = try? wire.readString(), (try? wire.readString()) != nil, (try? wire.readString()) != nil,
+                  (try? wire.readUInt32()) == 1, let blob = try? wire.readString() else { return nil }
+            var header = SSHWire(blob)
+            type = (try? header.readString()).map { String(decoding: $0, as: UTF8.self) } ?? ""
+            fingerprint = KnownHosts.fingerprint(ofOpenSSHKey: "\(type) \(blob.base64EncodedString())")
+            isEncrypted = cipher != Data("none".utf8)
+        } else if trimmed.hasPrefix("-----BEGIN"), trimmed.contains("ENCRYPTED") {
+            (type, fingerprint, isEncrypted) = ("", "", true)
+        } else if let key = try? PrivateKeyFile(trimmed, passphrase: nil) {
+            type = key.publicKeyType
+            fingerprint = KnownHosts.fingerprint(ofOpenSSHKey: key.publicKeyLine(comment: ""))
+            isEncrypted = false
+        } else {
+            return nil
+        }
     }
 }

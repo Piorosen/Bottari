@@ -58,6 +58,12 @@ enum SnapshotRenderer {
                     )
                 }
             }
+            // Choosing what to take from ~/.ssh.
+            await render(
+                SSHImportSheet(library: library) { _ in }.background(Palette.panel),
+                size: CGSize(width: 580, height: 560), appearance: appearance,
+                to: directory.appending(path: "ssh-import-\(name).png")
+            )
             // Offered once a password got in: a key in its place.
             await render(
                 KeySetupSheet(request: KeySetupRequest(site: nas, provider: nil, isOffer: true)).background(Palette.panel),

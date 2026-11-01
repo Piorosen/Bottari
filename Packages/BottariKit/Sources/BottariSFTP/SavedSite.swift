@@ -223,17 +223,19 @@ public struct SiteStore: Sendable {
         try encoder.encode(sites).write(to: fileURL, options: .atomic)
     }
 
-    /// Adds every `~/.ssh/config` host that is not saved yet. Sites imported
-    /// before are left alone, so the user's edits survive a second import.
+    /// Adds every `~/.ssh/config` host that is not saved yet, or only those
+    /// in `aliases`. Sites imported before are left alone, so the user's edits
+    /// survive a second import.
     public static func importing(
         _ config: SSHConfig,
         into sites: [SavedSite],
+        only aliases: Set<String>? = nil,
         defaultUser: String = NSUserName(),
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> (sites: [SavedSite], added: [SavedSite]) {
         let known = Set(sites.compactMap(\.sshConfigAlias))
         let added = config.hosts
-            .filter { !known.contains($0.alias) }
+            .filter { !known.contains($0.alias) && aliases?.contains($0.alias) != false }
             .map { SavedSite(importing: $0, defaultUser: defaultUser, fileExists: fileExists) }
         return (sites + added, added)
     }
@@ -331,7 +333,8 @@ extension SavedSite {
                 if let password = try password ?? secrets.readableSecret(for: passwordKey) { return .password(password) }
                 throw SiteConnectError.storedKeyMissing(site: name, key: passwordKey)
             }
-            keys = .privateKey(text, passphrase: nil)
+            // A key brought in from a file keeps the passphrase saved for it.
+            keys = .privateKey(text, passphrase: try secrets.readableSecret(for: passphraseKey))
         case .password:
             let stored: String?
             do {
@@ -365,6 +368,17 @@ extension SavedSite {
             credential: try credential(secrets: secrets, password: password, sshDirectory: sshConfig.directory, readFile: readFile),
             hops: try resolver.hops(for: proxyJump, visiting: [name])
         )
+    }
+
+    /// The site logging in with `text`, a private key file's contents, kept in
+    /// `secrets` as its Bottari key, so the file need not be readable again
+    /// (the App Sandbox keeps ~/.ssh out of reach until allowed). A passphrase
+    /// saved for the file stays, and unlocks the copy.
+    public func keepingKey(_ text: String, in secrets: any SecretStore) throws -> SavedSite {
+        try secrets.setSecret(text, for: privateKeyKey)
+        var site = self
+        site.authentication = .storedKey
+        return site
     }
 
     /// `[user@]host[:port]`, as ProxyJump writes a hop. An IPv6 address

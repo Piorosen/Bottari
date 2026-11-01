@@ -72,7 +72,10 @@ struct PasswordRequest: Identifiable {
             isPassphrase = false
             reason = String(localized: "이 연결의 Bottari 키는 다른 Mac에서 만든 것이라 이 Mac에는 없습니다. 비밀번호로 로그인한 뒤 이 Mac의 키를 만들 수 있습니다.")
         case SFTPConnectError.unreadableKey:
-            guard case .keyFile = site.authentication else { return nil }
+            switch site.authentication {
+            case .keyFile, .storedKey: break
+            default: return nil
+            }
             owner = site
             key = site.passphraseKey
             isPassphrase = true

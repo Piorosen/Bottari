@@ -128,6 +128,17 @@ import Testing
         #expect(try nas.credential(secrets: InMemorySecretStore(), password: "typed") == .password("typed"))
     }
 
+    /// A key file copied into the Keychain logs in with the file out of reach,
+    /// unlocked by the passphrase saved for the file.
+    @Test func keyFilesKeptInTheSecretStoreNeedNoFile() throws {
+        let prod = site("prod", .keyFile(path: "/keys/prod"))
+        let secrets = InMemorySecretStore([prod.passphraseKey: "pp"])
+        let kept = try prod.keepingKey("PROD KEY", in: secrets)
+        #expect(kept.authentication == .storedKey)
+        #expect(kept.id == prod.id)
+        #expect(try kept.credential(secrets: secrets, readFile: { _ in nil }) == .privateKey("PROD KEY", passphrase: "pp"))
+    }
+
     @Test func defaultKeysAreTheKeyFilesSshTries() throws {
         let nas = site("nas", .defaultKeys)
         let files = ["/Users/me/.ssh/id_rsa": "RSA KEY", "/Users/me/.ssh/id_ed25519": "ED25519 KEY"]

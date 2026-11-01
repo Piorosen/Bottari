@@ -60,4 +60,20 @@ struct KeySetupTests {
         #expect(try await provider.stat(RemotePath(NSHomeDirectory())).kind == .directory)
         await provider.disconnect()
     }
+
+    /// Before importing, a key file shows its type and fingerprint, even
+    /// behind a passphrase, as `ssh-keygen -l` would.
+    @Test func keyFilesDescribeThemselvesWithoutTheirPassphrase() throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for (type, passphrase) in [("ed25519", "secret"), ("rsa", ""), ("ecdsa", "")] {
+            let key = try OpenSSH.makeKey(in: folder, type: type, bits: type == "rsa" ? 2048 : nil, passphrase: passphrase)
+            let listed = try OpenSSH.run(OpenSSH.keygen, ["-l", "-f", key.path.path + ".pub"]).split(separator: " ")
+            let summary = try #require(SSHKeyFileSummary(keyText: key.privateKey))
+            #expect(summary.fingerprint == String(listed[1]))
+            #expect(summary.isEncrypted == !passphrase.isEmpty)
+            #expect(summary.type == String(key.publicKey.split(separator: " ")[0]))
+        }
+        #expect(SSHKeyFileSummary(keyText: "Host prod\n  HostName example.com") == nil)
+    }
 }

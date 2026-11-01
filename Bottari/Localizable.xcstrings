@@ -41,6 +41,16 @@
         }
       }
     },
+    " · 경유 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · via %@"
+          }
+        }
+      }
+    },
     " 외 %lld개": {
       "localizations": {
         "en": {
@@ -2275,6 +2285,16 @@
         }
       }
     },
+    "~/.ssh/config의 새 호스트": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Hosts in ~/.ssh/config"
+          }
+        }
+      }
+    },
     "~/.ssh/config의 새 호스트 %lld개": {
       "localizations": {
         "en": {
@@ -2303,6 +2323,16 @@
         }
       }
     },
+    "~/.ssh/config의 호스트와 연결이 쓰는 키 파일을 골라 가져옵니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose hosts from ~/.ssh/config, and the key files your connections use, to bring in."
+          }
+        }
+      }
+    },
     "~/.ssh/known_hosts에는 %@의 다른 종류 키만 있어 이 서버가 보낸 키를 확인할 수 없습니다. 서버 관리자에게 지문을 확인한 뒤 맞을 때만 신뢰하십시오.\nknown_hosts의 키: %@\n받은 키: %@": {
       "localizations": {
         "en": {
@@ -2323,6 +2353,16 @@
         }
       }
     },
+    "~/.ssh를 아직 읽을 수 없습니다. 허용하면 config의 호스트와 키 파일이 보입니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari can’t read ~/.ssh yet. Allow it to see the hosts in config and the key files."
+          }
+        }
+      }
+    },
     "~/.ssh를 읽을 수 있습니다": {
       "localizations": {
         "en": {
@@ -2339,6 +2379,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "There are no default key files without a passphrase in ~/.ssh (id_ed25519, id_ecdsa, id_rsa), or Bottari can’t read them. Allow your home folder or ~/.ssh in Settings › Folder Access, or choose a key file in Connections."
+          }
+        }
+      }
+    },
+    "~/.ssh에서 가져오기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from ~/.ssh"
+          }
+        }
+      }
+    },
+    "~/.ssh에서 가져오기…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from ~/.ssh…"
           }
         }
       }
@@ -2683,12 +2743,32 @@
         }
       }
     },
+    "가져올 호스트와 키체인에 둘 키 파일을 고르십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the hosts to import and the key files to keep in the Keychain."
+          }
+        }
+      }
+    },
     "가져옴": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Imported"
+          }
+        }
+      }
+    },
+    "가져왔습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported."
           }
         }
       }
@@ -2999,6 +3079,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "High Contrast"
+          }
+        }
+      }
+    },
+    "고르고 가져오기…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose and Import…"
+          }
+        }
+      }
+    },
+    "고른 키는 이 Mac의 키체인에 복사되고, 그 키를 쓰는 연결은 Bottari 키로 바뀝니다. 그 뒤로는 ~/.ssh를 허용하지 않아도 로그인합니다. ~/.ssh의 파일은 그대로 둡니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chosen keys are copied into this Mac’s Keychain, and the connections using them switch to a Bottari key. They then sign in without ~/.ssh being allowed. The files in ~/.ssh stay as they are."
           }
         }
       }
@@ -4149,6 +4249,16 @@
         }
       }
     },
+    "모두 해제": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect All"
+          }
+        }
+      }
+    },
     "모든 사용자": {
       "localizations": {
         "en": {
@@ -4929,6 +5039,16 @@
         }
       }
     },
+    "사용: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used by: %@"
+          }
+        }
+      }
+    },
     "사용자": {
       "localizations": {
         "en": {
@@ -5205,6 +5325,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trust the New Host Key and Try Again"
+          }
+        }
+      }
+    },
+    "새 호스트가 없습니다. 모두 가져왔거나 ~/.ssh/config가 비어 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No new hosts: all are imported, or ~/.ssh/config is empty."
           }
         }
       }
@@ -6115,6 +6245,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Known host keys"
+          }
+        }
+      }
+    },
+    "암호 있음 · 연결할 때 키 암호를 묻습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Has a passphrase · asked for when connecting"
           }
         }
       }
@@ -7467,6 +7607,16 @@
         }
       }
     },
+    "이 키 파일은 읽을 수 없어 가져오지 못했습니다: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These key files couldn’t be read, so they weren’t imported: %@"
+          }
+        }
+      }
+    },
     "이 포트에서 응답이 없습니다": {
       "localizations": {
         "en": {
@@ -7783,6 +7933,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read position / total"
+          }
+        }
+      }
+    },
+    "읽을 수 없음 · 이 파일이 있는 폴더를 허용해야 합니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t read it · allow the folder it’s in"
           }
         }
       }
@@ -9207,6 +9367,34 @@
         }
       }
     },
+    "키 %lld개 가져오기": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Import %lld Key"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Import %lld Keys"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키 %lld개 가져오기"
+          }
+        }
+      }
+    },
     "키 만드는 중…": {
       "localizations": {
         "en": {
@@ -9313,6 +9501,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The key file (%@) isn’t there. Sign in with the password."
+          }
+        }
+      }
+    },
+    "키 파일을 쓰는 연결이 없습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No connection uses a key file."
           }
         }
       }
@@ -9433,6 +9631,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved in the Keychain"
+          }
+        }
+      }
+    },
+    "키체인으로 가져올 키 파일": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key Files to Keep in the Keychain"
           }
         }
       }
@@ -10313,6 +10521,44 @@
           "stringUnit": {
             "state": "translated",
             "value": "Host"
+          }
+        }
+      }
+    },
+    "호스트 %lld개 · 키 %lld개 가져오기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Hosts (%lld) and Keys (%lld)"
+          }
+        }
+      }
+    },
+    "호스트 %lld개 가져오기": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Import %lld Host"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Import %lld Hosts"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "호스트 %lld개 가져오기"
           }
         }
       }

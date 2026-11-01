@@ -59,6 +59,15 @@ import Testing
         #expect(added[3].proxyJump.isEmpty)
     }
 
+    @Test func importTakesOnlyTheChosenHosts() {
+        let (sites, added) = SiteStore.importing(config, into: [], only: ["nas", "piped"], defaultUser: "me", fileExists: fileExists)
+        #expect(added.map(\.name) == ["nas", "piped"])
+        #expect(sites == added)
+        // The rest can still come later.
+        let later = SiteStore.importing(config, into: sites, defaultUser: "me", fileExists: fileExists)
+        #expect(later.added.map(\.name) == ["prod-web", "relayed"])
+    }
+
     @Test func importingAgainKeepsEditsAndAddsOnlyNewHosts() {
         var (sites, _) = SiteStore.importing(config, into: [], defaultUser: "me", fileExists: fileExists)
         sites[0].name = "운영 웹"
