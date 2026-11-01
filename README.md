@@ -183,7 +183,7 @@ Packages/BottariKit/    앱과 분리한 핵심 로직
   BottariRemote         SwiftTerm, RoyalVNCKit
   BottariCloud          S3(SigV4), Google Drive(AppAuth)
 Config/                 Info.plist 추가 키, 샌드박스 권한(Bottari.entitlements), App Store Connect 설정 예시
-scripts/                testflight.sh, app-icon.swift, glyphs.swift
+scripts/                testflight.sh, acknowledgements.py(오픈 소스 고지, 원문은 licenses/), app-icon.swift, glyphs.swift
 docs/                   README 이미지
 ```
 
@@ -196,4 +196,8 @@ docs/                   README 이미지
 
 ## 라이선스
 
-MIT. libmpv(MPVKit)는 LGPL 빌드를 사용한다. 함께 배포하는 IBM Plex 글꼴은 SIL Open Font License를 따른다.
+Bottari는 MIT 라이선스다. 앱에 들어 있는 오픈 소스와 그 라이선스 전문은 앱의 도움말 › 오픈 소스 라이선스(설정 › 일반에도 있음)와 [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md)에 있다.
+
+- 영상 재생에 쓰는 libmpv와 FFmpeg는 MPVKit의 LGPL 빌드(GPL 부분 없음)이며, 앱에 정적으로 링크된다. Bottari의 소스가 공개되어 있으므로, 이 라이브러리를 고치거나 다른 버전으로 바꾼 뒤 앱을 다시 빌드할 수 있다(`Packages/BottariKit/Package.swift`의 MPVKit 의존성을 바꾸고 위의 빌드 안내를 따른다). 각 라이브러리의 소스는 고지에 적힌 저장소와 그 버전의 MPVKit 빌드 스크립트에 있고, 요청하면 배포일로부터 3년 동안 소스 사본을 제공한다([이슈](https://github.com/Piorosen/Bottari/issues)).
+- 함께 배포하는 IBM Plex 글꼴은 SIL Open Font License 1.1을 따른다.
+- 의존성을 바꾸면 `python3 scripts/acknowledgements.py`로 고지를 다시 만든다. 버전은 `Package.resolved`에서 읽고, 라이선스 원문은 `scripts/licenses/`에 둔다.

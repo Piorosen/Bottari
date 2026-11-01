@@ -1001,6 +1001,16 @@
         }
       }
     },
+    "Bottari에 들어 있는 오픈 소스 %lld개": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld open source components in Bottari"
+          }
+        }
+      }
+    },
     "Bottari에서 이 폴더 열기": {
       "localizations": {
         "en": {
@@ -1297,6 +1307,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invalid JSON"
+          }
+        }
+      }
+    },
+    "LGPL 고지": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LGPL Notice"
           }
         }
       }
@@ -1797,6 +1817,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The SSH terminal works whatever this is set to"
+          }
+        }
+      }
+    },
+    "Swift 패키지": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swift Packages"
           }
         }
       }
@@ -3233,6 +3263,16 @@
         }
       }
     },
+    "글꼴": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fonts"
+          }
+        }
+      }
+    },
     "글자와 간격": {
       "localizations": {
         "en": {
@@ -3985,6 +4025,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Warm grey"
+          }
+        }
+      }
+    },
+    "라이브러리 교체와 소스": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replacing the libraries, and their source"
+          }
+        }
+      }
+    },
+    "라이선스 정보를 읽을 수 없습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t read the license information."
           }
         }
       }
@@ -6949,6 +7009,16 @@
         }
       }
     },
+    "영상 재생 (MPVKit)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video Playback (MPVKit)"
+          }
+        }
+      }
+    },
     "영상을 열 수 없음": {
       "localizations": {
         "en": {
@@ -7065,6 +7135,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open in Right Pane"
+          }
+        }
+      }
+    },
+    "오픈 소스 라이선스": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Source Licenses"
           }
         }
       }
@@ -7193,6 +7273,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open in Left Pane"
+          }
+        }
+      }
+    },
+    "왼쪽에서 항목을 고르면 그 라이선스 전문이 보입니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an item on the left to read its full license."
           }
         }
       }

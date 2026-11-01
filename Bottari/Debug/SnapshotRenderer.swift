@@ -476,6 +476,11 @@ enum SnapshotRenderer {
             await render(CommandPalette(workspace: workspace) {}.padding(20), size: CGSize(width: 680, height: 520), appearance: appearance,
                          to: directory.appending(path: "palette-\(name).png"))
         }
+        // Help › 오픈 소스 라이선스: the LGPL note, and one license.
+        for (file, selected) in [("licenses", String?.none), ("licenses-ffmpeg", "FFmpeg")] {
+            await render(AcknowledgementsWindow(selection: selected).themed(), size: CGSize(width: 980, height: 700), appearance: .aqua,
+                         to: directory.appending(path: "\(file).png"))
+        }
         // A path typed into ⌘K goes straight there.
         for (file, typed) in [("palette-path", "/var/log "), ("palette-home", "~/Documents")] {
             await render(CommandPalette(workspace: workspace, query: typed) {}.padding(20), size: CGSize(width: 680, height: 520), appearance: .aqua,

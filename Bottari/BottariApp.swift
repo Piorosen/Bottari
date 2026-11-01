@@ -35,6 +35,8 @@ struct BottariApp: App {
                 Button("로그 폴더 열기") {
                     NSWorkspace.shared.open(Diagnostics.logFile.deletingLastPathComponent())
                 }
+                Divider()
+                AcknowledgementsCommand()
             }
         }
 
@@ -64,6 +66,12 @@ struct BottariApp: App {
                 .themed()
         }
         .defaultSize(width: 1000, height: 720)
+
+        Window("오픈 소스 라이선스", id: "licenses") {
+            AcknowledgementsWindow()
+                .themed()
+        }
+        .defaultSize(width: 980, height: 700)
 
         // Only once there is a tunnel to switch.
         MenuBarExtra(

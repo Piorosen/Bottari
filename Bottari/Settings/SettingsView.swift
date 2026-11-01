@@ -254,6 +254,9 @@ struct GeneralSettings: View {
                     Text("새 버전은 TestFlight에서 받습니다.")
                         .font(.ui(.caption))
                         .foregroundStyle(.secondary)
+                    AcknowledgementsCommand()
+                        .buttonStyle(PanelButtonStyle())
+                        .fixedSize()
                 }
             }
         }

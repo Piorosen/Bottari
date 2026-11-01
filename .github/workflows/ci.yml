@@ -47,6 +47,12 @@ jobs:
           path: .build/xcode/SourcePackages
           key: spm-app-${{ runner.os }}-${{ hashFiles('Packages/BottariKit/Package.resolved', 'Bottari.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: spm-app-${{ runner.os }}-
+      # The open source notices follow Package.resolved; a dependency change
+      # without running the script leaves them stale.
+      - name: Open source notices are current
+        run: |
+          python3 scripts/acknowledgements.py
+          git diff --exit-code -- Bottari/Acknowledgements.json docs/THIRD_PARTY_NOTICES.md
       - name: Build (Debug, ad-hoc signed)
         run: |
           xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Debug \
