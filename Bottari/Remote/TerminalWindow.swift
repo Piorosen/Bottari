@@ -298,6 +298,7 @@ private struct TerminalScreen: View {
         switch site.authentication {
         case .defaultKeys: String(localized: "기본 키")
         case .keyFile(let path): (path as NSString).lastPathComponent
+        case .storedKey: String(localized: "Bottari 키")
         case .password: String(localized: "비밀번호")
         }
     }

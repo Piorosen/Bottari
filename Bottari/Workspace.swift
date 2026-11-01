@@ -48,6 +48,10 @@ final class Workspace {
     var siteManager: SiteManagerRequest?
     /// A connection waiting for the user to type a password.
     var passwordRequest: PasswordRequest?
+    /// An SSH key offered after a password login, or asked for.
+    var keySetupRequest: KeySetupRequest?
+    /// Sites already offered a key in this window, so "later" means later.
+    @ObservationIgnored private var keyOffersShown: Set<SavedSite.ID> = []
     /// The pane that should take keyboard focus next, e.g. after ⇥.
     var focusRequest: PaneSide?
     /// The pane that should open its search field (⌘F).
@@ -194,6 +198,7 @@ final class Workspace {
             do {
                 try await pane.connect(to: site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
                 await then?(pane)
+                offerKey(for: site, typed: typedSecrets, over: pane.provider as? SFTPFileProvider)
             } catch is CancellationError {
                 // Overtaken by another place chosen for the pane meanwhile.
             } catch {
@@ -206,6 +211,19 @@ final class Workspace {
                 }
             }
         }
+    }
+
+    /// After a password got in, offers to put a key on the server instead, once per site.
+    private func offerKey(for site: SavedSite, typed: [String: String], over provider: SFTPFileProvider?) {
+        guard let provider, KeySetupOffers.shouldOffer(for: site, typed: typed),
+              keyOffersShown.insert(site.id).inserted, passwordRequest == nil else { return }
+        keySetupRequest = KeySetupRequest(site: site, provider: provider, isOffer: true)
+    }
+
+    /// Tries the connection again as it was, e.g. once the key's folder is allowed.
+    func retry(_ request: PasswordRequest) {
+        passwordRequest = nil
+        connect(request.site, in: request.side, typedSecrets: request.typed, keepingTypedSecrets: true, failed: request.failed, then: request.then)
     }
 
     /// Tries the connection again with what the user typed into the password sheet.

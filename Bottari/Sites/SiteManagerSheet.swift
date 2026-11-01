@@ -435,7 +435,7 @@ private struct SiteRow: View {
 }
 
 private enum AuthKind: CaseIterable, Identifiable {
-    case defaultKeys, keyFile, password
+    case defaultKeys, keyFile, storedKey, password
 
     var id: Self { self }
 
@@ -443,6 +443,7 @@ private enum AuthKind: CaseIterable, Identifiable {
         switch self {
         case .defaultKeys: String(localized: "~/.ssh 기본 키")
         case .keyFile: String(localized: "키 파일")
+        case .storedKey: String(localized: "Bottari 키")
         case .password: String(localized: "비밀번호")
         }
     }
@@ -451,6 +452,7 @@ private enum AuthKind: CaseIterable, Identifiable {
         switch self {
         case .defaultKeys: String(localized: "~/.ssh의 암호 없는 id_ed25519, id_ecdsa, id_rsa로 로그인. 설정 › 폴더 접근에서 ~/.ssh를 허용해야 함")
         case .keyFile: String(localized: "OpenSSH 형식 개인 키(Ed25519, RSA). 키 암호는 키체인에 저장됨")
+        case .storedKey: String(localized: "Bottari가 만들어 이 Mac의 키체인에 둔 키. 아래 ‘키 만들고 서버에 설치…’로 만들며, Mac마다 따로 만듦")
         case .password: String(localized: "키체인에 저장됨")
         }
     }
@@ -461,6 +463,7 @@ private extension SavedSite.Authentication {
         switch self {
         case .defaultKeys: .defaultKeys
         case .keyFile: .keyFile
+        case .storedKey: .storedKey
         case .password: .password
         }
     }
@@ -484,6 +487,7 @@ private struct SiteForm: View {
     /// method, so clicking back (a slip, say) brings it back instead of blanks.
     @State private var kindsSetAside: [Int: SavedSite.Kind] = [:]
     @State private var authenticationsSetAside: [AuthKind: SavedSite.Authentication] = [:]
+    @State private var keySetup: KeySetupRequest?
 
     var body: some View {
         ScrollView {
@@ -705,10 +709,27 @@ private struct SiteForm: View {
                 SecureField("키 암호", text: $passphrase, prompt: Text("키 암호 (비워 두면 저장된 암호 사용)"))
                     .focused(secretFocused)
                     .designField()
+            case .storedKey:
+                if let key = AppServices.sites.storedKey(of: site) {
+                    KeySummary(key: key)
+                } else {
+                    Text("이 Mac에는 아직 이 연결의 키가 없습니다.")
+                        .font(.ui(.caption))
+                        .foregroundStyle(.secondary)
+                }
             case .password:
                 SecureField("비밀번호", text: $password, prompt: Text("비밀번호 (비워 두면 저장된 비밀번호 사용)"))
                     .focused(secretFocused)
                     .designField()
+            }
+            Button("키 만들고 서버에 설치…") {
+                keySetup = KeySetupRequest(site: site, provider: nil, isOffer: false)
+            }
+            .buttonStyle(PanelButtonStyle())
+            .fixedSize()
+            .help(String(localized: "이 Mac에서 SSH 키를 만들어 서버의 ~/.ssh/authorized_keys에 넣고, 이 연결을 그 키로 로그인하게 바꿉니다."))
+            .sheet(item: $keySetup) { request in
+                KeySetupSheet(request: request)
             }
         }
         LabeledField(String(localized: "점프 호스트 (ProxyJump)"), hint: String(localized: "저장된 연결 이름, ~/.ssh/config 별칭 또는 user@host:port. 쉼표로 구분하면 순서대로 경유")) {
@@ -806,6 +827,7 @@ private struct SiteForm: View {
                 let fresh: SavedSite.Authentication = switch kind {
                 case .defaultKeys: .defaultKeys
                 case .keyFile: .keyFile(path: "~/.ssh/id_ed25519")
+                case .storedKey: .storedKey
                 case .password: .password
                 }
                 site.authentication = authenticationsSetAside[kind] ?? fresh

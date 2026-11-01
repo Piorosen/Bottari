@@ -268,6 +268,8 @@ struct GeneralSettings: View {
 /// Host keys trusted on first connection, to forget one after a server is reinstalled.
 struct ConnectionSettings: View {
     @State private var keys = AppServices.knownHosts.remembered
+    @AppStorage(KeySetupOffers.enabledKey) private var offersKeys = true
+    @State private var declinesForgotten = false
 
     var body: some View {
         ScrollView {
@@ -298,8 +300,40 @@ struct ConnectionSettings: View {
                         }
                     }
                 }
-                SettingsGroup(String(localized: "비밀번호와 키 암호")) {
-                    Label("macOS 키체인에만 저장됩니다. 연결 목록 파일과 iCloud 동기화 파일에는 포함되지 않습니다.", systemImage: "lock.fill")
+                SettingsGroup(
+                    String(localized: "SSH 키"),
+                    footer: String(localized: "Bottari 키는 이 Mac에서 만들어 서버의 ~/.ssh/authorized_keys에 넣은 키입니다. 개인 키는 이 Mac의 키체인에만 있어서, 다른 Mac에서는 비밀번호로 한 번 로그인한 뒤 그 Mac의 키를 따로 만듭니다.")
+                ) {
+                    SettingSwitch(
+                        title: String(localized: "비밀번호로 로그인하면 SSH 키로 바꾸기 제안"),
+                        detail: String(localized: "키를 만들어 서버에 넣고, 키로 로그인되면 저장된 비밀번호를 지울 수 있습니다"),
+                        isOn: $offersKeys
+                    )
+                    Button(declinesForgotten ? String(localized: "다시 묻습니다") : String(localized: "‘다시 묻지 않기’ 한 서버에도 다시 묻기")) {
+                        KeySetupOffers.forgetDeclines()
+                        declinesForgotten = true
+                    }
+                    .buttonStyle(PanelButtonStyle())
+                    .fixedSize()
+                    .disabled(declinesForgotten)
+                    let keyed = AppServices.sites.sites.filter { $0.authentication == .storedKey }
+                    if !keyed.isEmpty {
+                        Rectangle().fill(Palette.line).frame(height: 1)
+                        ForEach(keyed) { site in
+                            HStack(spacing: 10) {
+                                Text(site.name).font(.ui(.callout, weight: .medium))
+                                Spacer()
+                                Text(AppServices.sites.storedKey(of: site).map { "\($0.kind.title) · \($0.fingerprint)" } ?? String(localized: "이 Mac에는 키 없음"))
+                                    .font(.themeMono(.caption))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                    }
+                }
+                SettingsGroup(String(localized: "비밀번호와 키")) {
+                    Label("비밀번호, 키 암호, Bottari 키는 macOS 키체인에만 저장됩니다. 연결 목록 파일과 iCloud 동기화 파일에는 포함되지 않습니다.", systemImage: "lock.fill")
                         .font(.ui(.callout))
                 }
             }

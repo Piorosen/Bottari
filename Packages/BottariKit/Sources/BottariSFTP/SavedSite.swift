@@ -9,6 +9,9 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         case defaultKeys
         /// An OpenSSH private key file. Its passphrase, if any, is in the secret store.
         case keyFile(path: String)
+        /// A key Bottari made for the site and keeps in the secret store, one
+        /// per Mac: the site syncs, the key stays where it was made.
+        case storedKey
         /// A password kept in the secret store.
         case password
 
@@ -16,7 +19,7 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         /// first, so sites.json reads the same in older and newer copies.
         private enum CodingKeys: String, CodingKey {
             case defaultKeys = "agent"
-            case keyFile, password
+            case keyFile, storedKey, password
         }
     }
 
@@ -187,6 +190,8 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
 
     public var passwordKey: String { "site.\(id.uuidString).password" }
     public var passphraseKey: String { "site.\(id.uuidString).passphrase" }
+    /// The key Bottari made for the site, in OpenSSH's format.
+    public var privateKeyKey: String { "site.\(id.uuidString).key" }
     /// The VNC or Screen Sharing password.
     public var screenPasswordKey: String { "site.\(id.uuidString).screen" }
     /// The account a Screen Sharing password belongs to, kept beside it.
@@ -265,7 +270,13 @@ public enum SiteConnectError: Error, Equatable, Sendable {
     /// A password is saved for the site, but the Keychain would not hand it
     /// to this app; typing it again replaces the saved one.
     case passwordUnreadable(site: String, key: String)
-    case keyFileUnreadable(path: String)
+    /// The site's key file cannot be read (outside the folders the App
+    /// Sandbox lets Bottari into, or gone) and no password is saved for it;
+    /// `key` is where one would go.
+    case keyFileUnreadable(path: String, site: String, key: String)
+    /// The site logs in with a key Bottari made on another Mac, and none is
+    /// kept on this one; `key` is where a password would go.
+    case storedKeyMissing(site: String, key: String)
     /// Jump hosts refer back to each other.
     case jumpLoop(String)
 }
@@ -275,7 +286,8 @@ extension SiteConnectError: LocalizedError {
         switch self {
         case .passwordMissing(let site, _): String(localized: "\(site)의 비밀번호가 저장되어 있지 않습니다.")
         case .passwordUnreadable(let site, _): String(localized: "키체인에 저장된 \(site)의 비밀번호를 읽을 수 없습니다. 다시 입력하면 새로 저장합니다.")
-        case .keyFileUnreadable(let path): String(localized: "키 파일을 읽을 수 없습니다: \(path)")
+        case .keyFileUnreadable(let path, _, _): String(localized: "키 파일을 읽을 수 없습니다: \(path)")
+        case .storedKeyMissing(let site, _): String(localized: "이 Mac에는 \(site)의 Bottari 키가 없습니다. 비밀번호로 로그인하면 이 Mac의 키를 만들어 설치할 수 있습니다.")
         case .jumpLoop(let name): String(localized: "점프 호스트가 서로를 참조하고 있습니다: \(name)")
         }
     }
@@ -300,7 +312,8 @@ extension SavedSite {
     /// The site's credential, with secrets taken from `secrets`. A `password`
     /// passed in (just typed by the user) wins over a stored one. Default keys
     /// are read from `sshDirectory`. A site that logs in with keys but also has
-    /// a password tries the keys first, then the password, the way `ssh` does.
+    /// a password tries the keys first, then the password, the way `ssh` does;
+    /// with its key out of reach, the password alone.
     public func credential(secrets: SecretStore, password: String? = nil, sshDirectory: String? = nil, readFile: FileReader = SavedSite.readFile) throws -> SFTPCredential {
         let keys: SFTPCredential
         switch authentication {
@@ -308,10 +321,17 @@ extension SavedSite {
             keys = Self.defaultKeysCredential(sshDirectory: sshDirectory, readFile: readFile)
         case .keyFile(let path):
             guard let text = readFile(UserHome.expand(path)) else {
-                throw SiteConnectError.keyFileUnreadable(path: path)
+                if let password = try password ?? secrets.readableSecret(for: passwordKey) { return .password(password) }
+                throw SiteConnectError.keyFileUnreadable(path: path, site: name, key: passwordKey)
             }
             // An unreadable passphrase is asked for again, like a missing one.
             keys = .privateKey(text, passphrase: try secrets.readableSecret(for: passphraseKey))
+        case .storedKey:
+            guard let text = try secrets.readableSecret(for: privateKeyKey) else {
+                if let password = try password ?? secrets.readableSecret(for: passwordKey) { return .password(password) }
+                throw SiteConnectError.storedKeyMissing(site: name, key: passwordKey)
+            }
+            keys = .privateKey(text, passphrase: nil)
         case .password:
             let stored: String?
             do {

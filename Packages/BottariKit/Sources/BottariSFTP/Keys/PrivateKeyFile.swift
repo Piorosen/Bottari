@@ -30,7 +30,8 @@ enum PrivateKeyFile {
     }
 
     /// One authentication attempt per way to offer the key. RSA goes with
-    /// SHA-512 first and, for servers too old for that, SHA-1.
+    /// SHA-512 first, then SHA-256 (servers and appliances that know only
+    /// that one), and SHA-1 for servers too old for either.
     func attempts(username: String) -> [SSHAuthenticationMethod] {
         switch self {
         case .ed25519(let key): [.ed25519(username: username, privateKey: key)]
@@ -41,6 +42,9 @@ enum PrivateKeyFile {
             [
                 Self.offer(OfferedPrivateKey<RSASHA512Kind>(body: body) { data in
                     try key.signature(for: SHA512.hash(data: data), padding: .insecurePKCS1v1_5).rawRepresentation
+                }, username: username),
+                Self.offer(OfferedPrivateKey<RSASHA256Kind>(body: body) { data in
+                    try key.signature(for: SHA256.hash(data: data), padding: .insecurePKCS1v1_5).rawRepresentation
                 }, username: username),
                 Self.offer(OfferedPrivateKey<RSASHA1Kind>(body: body) { data in
                     try key.signature(for: Insecure.SHA1.hash(data: data), padding: .insecurePKCS1v1_5).rawRepresentation

@@ -48,15 +48,22 @@ enum SnapshotRenderer {
             )
             // Asked on connecting: no password saved, and keys the server refused.
             for (file, error) in [("password-missing", SiteConnectError.passwordMissing(site: nas.name, key: nas.passwordKey) as any Error),
-                                  ("password-keys", SFTPConnectError.authenticationFailed)] {
-                if let request = PasswordRequest(site: file == "password-keys" ? prod : nas, side: .left, error: error, typed: [:], sites: library.sites, failed: nil, then: nil) {
+                                  ("password-keys", SFTPConnectError.authenticationFailed),
+                                  ("password-key-unreadable", SiteConnectError.keyFileUnreadable(path: "~/.ssh/id_ed25519", site: prod.name, key: prod.passwordKey))] {
+                if let request = PasswordRequest(site: file == "password-missing" ? nas : prod, side: .left, error: error, typed: [:], sites: library.sites, failed: nil, then: nil) {
                     await render(
                         PasswordSheet(request: request) { _, _ in }.background(Palette.panel),
-                        size: CGSize(width: 400, height: 260), appearance: appearance,
+                        size: CGSize(width: 400, height: file == "password-key-unreadable" ? 320 : 260), appearance: appearance,
                         to: directory.appending(path: "\(file)-\(name).png")
                     )
                 }
             }
+            // Offered once a password got in: a key in its place.
+            await render(
+                KeySetupSheet(request: KeySetupRequest(site: nas, provider: nil, isOffer: true)).background(Palette.panel),
+                size: CGSize(width: 460, height: 360), appearance: appearance,
+                to: directory.appending(path: "key-offer-\(name).png")
+            )
             // A pane showing a PROD site; local sample files stand in for the server.
             let pane = PaneModel(provider: LocalFileProvider(), library: library)
             var site = prod

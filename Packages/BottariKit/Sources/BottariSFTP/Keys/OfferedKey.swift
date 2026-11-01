@@ -97,6 +97,15 @@ enum RSASHA512Kind: OfferedKeyKind {
     }
 }
 
+/// RSA signed with SHA-256 (RFC 8332), for servers that offer only that one.
+enum RSASHA256Kind: OfferedKeyKind {
+    static let name = "rsa-sha2-256"
+
+    static func isValid(signature: Data, for data: Data, publicKey body: Data) -> Bool {
+        RSAKeyBody(body)?.isValid(signature: signature, for: SHA256.hash(data: data)) ?? false
+    }
+}
+
 /// RSA signed with SHA-1, for servers older than OpenSSH 7.2.
 enum RSASHA1Kind: OfferedKeyKind {
     static let name = "ssh-rsa"

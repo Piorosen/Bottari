@@ -76,6 +76,7 @@ enum Diagnostics {
             let auth = switch site.authentication {
             case .defaultKeys: String(localized: "기본 키")
             case .keyFile: String(localized: "키 파일")
+            case .storedKey: String(localized: "Bottari 키")
             case .password: String(localized: "비밀번호")
             }
             var parts = ["\(site.name): SFTP \(site.endpoint.username)@\(site.endpoint.hostKeyID)", auth]

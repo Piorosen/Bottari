@@ -79,9 +79,13 @@ import Testing
         let secrets = InMemorySecretStore([prod.passphraseKey: "pp"])
 
         #expect(try prod.credential(secrets: secrets, readFile: readFile) == .privateKey("PROD KEY", passphrase: "pp"))
-        #expect(throws: SiteConnectError.keyFileUnreadable(path: "/keys/missing")) {
-            try site("x", .keyFile(path: "/keys/missing")).credential(secrets: secrets, readFile: readFile)
+        let lost = site("x", .keyFile(path: "/keys/missing"))
+        #expect(throws: SiteConnectError.keyFileUnreadable(path: "/keys/missing", site: "x", key: lost.passwordKey)) {
+            try lost.credential(secrets: secrets, readFile: readFile)
         }
+        // A saved or typed password still signs in while the key is out of reach.
+        #expect(try lost.credential(secrets: InMemorySecretStore([lost.passwordKey: "stored"]), readFile: readFile) == .password("stored"))
+        #expect(try lost.credential(secrets: secrets, password: "typed", readFile: readFile) == .password("typed"))
     }
 
     @Test func jumpHostsResolveThroughSitesConfigAndRawAddresses() throws {
@@ -112,6 +116,16 @@ import Testing
         let plan = try target.connectionPlan(sites: [gateway, target], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: readFile)
         let detoured = plan.through(try gateway.connectionPlan(sites: [gateway], sshConfig: config, secrets: InMemorySecretStore(), readFile: readFile))
         #expect(detoured.hops.map(\.endpoint) == [gateway.endpoint, SFTPEndpoint(host: "bastion.example.com", username: "me")])
+    }
+
+    @Test func storedKeysComeFromTheSecretStoreOfThisMac() throws {
+        let nas = site("nas", .storedKey)
+        #expect(try nas.credential(secrets: InMemorySecretStore([nas.privateKeyKey: "BOTTARI KEY"])) == .privateKey("BOTTARI KEY", passphrase: nil))
+        // Made on another Mac: a password is asked for, to make one here.
+        #expect(throws: SiteConnectError.storedKeyMissing(site: "nas", key: nas.passwordKey)) {
+            try nas.credential(secrets: InMemorySecretStore())
+        }
+        #expect(try nas.credential(secrets: InMemorySecretStore(), password: "typed") == .password("typed"))
     }
 
     @Test func defaultKeysAreTheKeyFilesSshTries() throws {

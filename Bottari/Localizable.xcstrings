@@ -861,6 +861,26 @@
         }
       }
     },
+    "Bottari 키": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari key"
+          }
+        }
+      }
+    },
+    "Bottari 키는 이 Mac에서 만들어 서버의 ~/.ssh/authorized_keys에 넣은 키입니다. 개인 키는 이 Mac의 키체인에만 있어서, 다른 Mac에서는 비밀번호로 한 번 로그인한 뒤 그 Mac의 키를 따로 만듭니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Bottari key is made on this Mac and put in the server’s ~/.ssh/authorized_keys. The private key stays in this Mac’s Keychain, so on another Mac you sign in with the password once and make that Mac’s own key."
+          }
+        }
+      }
+    },
     "Bottari 터널": {
       "localizations": {
         "en": {
@@ -891,12 +911,32 @@
         }
       }
     },
+    "Bottari가 만들어 이 Mac의 키체인에 둔 키. 아래 ‘키 만들고 서버에 설치…’로 만들며, Mac마다 따로 만듦": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A key Bottari made and keeps in this Mac’s Keychain. Make it with “Make a Key and Install It on the Server…” below; each Mac has its own"
+          }
+        }
+      }
+    },
     "Bottari가 쓸 폴더를 고르십시오. 고른 폴더와 그 안의 모든 것을 열 수 있게 되고, 다음에 실행할 때도 기억합니다.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Choose a folder for Bottari to use. It will be able to open that folder and everything in it, and will remember it next time."
+          }
+        }
+      }
+    },
+    "Bottari가 이 Mac에서 키를 만들어 서버의 ~/.ssh/authorized_keys에 넣고, 그 키만으로 로그인되는지 확인한 뒤 바꿉니다. 개인 키는 이 Mac의 키체인에만 둡니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottari makes a key on this Mac, puts it in the server’s ~/.ssh/authorized_keys and checks that the key alone signs in before switching. The private key stays in this Mac’s Keychain."
           }
         }
       }
@@ -1027,6 +1067,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Drive sent an unexpected response"
+          }
+        }
+      }
+    },
+    "Ed25519를 받지 않는 서버용(FIPS 모드 등).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For servers that don’t take Ed25519 (FIPS mode and the like)."
           }
         }
       }
@@ -1641,6 +1691,16 @@
         }
       }
     },
+    "SSH 키": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH Keys"
+          }
+        }
+      }
+    },
     "SSH 터널": {
       "localizations": {
         "en": {
@@ -2045,6 +2105,16 @@
         }
       }
     },
+    "macOS 샌드박스 때문에 키 파일(%@)을 읽을 수 없습니다. 키가 있는 폴더를 허용하거나, 비밀번호로 로그인하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The macOS sandbox keeps Bottari from reading the key file (%@). Allow the folder it’s in, or sign in with the password."
+          }
+        }
+      }
+    },
     "macOS 설정 따름": {
       "localizations": {
         "en": {
@@ -2313,6 +2383,16 @@
         }
       }
     },
+    "‘%@’ SSH 키 만들기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make an SSH Key for “%@”"
+          }
+        }
+      }
+    },
     "‘%@’ 버킷은 %@ 리전에 있습니다. 연결 관리에서 리전을 %@(으)로 바꾸십시오.": {
       "localizations": {
         "en": {
@@ -2393,6 +2473,16 @@
         }
       }
     },
+    "‘%@’에 SSH 키로 로그인할까요?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to “%@” with an SSH key?"
+          }
+        }
+      }
+    },
     "‘%@’에 가는 길에 거치는 점프 호스트": {
       "localizations": {
         "en": {
@@ -2433,6 +2523,16 @@
         }
       }
     },
+    "‘%@’은(는) 이제 키로 로그인합니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” now signs in with a key"
+          }
+        }
+      }
+    },
     "‘%@’의 변경 사항이 아직 서버에 올라가지 않았습니다": {
       "localizations": {
         "en": {
@@ -2459,6 +2559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "See and control the screen of “%@” in a Bottari window."
+          }
+        }
+      }
+    },
+    "‘다시 묻지 않기’ 한 서버에도 다시 묻기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask Again for Servers Marked “Don’t Ask Again”"
           }
         }
       }
@@ -2673,12 +2783,32 @@
         }
       }
     },
+    "개인 키 내보내기…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Private Key…"
+          }
+        }
+      }
+    },
     "개인 키 선택": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Choose a private key"
+          }
+        }
+      }
+    },
+    "개인 키는 암호 없이 저장됩니다. 다른 사람이 읽을 수 없는 곳에 두십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The private key is saved without a passphrase. Keep it where nobody else can read it."
           }
         }
       }
@@ -2883,6 +3013,16 @@
         }
       }
     },
+    "공개 키 복사": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Public Key"
+          }
+        }
+      }
+    },
     "공유 드라이브 포함": {
       "localizations": {
         "en": {
@@ -2899,6 +3039,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tag and Safety"
+          }
+        }
+      }
+    },
+    "권장. 짧고 빠르며 OpenSSH 6.5 이후 서버는 모두 받습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommended. Short and fast, and every server from OpenSSH 6.5 on takes it."
           }
         }
       }
@@ -3121,6 +3271,16 @@
         }
       }
     },
+    "나중에": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later"
+          }
+        }
+      }
+    },
     "남은 항목에도 적용": {
       "localizations": {
         "en": {
@@ -3217,6 +3377,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allow Another Folder…"
+          }
+        }
+      }
+    },
+    "다시 묻습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Will Ask Again"
+          }
+        }
+      }
+    },
+    "다시 묻지 않기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don’t Ask Again"
           }
         }
       }
@@ -3855,6 +4035,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn on ‘Open an HTTP proxy too’ first."
+          }
+        }
+      }
+    },
+    "먼저 비밀번호로 연결한 뒤 다시 시도하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect with the password first, then try again."
           }
         }
       }
@@ -4549,6 +4739,16 @@
         }
       }
     },
+    "비밀번호, 키 암호, Bottari 키는 macOS 키체인에만 저장됩니다. 연결 목록 파일과 iCloud 동기화 파일에는 포함되지 않습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwords, key passphrases and Bottari keys are kept only in the macOS Keychain, never in the connections file or the iCloud sync files."
+          }
+        }
+      }
+    },
     "비밀번호가 맞지 않습니다.": {
       "localizations": {
         "en": {
@@ -4565,6 +4765,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Passwords are never written to the files"
+          }
+        }
+      }
+    },
+    "비밀번호로 로그인하면 SSH 키로 바꾸기 제안": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offer an SSH key after a password sign-in"
+          }
+        }
+      }
+    },
+    "비밀번호와 키": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwords and Keys"
           }
         }
       }
@@ -5269,6 +5489,26 @@
         }
       }
     },
+    "서버에 키를 넣고 키로 로그인되는 것을 확인했습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key is on the server and signs in."
+          }
+        }
+      }
+    },
+    "서버에 키를 넣고 키로 로그인되는 것을 확인했습니다. 저장된 비밀번호는 지웠습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key is on the server and signs in. The saved password is gone."
+          }
+        }
+      }
+    },
     "서버에는 휴지통이 없으므로 되돌릴 수 없습니다. 폴더는 안의 항목까지 모두 삭제됩니다.": {
       "localizations": {
         "en": {
@@ -5365,6 +5605,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The connection to the server was lost"
+          }
+        }
+      }
+    },
+    "서버의 authorized_keys에 넣는 중…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adding it to the server’s authorized_keys…"
           }
         }
       }
@@ -6599,6 +6849,16 @@
         }
       }
     },
+    "오래된 서버와 장비용. rsa-sha2-512, rsa-sha2-256 순서로 서명하고, 둘 다 모르는 서버에만 SHA-1을 씁니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For old servers and appliances. Signs with rsa-sha2-512, then rsa-sha2-256, and with SHA-1 only for servers that know neither."
+          }
+        }
+      }
+    },
     "오른쪽": {
       "localizations": {
         "en": {
@@ -7037,6 +7297,46 @@
         }
       }
     },
+    "이 Mac에는 %@의 Bottari 키가 없습니다. 비밀번호로 로그인하면 이 Mac의 키를 만들어 설치할 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has no Bottari key for %@. Sign in with the password to make and install this Mac’s own key."
+          }
+        }
+      }
+    },
+    "이 Mac에는 아직 이 연결의 키가 없습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac has no key for this connection yet."
+          }
+        }
+      }
+    },
+    "이 Mac에는 키 없음": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No key on this Mac"
+          }
+        }
+      }
+    },
+    "이 Mac에서 SSH 키를 만들어 서버의 ~/.ssh/authorized_keys에 넣고, 이 연결을 그 키로 로그인하게 바꿉니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Makes an SSH key on this Mac, puts it in the server’s ~/.ssh/authorized_keys, and switches this connection to sign in with it."
+          }
+        }
+      }
+    },
     "이 Mac에서 로그인 필요 · %@": {
       "localizations": {
         "en": {
@@ -7133,6 +7433,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The terminal and remote screen can use this connection too"
+          }
+        }
+      }
+    },
+    "이 연결의 Bottari 키는 다른 Mac에서 만든 것이라 이 Mac에는 없습니다. 비밀번호로 로그인한 뒤 이 Mac의 키를 만들 수 있습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection’s Bottari key was made on another Mac and isn’t on this one. Sign in with the password, then make this Mac’s own key."
           }
         }
       }
@@ -8897,6 +9207,36 @@
         }
       }
     },
+    "키 만드는 중…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Making the key…"
+          }
+        }
+      }
+    },
+    "키 만들고 서버에 설치…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make a Key and Install It on the Server…"
+          }
+        }
+      }
+    },
+    "키 만들고 설치": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make and Install Key"
+          }
+        }
+      }
+    },
     "키 보내기": {
       "localizations": {
         "en": {
@@ -8967,12 +9307,72 @@
         }
       }
     },
+    "키 파일(%@)이 없습니다. 비밀번호로 로그인하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key file (%@) isn’t there. Sign in with the password."
+          }
+        }
+      }
+    },
     "키 파일을 읽을 수 없습니다: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Can’t read the key file: %@"
+          }
+        }
+      }
+    },
+    "키 폴더 허용…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Key Folder…"
+          }
+        }
+      }
+    },
+    "키로 로그인되는지 확인하는 중…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking that the key signs in…"
+          }
+        }
+      }
+    },
+    "키로 로그인되면 저장된 비밀번호 지우기": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the saved password once the key signs in"
+          }
+        }
+      }
+    },
+    "키를 만들어 서버에 넣고, 키로 로그인되면 저장된 비밀번호를 지울 수 있습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Makes a key, puts it on the server, and can delete the saved password once the key signs in"
+          }
+        }
+      }
+    },
+    "키를 서버의 ~/.ssh/authorized_keys에 넣었지만 서버가 이 키로 로그인을 받지 않습니다. sshd 설정(PubkeyAuthentication, AuthorizedKeysFile)이나 홈 폴더 권한(그룹과 다른 사용자가 쓸 수 없어야 함)을 확인하십시오. 로그인 방식은 바꾸지 않았습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key is in the server’s ~/.ssh/authorized_keys, but the server won’t take it. Check the sshd settings (PubkeyAuthentication, AuthorizedKeysFile) and the home folder’s permissions (no writing by the group or others). The sign-in method wasn’t changed."
           }
         }
       }

@@ -49,9 +49,12 @@ struct MainWindow: View {
             }
         }
         .sheet(item: $workspace.passwordRequest) { request in
-            PasswordSheet(request: request) { secret, keep in
+            PasswordSheet(request: request, retry: { workspace.retry(request) }) { secret, keep in
                 workspace.answer(request, with: secret, keeping: keep)
             }
+        }
+        .sheet(item: $workspace.keySetupRequest) { request in
+            KeySetupSheet(request: request)
         }
         .sheet(item: $workspace.siteManager) { request in
             SiteManagerSheet(library: AppServices.sites, initialSelection: request.selection, initialError: request.error) { provider, site in
