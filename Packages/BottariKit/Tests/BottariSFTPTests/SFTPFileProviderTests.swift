@@ -415,3 +415,20 @@ final class Counter: Sendable {
         count.withLock { $0 += 1 }
     }
 }
+
+@Suite(.timeLimit(.minutes(1))) struct ClosingTests {
+    /// A request the server never answers fails only once the connection is
+    /// down, so closing must not wait for it first: a task group that "waits
+    /// two seconds at most" waits for every child, and hung tests on CI.
+    @Test func closingDoesNotWaitOnARequestThatNeverEnds() async throws {
+        let server = try await TestSFTPServer.start()
+        let connection = try await SFTPConnection.open(to: server.endpoint, credential: .password(TestSFTPServer.password), hostKeys: .acceptAnything)
+        connection.track { try await Task.sleep(for: .seconds(3600)) }
+        let closed = await answer(within: .seconds(15), otherwise: false) {
+            await connection.close()
+            return true
+        }
+        #expect(closed, "close() waited on a request that never ends")
+        await server.stop()
+    }
+}

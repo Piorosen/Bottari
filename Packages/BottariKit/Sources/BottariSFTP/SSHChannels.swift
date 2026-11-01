@@ -169,25 +169,17 @@ extension SFTPFileProvider {
     public func checkPort(host: String, port: Int) async -> PortCheck {
         guard (1...65535).contains(port), let client = try? await link.live().client else { return .silent }
         let box = UncheckedSendable(client)
-        return await withTaskGroup(of: PortCheck.self) { group in
-            group.addTask {
-                do {
-                    let channel = try await box.value.createDirectTCPIPChannel(
-                        using: .init(targetHost: host, targetPort: port, originatorAddress: try SocketAddress(ipAddress: "127.0.0.1", port: 0))
-                    ) { $0.eventLoop.makeSucceededVoidFuture() }
-                    try? await channel.close()
-                    return .answering
-                } catch {
-                    return Self.isForwardingDisabled(error) ? .forwardingDisabled : .silent
-                }
+        // The server may take its own time to give up on the port.
+        return await answer(within: .seconds(5), otherwise: .silent) {
+            do {
+                let channel = try await box.value.createDirectTCPIPChannel(
+                    using: .init(targetHost: host, targetPort: port, originatorAddress: try SocketAddress(ipAddress: "127.0.0.1", port: 0))
+                ) { $0.eventLoop.makeSucceededVoidFuture() }
+                try? await channel.close()
+                return .answering
+            } catch {
+                return Self.isForwardingDisabled(error) ? .forwardingDisabled : .silent
             }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(5))
-                return .silent
-            }
-            let answer = await group.next() ?? .silent
-            group.cancelAll()
-            return answer
         }
     }
 

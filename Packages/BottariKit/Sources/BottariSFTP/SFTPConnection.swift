@@ -504,45 +504,30 @@ final class SFTPConnection: @unchecked Sendable {
         guard let pending else { return }
         keepAlive.withLock { $0?.cancel() }
         // Give tracked requests their answers first, for two seconds at most.
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for task in pending { await task.value }
-            }
-            group.addTask { try? await Task.sleep(for: .seconds(2)) }
-            await group.next()
-            group.cancelAll()
+        // A request the server never answers fails only once the connection
+        // is down, which is what comes next.
+        await answer(within: .seconds(2), otherwise: ()) {
+            for task in pending { await task.value }
         }
         // Each side is asked to close, but not waited on for long: a server
         // that has stopped answering never confirms, and behind a jump host
         // nothing underneath fails either, as the jump host itself is fine.
         // Requests still waiting on such a server would wait for ever.
-        await Self.waitAtMost(.seconds(2)) {
+        let polite = Task {
             try? await self.sftp.close()
             try? await self.client.close()
             for jump in self.jumps.reversed() {
                 try? await jump.close()
             }
         }
+        await answer(within: .seconds(2), otherwise: ()) { await polite.value }
         // The outermost connection is this Mac's own socket, which closes at
         // once and takes every channel inside it down with it.
         try? await (jumps.first ?? client).close()
+        // What was still closing now ends too; it must, before the event loop
+        // it runs on stops.
+        await answer(within: .seconds(2), otherwise: ()) { await polite.value }
         try? await group.shutdownGracefully()
-    }
-
-    /// Waits for `operation`, but no longer than `limit`; it carries on alone after that.
-    private static func waitAtMost(_ limit: Duration, for operation: @escaping @Sendable () async -> Void) async {
-        let outcome = FirstAnswer()
-        _ = await withCheckedContinuation { continuation in
-            outcome.wait(with: continuation)
-            Task {
-                await operation()
-                outcome.give(true)
-            }
-            Task {
-                try? await Task.sleep(for: limit)
-                outcome.give(false)
-            }
-        }
     }
 }
 
@@ -587,19 +572,37 @@ final class Heartbeat: Sendable {
 }
 
 /// Resumes a continuation with whichever answer comes first.
-final class FirstAnswer: Sendable {
-    private let continuation = Mutex<CheckedContinuation<Bool, Never>?>(nil)
+final class FirstOf<Value: Sendable>: Sendable {
+    private let continuation = Mutex<CheckedContinuation<Value, Never>?>(nil)
 
-    func wait(with continuation: CheckedContinuation<Bool, Never>) {
+    func wait(with continuation: CheckedContinuation<Value, Never>) {
         self.continuation.withLock { $0 = continuation }
     }
 
-    func give(_ answer: Bool) {
+    func give(_ answer: Value) {
         let waiting = continuation.withLock { current in
             defer { current = nil }
             return current
         }
         waiting?.resume(returning: answer)
+    }
+}
+
+typealias FirstAnswer = FirstOf<Bool>
+
+/// `operation`'s answer, or `fallback` once `limit` has passed, whichever
+/// comes first; the operation carries on alone after that. A task group with
+/// a sleeping child cannot do this: it waits for every child, cancelled or not,
+/// so one that never ends keeps the group from returning.
+func answer<Value: Sendable>(within limit: Duration, otherwise fallback: Value, _ operation: @escaping @Sendable () async -> Value) async -> Value {
+    let first = FirstOf<Value>()
+    return await withCheckedContinuation { continuation in
+        first.wait(with: continuation)
+        Task { first.give(await operation()) }
+        Task {
+            try? await Task.sleep(for: limit)
+            first.give(fallback)
+        }
     }
 }
 
