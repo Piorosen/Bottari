@@ -72,10 +72,11 @@ import Testing
         }
     }
 
+    /// Port 1: nothing listens there, and no test can take it, as binding it
+    /// needs root (a server's port freed and then taken by a test running
+    /// alongside made this flaky on CI).
     @Test func aClosedPortIsReportedAsRefused() async throws {
-        let server = try await TestSFTPServer.start()
-        let endpoint = server.endpoint
-        await server.stop()
+        let endpoint = SFTPEndpoint(host: "127.0.0.1", port: 1, username: "me")
         await #expect(throws: SFTPConnectError.refused(address: "127.0.0.1:\(endpoint.port)")) {
             _ = try await SFTPFileProvider.connect(
                 to: endpoint,
