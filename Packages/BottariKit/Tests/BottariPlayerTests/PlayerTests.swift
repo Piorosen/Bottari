@@ -143,6 +143,14 @@ func makeMovie(at url: URL, seconds: Int = 2) async throws {
     }
 }
 
+@Suite struct SubtitleMatchingTests {
+    @Test func onlySubtitlesNamedAfterTheVideoLoadWithIt() {
+        let folder = ["Lecture 1.mp4", "Lecture 1.srt", "Lecture 10.srt", "Lecture 1.ko.ass", "Lecture 11.srt", "Lecture 1 notes.txt"]
+            .map { FileItem(path: RemotePath("/videos/\($0)"), kind: .file) }
+        #expect(MPVPlayer.subtitles(for: folder[0], among: folder).map(\.name) == ["Lecture 1.srt", "Lecture 1.ko.ass"])
+    }
+}
+
 /// A provider whose reads never deliver anything.
 struct NeverEndingProvider: FileProvider {
     var displayName: String { "slow" }

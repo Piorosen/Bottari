@@ -184,7 +184,7 @@ public final class MPVPlayer: @unchecked Sendable {
         let stem = (video.name as NSString).deletingPathExtension
         return siblings.filter { sibling in
             ["srt", "ass", "ssa", "vtt", "sub"].contains(sibling.path.pathExtension.lowercased())
-                && sibling.name.hasPrefix(stem)
+                && sibling.name.hasPrefix(stem + ".")
         }
     }
 
