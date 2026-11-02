@@ -59,6 +59,44 @@ struct KeySetupTests {
         }
     }
 
+    /// A new key for a site takes the key Bottari made for it before off the
+    /// server, once the new one is known to log in. A key the user brought in
+    /// from a key file of their own stays on the server.
+    @Test func aNewKeyRetiresTheOneBottariMadeBefore() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let own = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let server = try await OpenSSHServer.start(authorizing: [own.publicKey])
+        defer { server.stop() }
+        let authorized = server.folder.appending(path: "authorized_keys")
+        let site = SavedSite(name: "box", endpoint: server.endpoint, authentication: .storedKey)
+        let secrets = InMemorySecretStore()
+        func connect(_ site: SavedSite, _ typed: TypedSecrets) async throws -> SFTPFileProvider {
+            let plan = try site.connectionPlan(sites: [], sshConfig: SSHConfig(text: "", directory: ""), secrets: typed.over(secrets))
+            return try await SFTPFileProvider.connect(to: plan.endpoint, credential: plan.credential, hostKeys: .acceptAnything, via: plan.hops)
+        }
+        // As the app does it: the key Bottari keeps for the site is replaced
+        // once the new one is in and checked.
+        func switchToNewKey() async throws -> NewSSHKey {
+            let key = try NewSSHKey.generate(.ed25519, comment: "bottari@test")
+            let previous = try secrets.secret(for: site.privateKeyKey).flatMap { NewSSHKey(privateKey: $0) }
+            try await site.install(key, replacing: previous, over: nil, typed: TypedSecrets(), in: authorized.path, connect: connect) { _ in }
+            try secrets.setSecret(key.privateKey, for: site.privateKeyKey)
+            return key
+        }
+        // The user's own key, copied into the Keychain from ~/.ssh.
+        try secrets.setSecret(own.privateKey, for: site.privateKeyKey)
+
+        let first = try await switchToNewKey()
+        let second = try await switchToNewKey()
+
+        let lines = try String(contentsOf: authorized, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(lines == [own.publicKey, second.publicKey])
+        await #expect(throws: SFTPConnectError.authenticationFailed) {
+            _ = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(first.privateKey), hostKeys: .acceptAnything)
+        }
+    }
+
     /// Some servers and appliances take RSA only with SHA-256.
     @Test func rsaKeysAlsoSignWithSHA256() async throws {
         let key = try NewSSHKey.generate(.rsa, comment: "bottari@test")

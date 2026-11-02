@@ -48,15 +48,6 @@ enum KeySetupOffers {
     }
 }
 
-enum KeySetupStep {
-    case generating, installing, checking
-}
-
-struct KeySetupError: LocalizedError {
-    let message: String
-    var errorDescription: String? { message }
-}
-
 extension SiteLibrary {
     /// The saved sites `site` goes through on the way, outermost first.
     func jumpSites(of site: SavedSite, visiting: Set<SavedSite.ID> = []) -> [SavedSite] {
@@ -67,11 +58,11 @@ extension SiteLibrary {
         }
     }
 
-    /// Makes a key of `kind`, puts it in the server's `~/.ssh/authorized_keys`
-    /// over `provider` (or a new connection), checks that the key alone logs
-    /// in, then keeps it in this Mac's Keychain and switches the site to it.
-    /// The saved password goes too when `forgettingPassword`. Until the key
-    /// is known to work, the site stays as it was.
+    /// Makes a key of `kind`, puts it on the server in place of the Bottari
+    /// key the site had (see `SavedSite.install`), then keeps it in this
+    /// Mac's Keychain and switches the site to it. The saved password goes
+    /// too when `forgettingPassword`. Until the key is known to work, the
+    /// site stays as it was.
     func switchToKey(
         _ site: SavedSite,
         kind: NewSSHKey.Kind,
@@ -81,42 +72,8 @@ extension SiteLibrary {
         progress: (KeySetupStep) -> Void
     ) async throws -> NewSSHKey {
         progress(.generating)
-        let comment = "bottari@" + (Host.current().localizedName ?? "Mac").replacingOccurrences(of: " ", with: "-")
-        let key = try await Task.detached { try NewSSHKey.generate(kind, comment: comment) }.value
-
-        progress(.installing)
-        if let provider, provider.isConnected {
-            try await provider.authorize(publicKey: key.publicKey)
-        } else {
-            let opened: SFTPFileProvider
-            do {
-                opened = try await connectSFTP(site, typedSecrets: typedSecrets)
-            } catch let error as SiteConnectError {
-                throw KeySetupError(message: error.localizedDescription + " " + String(localized: "먼저 비밀번호로 연결한 뒤 다시 시도하십시오."))
-            }
-            do {
-                try await opened.authorize(publicKey: key.publicKey)
-            } catch {
-                await opened.disconnect()
-                throw error
-            }
-            await opened.disconnect()
-        }
-
-        progress(.checking)
-        // The key alone, the way the next connection logs in: a stand-in
-        // site has no saved password to fall back on.
-        var probeSite = site
-        probeSite.id = UUID()
-        probeSite.authentication = .storedKey
-        var probeSecrets = TypedSecrets()
-        probeSecrets.set(key.privateKey, for: probeSite.privateKeyKey, keeping: false)
-        do {
-            let probe = try await connectSFTP(probeSite, typedSecrets: probeSecrets)
-            await probe.disconnect()
-        } catch SFTPConnectError.authenticationFailed {
-            throw KeySetupError(message: String(localized: "키를 서버의 ~/.ssh/authorized_keys에 넣었지만 서버가 이 키로 로그인을 받지 않습니다. sshd 설정(PubkeyAuthentication, AuthorizedKeysFile)이나 홈 폴더 권한(그룹과 다른 사용자가 쓸 수 없어야 함)을 확인하십시오. 로그인 방식은 바꾸지 않았습니다."))
-        }
+        let key = try await Task.detached { try NewSSHKey.generate(kind, comment: NewSSHKey.bottariComment) }.value
+        try await site.install(key, replacing: storedKey(of: site), over: provider, typed: typedSecrets, connect: { try await self.connectSFTP($0, typedSecrets: $1) }, progress: progress)
 
         try secrets.setSecret(key.privateKey, for: site.privateKeyKey)
         var updated = self.site(site.id) ?? site

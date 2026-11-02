@@ -19,11 +19,17 @@ enum PrivateKeyFile {
     /// Reads `text`. A missing or wrong passphrase and anything that is not a
     /// key read as `unreadableKey`; key kinds Bottari cannot use as `unsupportedKey`.
     init(_ text: String, passphrase: String?) throws {
+        self = try Self.read(text, passphrase: passphrase).key
+    }
+
+    /// The key in `text`, and the comment OpenSSH's format keeps with it
+    /// (empty for PEM, which has none).
+    static func read(_ text: String, passphrase: String?) throws -> (key: PrivateKeyFile, comment: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("-----BEGIN OPENSSH PRIVATE KEY-----") {
-            self = try Self.openSSH(Self.payload(of: trimmed), passphrase: passphrase)
+            return try Self.openSSH(Self.payload(of: trimmed), passphrase: passphrase)
         } else if trimmed.hasPrefix("-----BEGIN") {
-            self = try Self.pem(trimmed)
+            return (try Self.pem(trimmed), "")
         } else {
             throw SFTPConnectError.unreadableKey
         }
@@ -93,7 +99,7 @@ enum PrivateKeyFile {
 
     /// `openssh-key-v1`: cipher, KDF and its options, one public key, then the
     /// private part, encrypted unless the cipher is `none`.
-    private static func openSSH(_ data: Data, passphrase: String?) throws -> PrivateKeyFile {
+    private static func openSSH(_ data: Data, passphrase: String?) throws -> (key: PrivateKeyFile, comment: String) {
         let magic = Data("openssh-key-v1".utf8) + Data([0])
         guard data.starts(with: magic) else { throw SFTPConnectError.unreadableKey }
         var wire = SSHWire(data.dropFirst(magic.count))
@@ -130,16 +136,17 @@ enum PrivateKeyFile {
 
     /// Two equal check words (unequal means a wrong passphrase), the key type
     /// and the key, then the comment and padding.
-    private static func privateSection(_ data: Data) throws -> PrivateKeyFile {
+    private static func privateSection(_ data: Data) throws -> (key: PrivateKeyFile, comment: String) {
         var wire = SSHWire(data)
         guard try wire.readUInt32() == wire.readUInt32() else { throw SFTPConnectError.unreadableKey }
         let type = String(decoding: try wire.readString(), as: UTF8.self)
+        let key: PrivateKeyFile
         switch type {
         case "ssh-ed25519":
             _ = try wire.readString()
             let secret = try wire.readString()
             guard secret.count == 64 else { throw SFTPConnectError.unreadableKey }
-            return .ed25519(try Curve25519.Signing.PrivateKey(rawRepresentation: secret.prefix(32)))
+            key = .ed25519(try Curve25519.Signing.PrivateKey(rawRepresentation: secret.prefix(32)))
         case "ssh-rsa":
             let n = try wire.readString().mpintMagnitude
             let e = try wire.readString().mpintMagnitude
@@ -147,16 +154,17 @@ enum PrivateKeyFile {
             _ = try wire.readString() // iqmp
             let p = try wire.readString().mpintMagnitude
             let q = try wire.readString().mpintMagnitude
-            return .rsa(try _RSA.Signing.PrivateKey(n: n, e: e, d: d, p: p, q: q), body: RSAKeyBody.encode(e: e, n: n))
+            key = .rsa(try _RSA.Signing.PrivateKey(n: n, e: e, d: d, p: p, q: q), body: RSAKeyBody.encode(e: e, n: n))
         case ECDSAP256Kind.name:
-            return .p256(try P256.Signing.PrivateKey(rawRepresentation: try ecdsaScalar(&wire, size: 32)))
+            key = .p256(try P256.Signing.PrivateKey(rawRepresentation: try ecdsaScalar(&wire, size: 32)))
         case ECDSAP384Kind.name:
-            return .p384(try P384.Signing.PrivateKey(rawRepresentation: try ecdsaScalar(&wire, size: 48)))
+            key = .p384(try P384.Signing.PrivateKey(rawRepresentation: try ecdsaScalar(&wire, size: 48)))
         case ECDSAP521Kind.name:
-            return .p521(try P521.Signing.PrivateKey(rawRepresentation: try ecdsaScalar(&wire, size: 66)))
+            key = .p521(try P521.Signing.PrivateKey(rawRepresentation: try ecdsaScalar(&wire, size: 66)))
         default:
             throw SFTPConnectError.unsupportedKey(type)
         }
+        return (key, (try? wire.readString()).map { String(decoding: $0, as: UTF8.self) } ?? "")
     }
 
     /// `string curve, string Q, mpint d`, returning `d` padded to the curve's size.

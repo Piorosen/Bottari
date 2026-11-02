@@ -19,25 +19,37 @@ public struct NewSSHKey: Sendable, Equatable {
     public let kind: Kind
     public let privateKey: String
     public let publicKey: String
+    /// What the key says about itself, e.g. `bottari@MacBook`.
+    public let comment: String
 
     /// A key kept earlier, read back from its private half; nil if it is not
     /// one Bottari can use.
-    public init?(privateKey text: String, comment: String = "bottari") {
-        guard let key = try? PrivateKeyFile(text, passphrase: nil) else { return nil }
-        kind = switch key {
+    public init?(privateKey text: String) {
+        guard let read = try? PrivateKeyFile.read(text, passphrase: nil) else { return nil }
+        kind = switch read.key {
         case .ed25519: .ed25519
         case .p256, .p384, .p521: .ecdsa
         case .rsa: .rsa
         }
         privateKey = text
-        publicKey = key.publicKeyLine(comment: comment)
+        publicKey = read.key.publicKeyLine(comment: read.comment)
+        comment = read.comment
     }
 
-    private init(kind: Kind, privateKey: String, publicKey: String) {
+    private init(kind: Kind, privateKey: String, publicKey: String, comment: String) {
         self.kind = kind
         self.privateKey = privateKey
         self.publicKey = publicKey
+        self.comment = comment
     }
+
+    /// `bottari@<this Mac's name>`, the comment of the keys Bottari makes.
+    public static var bottariComment: String {
+        "bottari@" + (Host.current().localizedName ?? "Mac").replacingOccurrences(of: " ", with: "-")
+    }
+
+    /// Made by Bottari, rather than copied in from one of the user's key files.
+    public var isBottariKey: Bool { comment.hasPrefix("bottari@") }
 
     /// `SHA256:…`, as `ssh-keygen -l` prints it.
     public var fingerprint: String {
@@ -51,7 +63,7 @@ public struct NewSSHKey: Sendable, Equatable {
         case .ecdsa: .p256(P256.Signing.PrivateKey())
         case .rsa: try rsa(_RSA.Signing.PrivateKey(keySize: .bits4096))
         }
-        return NewSSHKey(kind: kind, privateKey: try key.openSSHText(comment: comment), publicKey: key.publicKeyLine(comment: comment))
+        return NewSSHKey(kind: kind, privateKey: try key.openSSHText(comment: comment), publicKey: key.publicKeyLine(comment: comment), comment: comment)
     }
 
     private static func rsa(_ key: _RSA.Signing.PrivateKey) throws -> PrivateKeyFile {
