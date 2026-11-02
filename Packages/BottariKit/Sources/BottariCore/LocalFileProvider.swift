@@ -87,7 +87,10 @@ public struct LocalFileProvider: FileProvider {
         try await write(path, from: data, resumingAt: 0)
     }
 
-    public func write(_ path: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
+    public func write(_ given: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
+        // Saving through a link writes the file it points to, as an editor
+        // would, instead of replacing the link with a plain file.
+        let path = Self.followingLinks(given)
         guard let parent = path.parent else { throw ProviderError.permissionDenied(path) }
         try requireDirectory(parent)
         let fm = FileManager.default
@@ -132,6 +135,16 @@ public struct LocalFileProvider: FileProvider {
             try? fm.removeItem(atPath: temp.string)
             throw Self.translate(error, path)
         }
+    }
+
+    /// Where writing to `path` should land: the file a link there points to,
+    /// or `path` itself when it is no link or the link leads nowhere.
+    private static func followingLinks(_ path: RemotePath) -> RemotePath {
+        guard (try? FileManager.default.attributesOfItem(atPath: path.string))?[.type] as? FileAttributeType == .typeSymbolicLink,
+              let real = realpath(path.string, nil)
+        else { return path }
+        defer { free(real) }
+        return RemotePath(String(cString: real))
     }
 
     public func checksum(_ path: RemotePath) async throws -> String {

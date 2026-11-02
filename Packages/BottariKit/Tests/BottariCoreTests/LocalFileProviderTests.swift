@@ -119,6 +119,28 @@ import Testing
         #expect(try await provider.list(dir).map(\.name) == ["app.env"])
     }
 
+    @Test func savingThroughALinkWritesTheFileItPointsTo() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let real = dir.appending("dotfiles/zshrc")
+        let link = dir.appending(".zshrc")
+        try await provider.makeDirectory(dir.appending("dotfiles"))
+        try await provider.write(real, data: Data("old".utf8))
+        try setMode(0o600, real)
+        try FileManager.default.createSymbolicLink(atPath: link.string, withDestinationPath: "dotfiles/zshrc")
+
+        try await provider.write(link, data: Data("new".utf8))
+
+        let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: link.string)
+        #expect(destination == "dotfiles/zshrc")
+        let saved = String(decoding: try await provider.readData(real), as: UTF8.self)
+        #expect(saved == "new")
+        let mode = try await provider.stat(real).permissions.map { String($0, radix: 8) }
+        #expect(mode == "600")
+        let names = try await provider.list(dir).map(\.name) + provider.list(dir.appending("dotfiles")).map(\.name)
+        #expect(names == ["dotfiles", ".zshrc", "zshrc"])
+    }
+
     @Test func failedWriteLeavesOriginalUntouched() async throws {
         let dir = try makeTempDirectory()
         defer { cleanUp(dir) }
