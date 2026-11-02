@@ -70,12 +70,13 @@ public enum TextCodec {
         }
         guard let (raw, encoding) = decoded else { return nil }
         let lineEnding = lineEnding(of: raw)
-        let text = raw.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        return (text, TextFormat(encoding: encoding, lineEnding: lineEnding))
+        return (withLF(raw), TextFormat(encoding: encoding, lineEnding: lineEnding))
     }
 
-    /// The bytes to save, or nil when the text has characters the encoding cannot hold.
+    /// The bytes to save, every line break in the format's line ending, or nil
+    /// when the text has characters the encoding cannot hold.
     public static func encode(_ text: String, as format: TextFormat) -> Data? {
+        let text = withLF(text)
         let lines = format.lineEnding == .lf ? text : text.replacingOccurrences(of: "\n", with: format.lineEnding.characters)
         switch format.encoding {
         case .utf8:
@@ -89,6 +90,11 @@ public enum TextCodec {
         case .eucKR:
             return lines.data(using: eucKR, allowLossyConversion: false)
         }
+    }
+
+    /// `text` with each line break, of whichever kind, as `\n`.
+    private static func withLF(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }
 
     /// The most common line ending, LF when there are none.

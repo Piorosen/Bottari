@@ -12,6 +12,16 @@ import Testing
         #expect(TextCodec.encode(text, as: format) == data)
     }
 
+    @Test func pastedLineEndingsAreSavedAsTheFilesOwn() {
+        let pasted = "a\r\nb\rc\n"
+        func saved(_ lineEnding: TextFormat.LineEnding) -> [UInt8]? {
+            TextCodec.encode(pasted, as: TextFormat(lineEnding: lineEnding)).map(Array.init)
+        }
+        #expect(saved(.lf) == Array("a\nb\nc\n".utf8))
+        #expect(saved(.crlf) == Array("a\r\nb\r\nc\r\n".utf8))
+        #expect(saved(.cr) == Array("a\rb\rc\r".utf8))
+    }
+
     @Test func byteOrderMarksAreKept() throws {
         let data = Data([0xEF, 0xBB, 0xBF]) + Data("한글\n".utf8)
         let (text, format) = try #require(TextCodec.decode(data))
