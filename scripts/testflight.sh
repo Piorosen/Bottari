@@ -2,7 +2,7 @@
 # Builds Bottari for the Mac App Store and hands it to App Store Connect, where
 # TestFlight gives each build to the internal testers:
 #
-#   scripts/testflight.sh           # archive and export a signed .pkg into .build/appstore/
+#   scripts/testflight.sh           # archive and export a signed .pkg into .build/testflight.noindex/
 #   scripts/testflight.sh --upload  # the same, then upload it to App Store Connect
 #
 # Signing and upload use an App Store Connect API key (Users and Access ›
@@ -25,8 +25,10 @@ if ! xcodebuild -version >/dev/null 2>&1 && [[ -d /Applications/Xcode.app ]]; th
 fi
 [[ -f "$key_path" ]] || { echo "API 키 파일이 없어요: $key_path" >&2; exit 1; }
 
-out=.build/appstore
-derived=.build/xcode-appstore
+# ".noindex" keeps Spotlight out, so these copies of the app are not offered
+# as one more "Bottari" in Spotlight and Open With.
+out=.build/testflight.noindex
+derived=.build/xcode-testflight.noindex
 archive=$out/Bottari.xcarchive
 rm -rf "$out"
 mkdir -p "$out"
@@ -61,7 +63,12 @@ PLIST
 xcodebuild -exportArchive -archivePath "$archive" -exportPath "$out" -exportOptionsPlist "$out/ExportOptions.plist" "${auth[@]}" -quiet
 
 step "끝"
+# Xcode registers every app it builds with Launch Services; take these back.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+find "$derived" "$out" -name '*.app' -type d -prune -exec "$lsregister" -u {} \; 2>/dev/null || true
 if (( upload )); then
+  # App Store Connect has the build and its symbols now.
+  rm -rf "$out"
   echo "App Store Connect에 올렸어요. 처리가 끝나면 TestFlight 내부 테스트 그룹에 자동으로 배포돼요."
 else
   ls -lh "$out"/*.pkg

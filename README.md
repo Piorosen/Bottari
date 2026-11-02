@@ -156,7 +156,7 @@ TestFlight로만 배포한다. App Store Connect의 앱(번들 ID `io.github.pio
 
 ```sh
 make testflight   # 보관, 서명(인증서와 프로필은 Xcode가 API 키로 만든다), App Store Connect에 업로드
-make archive      # 올리지 않고 .build/appstore/에 서명된 .pkg만 만든다
+make archive      # 올리지 않고 .build/testflight.noindex/에 서명된 .pkg만 만든다
 ```
 
 빌드 번호는 올릴 때의 시각(`YYYYMMDDhhmm`)이다. 버전은 `MARKETING_VERSION`을 따른다. 수출 규정(암호화) 답은 `Config/Info.plist`의 `ITSAppUsesNonExemptEncryption`에 있어 빌드마다 묻지 않는다.

@@ -39,7 +39,7 @@ snapshots: build
 open:
 	open $(PROJECT)
 
-# Signed for the App Store, into .build/appstore (see Config/appstore.env.example).
+# Signed for the App Store, into .build/testflight.noindex (see Config/appstore.env.example).
 archive:
 	scripts/testflight.sh
 
