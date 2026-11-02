@@ -29,7 +29,7 @@ final class MemoryFileProvider: FileProvider {
         var failingStats: Set<String> = []
         /// Writes still to fail as if the connection dropped midway.
         var droppedWrites = 0
-        var droppedMoves = 0
+        var movesWithLostReply = 0
         /// How names count as the same, e.g. like the Mac's disk.
         var matching = NameMatching.exact
     }
@@ -210,8 +210,8 @@ final class MemoryFileProvider: FileProvider {
                 state.entries[path] = nil
                 state.entries[RemotePath(to.string + "/" + path.components.dropFirst(from.components.count).joined(separator: "/"))] = entry
             }
-            if state.droppedMoves > 0 {
-                state.droppedMoves -= 1
+            if state.movesWithLostReply > 0 {
+                state.movesWithLostReply -= 1
                 throw ProviderError.disconnected("연결이 끊어졌어요")
             }
         }

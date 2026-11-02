@@ -386,7 +386,7 @@ import Testing
         TransferQueue.retryPause = .milliseconds(1)
         server.addFile("/src/x.txt", "new")
         server.addFile("/dst/x.txt", "old")
-        server.state.withLock { $0.droppedMoves = 1 }
+        server.state.withLock { $0.movesWithLostReply = 1 }
 
         let job = try await finished(try await transfer(.move, ["/src/x.txt"], from: server, to: server, into: "/dst", policy: .overwrite))
 

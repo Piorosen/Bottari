@@ -258,7 +258,7 @@ struct OpenSSHTests {
         let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
         let tree = RemotePath(folder.path).appending("tree")
         try FileManager.default.createDirectory(atPath: tree.string, withIntermediateDirectories: true)
-        let name = String(repeating: "a", count: 250) + ".txt"
+        let name = String(repeating: "a", count: FileNames.maxNameBytes - 5) + ".txt"
         let file = tree.appending(name)
 
         try await withServer(authorizing: [key.publicKey]) { server in
