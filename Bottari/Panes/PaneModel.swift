@@ -60,9 +60,10 @@ final class PaneModel {
     private var backStack: [RemotePath] = []
     private var forwardStack: [RemotePath] = []
     private var siteID: SavedSite.ID?
-    @ObservationIgnored private var loadGeneration = 0
-    /// Bumped by every connect and switch, so only the newest one lands.
-    @ObservationIgnored private var placeGeneration = 0
+    /// Every listing takes a turn, so only the newest one shows.
+    private let loads = Turns()
+    /// Every connect and switch takes a turn, so only the newest one lands.
+    private let places = Turns()
     /// Ended transfers this pane has already reloaded for.
     @ObservationIgnored private var seenTransfers: Set<TransferJob.ID> = []
     @ObservationIgnored private var hasStarted = false
@@ -121,28 +122,26 @@ final class PaneModel {
 
     /// Connects to a saved site and shows it in this pane. `typedSecrets` are
     /// passwords the user just typed for it (see `SiteLibrary.connect`).
-    /// A connect overtaken by a newer one (the user clicked elsewhere
-    /// meanwhile) closes what it opened and throws `CancellationError`.
+    /// A connect overtaken by a newer place (the user clicked elsewhere
+    /// meanwhile) closes what it opened and throws `CancellationError`,
+    /// whether it got in or failed.
     func connect(to site: SavedSite, typedSecrets: TypedSecrets = TypedSecrets()) async throws {
-        placeGeneration += 1
-        let generation = placeGeneration
+        let turn = places.take()
         connectingSite = site
-        defer { if generation == placeGeneration { connectingSite = nil } }
-        let provider = try await library.connect(site, typedSecrets: typedSecrets)
-        guard generation == placeGeneration else {
-            await AppServices.connections.release(provider)
-            throw CancellationError()
+        defer { if places.isNewest(turn) { connectingSite = nil } }
+        let provider = try await places.run(turn, discarding: { await AppServices.connections.release($0) }) {
+            try await library.connect(site, typedSecrets: typedSecrets)
         }
-        await switchProvider(to: provider, site: site)
+        guard await switchProvider(to: provider, site: site) else { throw CancellationError() }
     }
 
     /// Shows a different location in this pane, starting at the site's start
-    /// folder or the provider's home, and closes the connection the pane was using before.
-    func switchProvider(to newProvider: any FileProvider, site: SavedSite? = nil) async {
-        if connectingSite?.id != site?.id || site == nil {
-            placeGeneration += 1
-            connectingSite = nil
-        }
+    /// folder or the provider's home, and closes the connection the pane was
+    /// using before. False when a newer place was chosen before it opened.
+    @discardableResult
+    func switchProvider(to newProvider: any FileProvider, site: SavedSite? = nil) async -> Bool {
+        let turn = places.take()
+        connectingSite = nil
         // Results and downloads from the old place mean nothing here.
         endSearch()
         cancelPreviewDownload()
@@ -157,10 +156,11 @@ final class PaneModel {
         backStack = []
         forwardStack = []
         hasStarted = true
-        if await !load(start), start != newProvider.home, await load(newProvider.home) {
+        if await load(start) == .failed, start != newProvider.home, await load(newProvider.home) == .shown {
             errorMessage = String(localized: "시작 폴더를 열 수 없어 홈 폴더를 열었습니다: \(start.string)")
         }
         await AppServices.connections.release(previous)
+        return places.isNewest(turn)
     }
 
     /// Trades places with `other`: where each pane is, what it shows, its
@@ -171,10 +171,9 @@ final class PaneModel {
         cancelPreviewDownload()
         other.cancelPreviewDownload()
         // Anything either pane was still loading or connecting to is stale now.
-        loadGeneration += 1
-        other.loadGeneration += 1
-        placeGeneration += 1
-        other.placeGeneration += 1
+        for turns in [loads, other.loads, places, other.places] {
+            _ = turns.take()
+        }
         connectingSite = nil
         other.connectingSite = nil
         isLoading = false
@@ -230,7 +229,7 @@ final class PaneModel {
     func open(_ destination: RemotePath) async {
         guard destination != path else { return }
         let origin = path
-        if await load(destination) {
+        if await load(destination) == .shown {
             backStack.append(origin)
             forwardStack.removeAll()
         }
@@ -243,7 +242,7 @@ final class PaneModel {
             return
         }
         let origin = path
-        if await load(previous) {
+        if await load(previous) == .shown {
             backStack.removeLast()
             forwardStack.append(origin)
             selection = [origin]
@@ -253,7 +252,7 @@ final class PaneModel {
     func goForward() async {
         guard let next = forwardStack.last else { return }
         let origin = path
-        if await load(next) {
+        if await load(next) == .shown {
             forwardStack.removeLast()
             backStack.append(origin)
         }
@@ -608,19 +607,21 @@ final class PaneModel {
         return selectedItems.map { "\(address):\($0.path.string)" }.joined(separator: "\n")
     }
 
-    /// Lists `destination` and shows it. Returns false if it failed or a newer
-    /// navigation started meanwhile, in which case the pane stays where it was.
+    private enum Landing {
+        case shown, failed, overtaken
+    }
+
+    /// Lists `destination` and shows it. Unless it is shown, the pane stays
+    /// where it was: the listing failed, or a newer one started meanwhile.
     @discardableResult
-    private func load(_ destination: RemotePath, keepingSelection: Bool = false) async -> Bool {
-        loadGeneration += 1
-        let generation = loadGeneration
+    private func load(_ destination: RemotePath, keepingSelection: Bool = false) async -> Landing {
+        let turn = loads.take()
         isLoading = true
         defer {
-            if generation == loadGeneration { isLoading = false }
+            if loads.isNewest(turn) { isLoading = false }
         }
         do {
-            let listing = try await provider.list(destination)
-            guard generation == loadGeneration else { return false }
+            let listing = try await loads.run(turn) { try await provider.list(destination) }
             if destination != path {
                 endSearch()
                 cancelPreviewDownload()
@@ -632,9 +633,10 @@ final class PaneModel {
             }
             errorMessage = nil
             lockedFolder = nil
-            return true
+            return .shown
+        } catch is CancellationError {
+            return .overtaken
         } catch {
-            guard generation == loadGeneration else { return false }
             // The sandbox, not the folder, says no: go there and ask for it.
             if isLocal, case ProviderError.permissionDenied = error, !FolderAccess.shared.covers(destination) {
                 if destination != path {
@@ -646,10 +648,10 @@ final class PaneModel {
                 selection = []
                 errorMessage = nil
                 lockedFolder = destination
-                return true
+                return .shown
             }
             errorMessage = error.localizedDescription
-            return false
+            return .failed
         }
     }
 }

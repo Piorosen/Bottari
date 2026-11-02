@@ -157,7 +157,7 @@ final class Workspace {
         let pane = pane(side ?? activeSide)
         Task {
             if !pane.provider.isLocal {
-                await pane.switchProvider(to: LocalFileProvider())
+                guard await pane.switchProvider(to: LocalFileProvider()) else { return }
             }
             await pane.open(path)
         }
@@ -257,7 +257,9 @@ final class Workspace {
         let folder = source.path
         if source.provider.isLocal {
             Task {
-                if !target.provider.isLocal { await target.switchProvider(to: LocalFileProvider()) }
+                if !target.provider.isLocal {
+                    guard await target.switchProvider(to: LocalFileProvider()) else { return }
+                }
                 await target.open(folder)
             }
         } else if let site = source.site {
