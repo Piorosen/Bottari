@@ -87,15 +87,16 @@ final class OpenSSHServer {
         self.ended = ended
     }
 
-    static func start(authorizing publicKeys: [String], extraConfig: [String] = []) async throws -> OpenSSHServer {
+    /// `ports` are tried in turn; a test picks them only to prove that a
+    /// port another server holds is passed over.
+    static func start(authorizing publicKeys: [String], extraConfig: [String] = [], ports: [Int] = (0..<5).map { _ in Int.random(in: 30000..<60000) }) async throws -> OpenSSHServer {
         let folder = try OpenSSH.scratch()
         let hostKey = folder.appending(path: "host_ed25519")
         try OpenSSH.run(OpenSSH.keygen, ["-q", "-t", "ed25519", "-N", "", "-f", hostKey.path])
         let authorized = folder.appending(path: "authorized_keys")
         try publicKeys.joined(separator: "\n").appending("\n").write(to: authorized, atomically: true, encoding: .utf8)
         var lastError: (any Error)?
-        for _ in 0..<5 {
-            let port = Int.random(in: 30000..<60000)
+        for port in ports {
             let config = folder.appending(path: "sshd_config")
             try ([
                 "Port \(port)",
@@ -111,29 +112,27 @@ final class OpenSSHServer {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: OpenSSH.sshd)
             process.arguments = ["-D", "-f", config.path, "-E", folder.appending(path: "sshd.log").path]
-            let server = OpenSSHServer(folder: folder, port: port, process: process, ended: try process.start())
+            let ended = try process.start()
+            let server = OpenSSHServer(folder: folder, port: port, process: process, ended: ended)
             if await server.waitUntilListening() { return server }
             lastError = TestFailure("sshd did not start: \((try? String(contentsOf: folder.appending(path: "sshd.log"), encoding: .utf8)) ?? "")")
-            server.stop()
+            // The next port is tried with the same host key and keys.
+            process.stop(waitingOn: ended)
         }
+        try? FileManager.default.removeItem(at: folder)
         throw lastError ?? TestFailure("sshd did not start")
     }
 
+    /// Whether this sshd holds its port, as its own log says. Connecting to
+    /// the port proves nothing: an sshd that failed to bind is still running
+    /// for a moment, while another test's server answers there.
     private func waitUntilListening() async -> Bool {
-        for _ in 0..<50 {
+        let log = folder.appending(path: "sshd.log")
+        for _ in 0..<100 {
             guard process.isRunning else { return false }
-            let fd = socket(AF_INET, SOCK_STREAM, 0)
-            var address = sockaddr_in()
-            address.sin_family = sa_family_t(AF_INET)
-            address.sin_port = in_port_t(UInt16(port).bigEndian)
-            address.sin_addr.s_addr = inet_addr("127.0.0.1")
-            let connected = withUnsafePointer(to: &address) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
+            if let text = try? String(contentsOf: log, encoding: .utf8), text.contains("Server listening on 127.0.0.1 port \(port).") {
+                return true
             }
-            close(fd)
-            if connected == 0 { return true }
             try? await Task.sleep(for: .milliseconds(50))
         }
         return false

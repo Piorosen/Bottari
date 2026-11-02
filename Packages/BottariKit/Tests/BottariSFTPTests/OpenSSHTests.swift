@@ -12,6 +12,24 @@ import Testing
 struct OpenSSHTests {
     // MARK: Reading key files
 
+    /// A test server never takes another server's port for its own, so each
+    /// test logs in to the server it started. Run alongside other suites,
+    /// two servers draw the same random port now and then.
+    @Test func aServerStartedOnATakenPortMovesToAnother() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let holderKey = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let ownKey = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let holder = try await OpenSSHServer.start(authorizing: [holderKey.publicKey])
+        defer { holder.stop() }
+        let server = try await OpenSSHServer.start(authorizing: [ownKey.publicKey], ports: [holder.port, holder.port + 1])
+        defer { server.stop() }
+
+        #expect(server.port != holder.port)
+        let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(ownKey.privateKey), hostKeys: .acceptAnything)
+        await provider.disconnect()
+    }
+
     @Test(arguments: [
         ("ed25519", nil, nil),
         ("ecdsa", 256, "aes256-gcm@openssh.com"),
