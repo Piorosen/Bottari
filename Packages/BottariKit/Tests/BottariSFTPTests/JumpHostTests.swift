@@ -112,6 +112,37 @@ import Testing
         ])
     }
 
+    @Test func jumpHostsGetTheSettingsSshConfigHasForThem() throws {
+        let config = SSHConfig(
+            text: """
+            Host *.corp
+              User admin
+              IdentityFile ~/.ssh/corp
+            Host gw
+              HostName gw.example.com
+              Port 2222
+            Host db
+              ProxyJump gw.corp
+            """,
+            directory: "/Users/me/.ssh",
+            home: "/Users/me",
+            localUser: "me"
+        )
+        let files = ["/Users/me/.ssh/corp": "CORP KEY", "/Users/me/.ssh/id_ed25519": "MY KEY"]
+        let db = SavedSite(importing: config.resolve("db"), defaultUser: "me", fileExists: { files[$0] != nil })
+        let plan = try db.connectionPlan(sites: [db], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: { files[$0] })
+        // Only a wildcard block names gw.corp, as `ssh -J gw.corp` would read it.
+        #expect(plan.hops == [SSHHop(endpoint: SFTPEndpoint(host: "gw.corp", username: "admin"), credential: .privateKey("CORP KEY", passphrase: nil))])
+
+        // A user or port written in the hop wins; the alias still says where it is.
+        let app = site("app", .defaultKeys, via: ["ops@gw", "ops@gw:2200"])
+        let hops = try app.connectionPlan(sites: [app], sshConfig: config, secrets: InMemorySecretStore(), defaultUser: "me", readFile: { files[$0] }).hops
+        #expect(hops.map(\.endpoint) == [
+            SFTPEndpoint(host: "gw.example.com", port: 2222, username: "ops"),
+            SFTPEndpoint(host: "gw.example.com", port: 2200, username: "ops"),
+        ])
+    }
+
     @Test func aTunnelsServerGoesInFrontAsTheFirstHop() throws {
         let target = site("prod", .keyFile(path: "/keys/prod"), via: ["bastion"])
         let gateway = site("gateway", .keyFile(path: "/keys/prod"))

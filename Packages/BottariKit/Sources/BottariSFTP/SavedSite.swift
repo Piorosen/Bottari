@@ -383,14 +383,14 @@ extension SavedSite {
 
     /// `[user@]host[:port]`, as ProxyJump writes a hop. An IPv6 address
     /// comes bare (`2001:db8::1`, no port) or in brackets (`[2001:db8::1]:2222`).
-    static func endpoint(parsingHop text: String, defaultUser: String) -> SFTPEndpoint {
+    static func endpoint(parsingHop text: String, defaultUser: String, defaultPort: Int = 22) -> SFTPEndpoint {
         var rest = Substring(text)
         var user = defaultUser
         if let at = rest.lastIndex(of: "@") {
             user = String(rest[..<at])
             rest = rest[rest.index(after: at)...]
         }
-        var port = 22
+        var port = defaultPort
         if rest.hasPrefix("["), let close = rest.firstIndex(of: "]") {
             let after = rest[rest.index(after: close)...]
             if after.hasPrefix(":"), let parsed = Int(after.dropFirst()) { port = parsed }
@@ -415,22 +415,25 @@ private struct HopResolver {
         var hops: [SSHHop] = []
         for name in names {
             guard !visiting.contains(name) else { throw SiteConnectError.jumpLoop(name) }
-            let site: SavedSite? = sites.first { $0.name == name || $0.sshConfigAlias == name }
-                ?? (sshConfig.aliases.contains(name)
-                    ? SavedSite(importing: sshConfig.resolve(name), defaultUser: defaultUser, fileExists: { readFile($0) != nil })
-                    : nil)
-            if let site {
-                // A jump host can have its own jump hosts; those come first.
-                hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
-                hops.append(SSHHop(
-                    endpoint: site.endpoint,
-                    credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile)
-                ))
-            } else {
-                let credential = SavedSite.defaultKeysCredential(sshDirectory: sshConfig.directory, readFile: readFile)
-                hops.append(SSHHop(endpoint: SavedSite.endpoint(parsingHop: name, defaultUser: defaultUser), credential: credential))
-            }
+            let site = sites.first { $0.name == name || $0.sshConfigAlias == name } ?? configuredSite(for: name)
+            // A jump host can have its own jump hosts; those come first.
+            hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
+            hops.append(SSHHop(
+                endpoint: site.endpoint,
+                credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile)
+            ))
         }
         return hops
+    }
+
+    /// `[user@]host[:port]` the way `ssh -J` reaches it: with what
+    /// `sshConfig` says for `host`, wildcard blocks included, and the user
+    /// and port written in the hop over the configured ones.
+    private func configuredSite(for hop: String) -> SavedSite {
+        var host = sshConfig.resolve(SavedSite.endpoint(parsingHop: hop, defaultUser: defaultUser).host)
+        let typed = SavedSite.endpoint(parsingHop: hop, defaultUser: host.user ?? defaultUser, defaultPort: host.port)
+        host.user = typed.username
+        host.port = typed.port
+        return SavedSite(importing: host, defaultUser: defaultUser, fileExists: { readFile($0) != nil })
     }
 }
