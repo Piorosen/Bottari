@@ -85,13 +85,8 @@ final class EditorModel {
     // MARK: - Saving
 
     /// Uploads the text, unless the server's copy changed since it was opened
-    /// (then `conflict` is set).
-    func save() async {
-        await save(over: nil)
-    }
-
-    /// Uploads the text; over `newer`, that overwrites the server's copy it found.
-    private func save(over newer: EditedFile.Conflict?) async {
+    /// (then `conflict` is set); over `newer`, that overwrites the server's copy it found.
+    func save(over newer: EditedFile.Conflict? = nil) async {
         guard !isReadOnly else {
             notice = String(localized: "읽기 전용 서버에는 저장할 수 없습니다.")
             return

@@ -35,11 +35,7 @@ public struct LocalFileProvider: FileProvider {
     }
 
     public func realPath(_ path: RemotePath) async throws -> RemotePath {
-        guard let resolved = realpath(path.string, nil) else {
-            throw Self.translate(POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO), path)
-        }
-        defer { free(resolved) }
-        return RemotePath(String(cString: resolved))
+        try mapErrors(path) { try Self.resolve(path) }
     }
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
@@ -146,10 +142,17 @@ public struct LocalFileProvider: FileProvider {
     /// or `path` itself when it is no link or the link leads nowhere.
     private static func followingLinks(_ path: RemotePath) -> RemotePath {
         guard (try? FileManager.default.attributesOfItem(atPath: path.string))?[.type] as? FileAttributeType == .typeSymbolicLink,
-              let real = realpath(path.string, nil)
+              let real = try? resolve(path)
         else { return path }
-        defer { free(real) }
-        return RemotePath(String(cString: real))
+        return real
+    }
+
+    private static func resolve(_ path: RemotePath) throws -> RemotePath {
+        guard let resolved = realpath(path.string, nil) else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        defer { free(resolved) }
+        return RemotePath(String(cString: resolved))
     }
 
     public func checksum(_ path: RemotePath) async throws -> String {

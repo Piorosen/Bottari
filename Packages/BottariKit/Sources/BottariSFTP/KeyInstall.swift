@@ -38,13 +38,7 @@ extension SavedSite {
             } catch let error as SiteConnectError {
                 throw KeySetupError(message: error.localizedDescription + " " + String(localized: "먼저 비밀번호로 연결한 뒤 다시 시도하십시오."))
             }
-            do {
-                try await opened.authorize(publicKey: key.publicKey, in: file)
-            } catch {
-                await opened.disconnect()
-                throw error
-            }
-            await opened.disconnect()
+            try await disconnecting(opened) { try await opened.authorize(publicKey: key.publicKey, in: file) }
         }
 
         progress(.checking)
@@ -62,15 +56,11 @@ extension SavedSite {
         } catch SFTPConnectError.authenticationFailed {
             throw KeySetupError(message: String(localized: "키를 서버의 ~/.ssh/authorized_keys에 넣었지만 서버가 이 키로 로그인을 받지 않습니다. sshd 설정(PubkeyAuthentication, AuthorizedKeysFile)이나 홈 폴더 권한(그룹과 다른 사용자가 쓸 수 없어야 함)을 확인하십시오. 로그인 방식은 바꾸지 않았습니다."))
         }
-        do {
+        try await disconnecting(probe) {
             if let previous, previous.isBottariKey {
                 try await probe.unauthorize(publicKey: previous.publicKey, in: file)
             }
-        } catch {
-            await probe.disconnect()
-            throw error
         }
-        await probe.disconnect()
     }
 
     /// The key that deleting the site takes off its server: the one Bottari
@@ -94,15 +84,24 @@ extension SavedSite {
     ) async throws -> NewSSHKey? {
         guard let key = removableKey(in: secrets) else { return nil }
         let provider = try await connect(self)
-        do {
-            try await provider.unauthorize(publicKey: key.publicKey, in: file)
-        } catch {
-            await provider.disconnect()
-            throw error
-        }
-        await provider.disconnect()
+        try await disconnecting(provider) { try await provider.unauthorize(publicKey: key.publicKey, in: file) }
         return key
     }
+}
+
+/// Runs `body`, then closes `provider` whether it succeeded or threw.
+private func disconnecting(
+    _ provider: SFTPFileProvider,
+    isolation: isolated (any Actor)? = #isolation,
+    _ body: () async throws -> Void
+) async throws {
+    do {
+        try await body()
+    } catch {
+        await provider.disconnect()
+        throw error
+    }
+    await provider.disconnect()
 }
 
 extension SFTPFileProvider {
