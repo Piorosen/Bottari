@@ -11,13 +11,15 @@ public final class FolderAccess: @unchecked Sendable {
     public static let isSandboxed = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
 
     private let defaults: UserDefaults
+    private let sandboxed: Bool
     private let key = "folderAccess.bookmarks"
     private let lock = NSLock()
     /// Path → the bookmark-resolved URL whose access is open for the whole run.
     private var opened: [String: URL] = [:]
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, sandboxed: Bool = FolderAccess.isSandboxed) {
         self.defaults = defaults
+        self.sandboxed = sandboxed
     }
 
     /// What the user allowed, sorted, for listing them.
@@ -27,12 +29,15 @@ public final class FolderAccess: @unchecked Sendable {
 
     /// Opens everything allowed earlier; call once at launch.
     public func restore() {
-        guard Self.isSandboxed else { return }
+        guard sandboxed else { return }
         var kept: [Data] = []
         for bookmark in defaults.array(forKey: key) as? [Data] ?? [] {
             var isStale = false
             guard let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], bookmarkDataIsStale: &isStale),
-                  url.startAccessingSecurityScopedResource() else { continue }
+                  url.startAccessingSecurityScopedResource() else {
+                if Self.isOnAbsentVolume(bookmark) { kept.append(bookmark) }
+                continue
+            }
             let fresh = isStale ? (try? url.bookmarkData(options: [.withSecurityScope])) : bookmark
             kept.append(fresh ?? bookmark)
             lock.withLock { opened[url.path] = url }
@@ -44,7 +49,7 @@ public final class FolderAccess: @unchecked Sendable {
     /// from now on, also after relaunching.
     public func remember(_ url: URL) {
         // Something already reachable (inside an allowed folder, Downloads) needs no bookmark of its own.
-        guard Self.isSandboxed, !covers(RemotePath(url.path)) else { return }
+        guard sandboxed, !covers(RemotePath(url.path)) else { return }
         guard let bookmark = try? url.bookmarkData(options: [.withSecurityScope]) else { return }
         _ = url.startAccessingSecurityScopedResource()
         lock.withLock {
@@ -57,11 +62,21 @@ public final class FolderAccess: @unchecked Sendable {
         }
         var bookmarks = (defaults.array(forKey: key) as? [Data] ?? []).filter { data in
             var isStale = false
-            guard let kept = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope, .withoutUI], bookmarkDataIsStale: &isStale) else { return false }
+            guard let kept = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope, .withoutUI], bookmarkDataIsStale: &isStale) else {
+                return Self.isOnAbsentVolume(data)
+            }
             return !RemotePath(url.path).isAncestor(of: RemotePath(kept.path)) && kept.path != url.path
         }
         bookmarks.append(bookmark)
         defaults.set(bookmarks, forKey: key)
+    }
+
+    /// Whether `bookmark` is on a volume that is not mounted now (a disk not
+    /// plugged in, a share not connected), rather than on one where what it
+    /// points at is gone. The bookmark is kept for when the volume is back.
+    private static func isOnAbsentVolume(_ bookmark: Data) -> Bool {
+        guard let volume = URL.resourceValues(forKeys: [.volumeURLKey], fromBookmarkData: bookmark)?.volume else { return false }
+        return (try? volume.resourceValues(forKeys: [.volumeURLKey]))?.volume?.path != volume.path
     }
 
     /// Stops using a folder the user allowed before.
@@ -81,7 +96,7 @@ public final class FolderAccess: @unchecked Sendable {
     /// Whether Bottari can reach `path`: always outside the sandbox; inside it,
     /// in a folder the user allowed, the Downloads folder, or the app's own container.
     public func covers(_ path: RemotePath) -> Bool {
-        guard Self.isSandboxed else { return true }
+        guard sandboxed else { return true }
         let always = [RemotePath(NSHomeDirectory()), RemotePath(UserHome.path).appending("Downloads")]
         if always.contains(where: { $0 == path || $0.isAncestor(of: path) }) { return true }
         return lock.withLock { opened.keys.contains { RemotePath($0) == path || RemotePath($0).isAncestor(of: path) } }
