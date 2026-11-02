@@ -165,6 +165,44 @@ struct OpenSSHTests {
         }
     }
 
+    @Test func aLinkThatCannotBeDeletedLeavesWhatItPointsTo() async throws {
+        let folder = try OpenSSH.scratch()
+        let fm = FileManager.default
+        let locked = folder.appending(path: "locked")
+        let kept = folder.appending(path: "project/keep.txt")
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try? fm.removeItem(at: folder)
+        }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        try fm.createDirectory(at: folder.appending(path: "project"), withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: kept)
+        try fm.createDirectory(at: locked, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: locked.appending(path: "ext").path, withDestinationPath: "../project")
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+
+        try await withServer(authorizing: [key.publicKey]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+            let lockedPath = RemotePath(locked.path)
+
+            await #expect(throws: ProviderError.permissionDenied(lockedPath.appending("ext"))) {
+                try await provider.delete(lockedPath.appending("ext"))
+            }
+            #expect((try? String(contentsOf: kept, encoding: .utf8)) == "keep")
+            await #expect(throws: ProviderError.permissionDenied(lockedPath.appending("ext"))) {
+                try await provider.delete(lockedPath)
+            }
+            #expect((try? String(contentsOf: kept, encoding: .utf8)) == "keep")
+            #expect((try? fm.destinationOfSymbolicLink(atPath: locked.appending(path: "ext").path)) == "../project")
+
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try await provider.delete(lockedPath)
+            #expect(!fm.fileExists(atPath: locked.path))
+            #expect((try? String(contentsOf: kept, encoding: .utf8)) == "keep")
+        }
+    }
+
     @Test func aFolderAsSFTPShowsItIsFoundForTheShell() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

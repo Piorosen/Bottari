@@ -393,7 +393,9 @@ public struct SFTPFileProvider: FileProvider {
         } catch {
             let translated = Self.translate(error, path)
             if case ProviderError.notFound = translated { throw translated }
-            guard let children = try? await list(path) else { throw translated }
+            // A link that would not unlink is no folder to empty: listing it
+            // lists the folder it points to.
+            guard await isLink(path) == false, let children = try? await list(path) else { throw translated }
             for child in children {
                 try await delete(child.path)
             }
@@ -403,6 +405,17 @@ public struct SFTPFileProvider: FileProvider {
                 throw Self.translate(error, path)
             }
         }
+    }
+
+    /// Whether `path` itself is a symbolic link, or nil when the server will
+    /// not say. Citadel sends no lstat, so this checks whether resolving the
+    /// path leads somewhere other than its own name in its resolved parent.
+    private func isLink(_ path: RemotePath) async -> Bool? {
+        guard let parent = path.parent, let sftp = try? await link.live().sftp else { return nil }
+        async let real = sftp.getRealPath(atPath: path.string)
+        async let realParent = sftp.getRealPath(atPath: parent.string)
+        guard let real = try? await real, let realParent = try? await realParent else { return nil }
+        return RemotePath(real) != RemotePath(realParent).appending(path.name)
     }
 
     // MARK: - Pipelining
