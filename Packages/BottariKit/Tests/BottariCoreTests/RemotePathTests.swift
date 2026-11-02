@@ -57,6 +57,17 @@ import Testing
         #expect(!RemotePath("/var/w").isAncestor(of: site))
     }
 
+    @Test func partialNamesStayWithinTheNameLimitAndApart() {
+        #expect(RemotePath("/var/www/index.html").partialWritePath == "/var/www/.index.html.bottari-part")
+        let long = String(repeating: "가", count: 250)
+        let first = RemotePath("/d/\(long)a.txt").partialWritePath
+        let second = RemotePath("/d/\(long)b.txt").partialWritePath
+        #expect(first.parent == "/d")
+        #expect(first.name.utf8.count <= 255 && first.name.hasPrefix(".") && first.name.hasSuffix(".bottari-part"))
+        #expect(first != second)
+        #expect(first == RemotePath("/d/\(long)a.txt").partialWritePath)
+    }
+
     @Test func codableRoundTripUsesPlainString() throws {
         let data = try JSONEncoder().encode(["path": RemotePath("/var/www")])
         #expect(String(decoding: data, as: UTF8.self) == #"{"path":"\/var\/www"}"#)

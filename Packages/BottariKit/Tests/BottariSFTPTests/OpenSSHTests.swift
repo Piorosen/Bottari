@@ -255,6 +255,28 @@ struct OpenSSHTests {
         }
     }
 
+    @Test func aNameNearTheLimitCanStillBeUploadedAndReplaced() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let tree = RemotePath(folder.path).appending("tree")
+        try FileManager.default.createDirectory(atPath: tree.string, withIntermediateDirectories: true)
+        // 254 bytes, one short of the limit; the partial and backup names would run past it.
+        let name = String(repeating: "a", count: 250) + ".txt"
+        let file = tree.appending(name)
+
+        try await withServer(authorizing: [key.publicKey]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+
+            try await provider.write(file, data: Data("x".utf8))
+            try await provider.write(file, data: Data("y".utf8))
+
+            #expect(try String(contentsOf: URL(fileURLWithPath: file.string), encoding: .utf8) == "y")
+            #expect(try FileManager.default.contentsOfDirectory(atPath: tree.string) == [name])
+        }
+    }
+
     @Test func aFolderAsSFTPShowsItIsFoundForTheShell() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

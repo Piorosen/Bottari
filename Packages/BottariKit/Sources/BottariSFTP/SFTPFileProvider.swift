@@ -160,7 +160,7 @@ public struct SFTPFileProvider: FileProvider {
         // Saving through a link writes the file it points to, as an editor
         // would, instead of replacing the link with a plain file.
         let path = await Self.followingLinks(given, on: sftp)
-        guard let parent = path.parent else { throw ProviderError.permissionDenied(path) }
+        guard !path.isRoot else { throw ProviderError.permissionDenied(path) }
         // Upload next to the target and swap it in at the end, so a dropped
         // connection never leaves a half-written file where the original was.
         // What was written stays in the partial file so a retry can resume.
@@ -197,7 +197,7 @@ public struct SFTPFileProvider: FileProvider {
             throw Self.translate(error, path)
         }
         do {
-            try await swapIntoPlace(temp, path, backup: parent.appending(".\(path.name).bottari-old"), on: sftp)
+            try await swapIntoPlace(temp, path, backup: path.hiddenSibling(".bottari-old"), on: sftp)
         } catch {
             // Everything was written; what went wrong is the destination itself
             // (a folder in the way, no permission), so a resume would not help.

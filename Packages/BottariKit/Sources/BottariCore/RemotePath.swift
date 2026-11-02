@@ -1,3 +1,6 @@
+import CryptoKit
+import Foundation
+
 /// An absolute, normalized POSIX-style path on any provider, e.g. `/var/www/site`.
 ///
 /// Every provider speaks in these paths so panes can treat the Mac, an SFTP server
@@ -58,7 +61,21 @@ public struct RemotePath: Hashable, Sendable {
 
     /// Where an unfinished write to this path keeps its bytes until it is swapped into place.
     public var partialWritePath: RemotePath {
-        (parent ?? .root).appending(".\(name).bottari-part")
+        hiddenSibling(".bottari-part")
+    }
+
+    /// `.name<suffix>` next to this path, for a provider's own files, kept
+    /// within the longest name disks take. A name that would pass it is cut
+    /// short and given a hash of the whole name, so two long names never
+    /// share one and the same name always gets the same one.
+    public func hiddenSibling(_ suffix: String) -> RemotePath {
+        let folder = parent ?? .root
+        let whole = ".\(name)\(suffix)"
+        guard whole.utf8.count > FileNames.maxNameBytes else { return folder.appending(whole) }
+        let digest = SHA256.hash(data: Data(name.utf8)).prefix(4).map { String(format: "%02x", $0) }.joined()
+        var short = Substring(name)
+        while ".\(short)~\(digest)\(suffix)".utf8.count > FileNames.maxNameBytes { short.removeLast() }
+        return folder.appending(".\(short)~\(digest)\(suffix)")
     }
 
     public func isAncestor(of other: RemotePath) -> Bool {

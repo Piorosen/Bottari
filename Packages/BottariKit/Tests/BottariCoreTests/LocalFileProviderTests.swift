@@ -219,6 +219,19 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: target.string))
     }
 
+    @Test func aNameNearTheLimitCanStillBeWritten() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        // 254 bytes, one short of the limit; its partial name would run past it.
+        let file = dir.appending(String(repeating: "a", count: 250) + ".txt")
+
+        try await provider.write(file, data: Data("x".utf8))
+        try await provider.write(file, data: Data("y".utf8))
+
+        #expect(try await provider.readData(file) == Data("y".utf8))
+        #expect(try await provider.list(dir).map(\.name) == [file.name])
+    }
+
     @Test func checksumAndModificationTime() async throws {
         let dir = try makeTempDirectory()
         defer { cleanUp(dir) }

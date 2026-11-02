@@ -2,12 +2,16 @@ import Foundation
 
 /// Rules for names the user types, the same on every provider.
 public enum FileNames {
+    /// The longest name most disks take, in bytes. APFS counts UTF-16 units
+    /// instead, of which a name never has more than it has bytes.
+    public static let maxNameBytes = 255
+
     /// Why `name` cannot be used for a file or folder, or nil if it can.
     public static func problem(with name: String) -> String? {
         if name.trimmingCharacters(in: .whitespaces).isEmpty { return String(localized: "이름을 입력하십시오.") }
         if name.contains("/") { return String(localized: "이름에 /를 사용할 수 없습니다.") }
         if name == "." || name == ".." { return String(localized: "사용할 수 없는 이름입니다.") }
-        if name.utf8.count > 255 { return String(localized: "이름이 너무 깁니다.") }
+        if name.utf8.count > maxNameBytes { return String(localized: "이름이 너무 깁니다.") }
         return nil
     }
 
