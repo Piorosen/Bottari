@@ -74,13 +74,20 @@ public struct GoogleDriveProvider: FileProvider {
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
         let reader = RangeReader(start: range?.lowerBound ?? 0, end: range?.upperBound)
-        let exported = ExportOnce()
+        let download = DriveDownload()
         return AsyncThrowingStream(unfolding: { [self] in
-            let file = try await resolve(path)
+            let file: DriveFile
+            if let found = download.file {
+                file = found
+            } else {
+                file = try await resolve(path)
+                download.file = file
+            }
             guard !file.isFolder else { throw ProviderError.isADirectory(path) }
             if let export = exportFormat.export(for: file.mimeType), file.isGoogleDocument {
                 // Converted documents come whole; there is no byte range to ask for.
-                guard exported.claim() else { return nil }
+                guard !download.exported else { return nil }
+                download.exported = true
                 return try await request("GET", "\(Self.api)/files/\(file.id)/export", query: [("mimeType", export.mime)], path: path).0
             }
             guard let (from, to) = reader.nextRange(Self.chunkSize) else { return nil }
@@ -472,13 +479,13 @@ actor DriveIndex {
     }
 }
 
-/// A converted document is fetched once per stream.
-private final class ExportOnce: @unchecked Sendable {
-    private var done = false
-    func claim() -> Bool {
-        defer { done = true }
-        return !done
-    }
+/// What one download has found so far. Its path is looked up once, so every
+/// chunk comes from that file whatever the path names later; a converted
+/// document is fetched once. The stream asks from one task at a time, which
+/// is what makes the mutable state safe.
+private final class DriveDownload: @unchecked Sendable {
+    var file: DriveFile?
+    var exported = false
 }
 
 extension JSONDecoder {

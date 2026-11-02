@@ -150,6 +150,24 @@ import Testing
         #expect(try await drive.readData("/x (4).txt") == Data("4".utf8))
     }
 
+    @Test func aDownloadKeepsReadingTheFileItStartedOn() async throws {
+        let original = Data(repeating: 0xAA, count: GoogleDriveProvider.chunkSize + 1000)
+        let id = FakeDrive.add(drive, name: "x.bin", data: original)
+        let drive = provider()
+        var chunks = drive.read("/x.bin", range: nil).makeAsyncIterator()
+        var received = try await chunks.next() ?? Data()
+
+        FakeDrive.state.withLock { $0[self.drive]!.files[id]!.name = "old.bin" }
+        FakeDrive.add(self.drive, name: "x.bin", data: Data(repeating: 0xBB, count: GoogleDriveProvider.chunkSize + 1000))
+        _ = try await drive.list(.root)
+
+        while let chunk = try await chunks.next() {
+            received += chunk
+        }
+        #expect(received.count == original.count)
+        #expect(Set(received) == [0xAA], "every byte from the file the download started on")
+    }
+
     @Test func refreshingShowsChangesMadeElsewhere() async throws {
         let drive = provider()
         try await drive.write("/a.txt", data: Data("a".utf8))
