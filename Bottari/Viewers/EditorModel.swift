@@ -13,14 +13,6 @@ final class EditorModel {
         case failed(String)
     }
 
-    /// The server's copy changed while it was being edited.
-    struct Conflict {
-        let theirs: String
-        let modified: Date?
-        /// Both edits combined, when they touched different lines.
-        let merged: String?
-    }
-
     /// Files bigger than this open in Quick Look instead.
     static let sizeLimit: Int64 = 5 * 1024 * 1024
 
@@ -28,17 +20,18 @@ final class EditorModel {
     let site: SavedSite?
     let item: FileItem
     let language: String?
+    private let file: EditedFile
 
     var text = ""
     /// Bumped whenever the text is replaced wholesale (load, reload, merge),
     /// so the text view knows to take it.
     private(set) var revision = 0
     private(set) var phase: Phase = .loading
-    private(set) var format = TextFormat()
+    var format: TextFormat { file.format }
     private(set) var isDirty = false
     private(set) var isSaving = false
     private(set) var savedAt: Date?
-    var conflict: Conflict?
+    var conflict: EditedFile.Conflict?
     /// The outcome of the last save, or a problem to show.
     var notice: String?
     var cursor = (line: 1, column: 1)
@@ -48,18 +41,15 @@ final class EditorModel {
         didSet { UserDefaults.standard.set(postSaveCommand, forKey: commandKey) }
     }
 
-    /// The text as last opened or saved: the base for merging and for undoing a failed check.
-    @ObservationIgnored private var savedText = ""
-    @ObservationIgnored private var savedData = Data()
     /// When the server's copy was last changed, as of opening or the last save.
-    @ObservationIgnored private(set) var remoteModified: Date?
-    @ObservationIgnored private var remoteSize: Int64?
+    var remoteModified: Date? { file.remoteModified }
     private let commandKey: String
 
     init(context: ViewerContext) {
         provider = context.provider
         site = context.site
         item = context.item
+        file = EditedFile(provider: context.provider, item: context.item)
         language = SyntaxHighlighting.language(forFileNamed: context.item.name)
         commandKey = "editor.postSave.\(context.provider.locationID)\(context.item.path.string)"
         postSaveCommand = UserDefaults.standard.string(forKey: commandKey) ?? ""
@@ -79,104 +69,62 @@ final class EditorModel {
     func load() async {
         phase = .loading
         do {
-            let current = try await provider.stat(item.path)
-            if let size = current.size, size > Self.sizeLimit {
-                phase = .failed(String(localized: "파일이 너무 큽니다 (\(ByteFormat.string(size))). 빠른 미리보기를 사용하십시오."))
-                return
-            }
-            let data = try await provider.readData(item.path)
-            guard let (decoded, format) = TextCodec.decode(data) else {
-                phase = .failed(String(localized: "텍스트 파일이 아닙니다."))
-                return
-            }
-            replaceText(decoded, data: data)
-            self.format = format
-            remoteModified = current.modified
-            remoteSize = current.size
+            text = try await file.open(sizeLimit: Self.sizeLimit)
+            revision += 1
+            isDirty = false
             phase = .ready
+        } catch EditedFile.OpenError.tooLarge(let size) {
+            phase = .failed(String(localized: "파일이 너무 큽니다 (\(ByteFormat.string(size))). 빠른 미리보기를 사용하십시오."))
+        } catch EditedFile.OpenError.notText {
+            phase = .failed(String(localized: "텍스트 파일이 아닙니다."))
         } catch {
             phase = .failed(error.localizedDescription)
         }
     }
 
-    private func replaceText(_ newText: String, data: Data) {
-        text = newText
-        savedText = newText
-        savedData = data
-        revision += 1
-        isDirty = false
-    }
-
     // MARK: - Saving
 
     /// Uploads the text, unless the server's copy changed since it was opened
-    /// (then `conflict` is set) or `force` says to overwrite it anyway.
-    func save(force: Bool = false) async {
+    /// (then `conflict` is set).
+    func save() async {
+        await save(over: nil)
+    }
+
+    /// Uploads the text; over `newer`, that overwrites the server's copy it found.
+    private func save(over newer: EditedFile.Conflict?) async {
         guard !isReadOnly else {
             notice = String(localized: "읽기 전용 서버에는 저장할 수 없습니다.")
             return
         }
         // Typing goes on while the upload runs; only what was sent counts as saved.
         let sending = text
-        guard let data = TextCodec.encode(sending, as: format) else {
-            notice = String(localized: "\(format.label)로 저장할 수 없는 문자가 있습니다.")
-            return
-        }
         isSaving = true
         defer { isSaving = false }
         do {
-            if !force {
-                let current = try await provider.stat(item.path)
-                if current.modified != remoteModified || current.size != remoteSize {
-                    let theirs = TextCodec.decode(try await provider.readData(item.path))?.text ?? ""
-                    let merged: String? = switch ThreeWayMerge.merge(base: savedText, mine: sending, theirs: theirs) {
-                    case .merged(let text): text
-                    case .conflict: nil
-                    }
-                    conflict = Conflict(theirs: theirs, modified: current.modified, merged: merged)
-                    return
-                }
+            switch try await file.save(sending, over: newer, check: postSaveCheck) {
+            case .unencodable:
+                notice = String(localized: "\(format.label)로 저장할 수 없는 문자가 있습니다.")
+            case .conflict(let found):
+                conflict = found
+            case .checkFailed(let error, restoreError: nil):
+                notice = String(localized: "검사에 실패하여 서버 파일을 이전 버전으로 되돌렸습니다. 편집한 내용은 유지됩니다.\n\(error.localizedDescription)")
+            case .checkFailed(_, restoreError: let error?):
+                notice = String(localized: "검사에 실패했으며 이전 버전으로 되돌릴 수 없습니다: \(error.localizedDescription)")
+            case .saved:
+                isDirty = text != sending
+                conflict = nil
+                savedAt = Date()
             }
-            let previous = savedData
-            try await provider.write(item.path, data: data)
-            if let message = await runCheck(restoring: previous) {
-                notice = message
-                await refreshRemoteState()
-                return
-            }
-            savedText = sending
-            savedData = data
-            isDirty = text != sending
-            conflict = nil
-            savedAt = Date()
-            await refreshRemoteState()
         } catch {
             notice = String(localized: "저장할 수 없습니다: \(error.localizedDescription)")
         }
     }
 
-    /// Runs the post-save command; on failure puts `previous` back and says why.
-    private func runCheck(restoring previous: Data) async -> String? {
+    /// The post-save command, when there is one and the server can run it.
+    private var postSaveCheck: (@Sendable () async throws -> Void)? {
         let command = postSaveCommand.trimmingCharacters(in: .whitespaces)
         guard !command.isEmpty, let server = provider as? SFTPFileProvider, server.canRunCommands else { return nil }
-        do {
-            _ = try await server.run(command)
-            return nil
-        } catch {
-            do {
-                try await provider.write(item.path, data: previous)
-                return String(localized: "검사에 실패하여 서버 파일을 이전 버전으로 되돌렸습니다. 편집한 내용은 유지됩니다.\n\(error.localizedDescription)")
-            } catch {
-                return String(localized: "검사에 실패했으며 이전 버전으로 되돌릴 수 없습니다: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func refreshRemoteState() async {
-        if let current = try? await provider.stat(item.path) {
-            remoteModified = current.modified
-            remoteSize = current.size
-        }
+        return { _ = try await server.run(command) }
     }
 
     // MARK: - Settling a conflict
@@ -189,26 +137,12 @@ final class EditorModel {
     /// Saves over the server's newer copy, keeping that copy on the Mac
     /// first: it may hold someone else's work.
     func overwriteServerVersion() async {
-        let replaced = conflict.flatMap { keepCopy(of: $0.theirs) }
-        conflict = nil
-        await save(force: true)
+        guard let conflict else { return }
+        let replaced = file.keepCopy(of: conflict, in: URL.applicationSupportDirectory.appending(path: "Bottari/Replaced"))
+        self.conflict = nil
+        await save(over: conflict)
         if let replaced, notice == nil {
             notice = String(localized: "덮어쓴 서버 쪽 내용은 \(replaced.path(percentEncoded: false))에 보관했습니다.")
-        }
-    }
-
-    /// `text` written to Application Support/Bottari/Replaced, named after
-    /// the file and the time.
-    private func keepCopy(of text: String) -> URL? {
-        let folder = URL.applicationSupportDirectory.appending(path: "Bottari/Replaced")
-        let stamp = Date.now.formatted(.iso8601).replacingOccurrences(of: ":", with: "-")
-        let url = folder.appending(path: "\(stamp) \(item.name)")
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try Data(text.utf8).write(to: url)
-            return url
-        } catch {
-            return nil
         }
     }
 
@@ -217,6 +151,6 @@ final class EditorModel {
         text = merged
         revision += 1
         self.conflict = nil
-        await save(force: true)
+        await save(over: conflict)
     }
 }

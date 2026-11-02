@@ -48,7 +48,7 @@ let package = Package(
             ]
         ),
         .target(name: "BottariTransfer", dependencies: ["BottariCore"]),
-        .target(name: "BottariEditor", dependencies: [.product(name: "Highlightr", package: "Highlightr")]),
+        .target(name: "BottariEditor", dependencies: ["BottariCore", .product(name: "Highlightr", package: "Highlightr")]),
         .target(name: "BottariPlayer", dependencies: ["BottariCore", .product(name: "MPVKit", package: "MPVKit")]),
         .target(name: "BottariCloud", dependencies: [
             "BottariCore",
@@ -62,7 +62,7 @@ let package = Package(
         ]),
         .testTarget(name: "BottariCoreTests", dependencies: ["BottariCore"]),
         .testTarget(name: "BottariTransferTests", dependencies: ["BottariCore", "BottariTransfer"]),
-        .testTarget(name: "BottariEditorTests", dependencies: ["BottariEditor"]),
+        .testTarget(name: "BottariEditorTests", dependencies: ["BottariCore", "BottariEditor"]),
         .testTarget(name: "BottariPlayerTests", dependencies: ["BottariCore", "BottariPlayer"]),
         .testTarget(
             name: "BottariSFTPTests",

@@ -236,7 +236,7 @@ private struct EditorView: View {
         }
     }
 
-    private func conflictBanner(_ conflict: EditorModel.Conflict) -> some View {
+    private func conflictBanner(_ conflict: EditedFile.Conflict) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("편집하는 동안 서버의 파일이 변경되었습니다", systemImage: "exclamationmark.triangle.fill")
                 .font(.ui(.callout, weight: .semibold))
