@@ -23,6 +23,7 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
         var name: String
         var parents: [String]
         var received = Data()
+        var chunks = 0
     }
 
     struct Drive {
@@ -32,6 +33,9 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
         var counter = 0
         /// Requests still to be refused with "rate limit exceeded".
         var throttled = 0
+        /// The chunk of each upload, counted from 0, that Drive keeps one
+        /// byte short of, as it may.
+        var shortChunk: Int?
     }
 
     static let state = Mutex<[String: Drive]>([:])
@@ -60,6 +64,10 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
 
     static func throttle(_ drive: String, times: Int) {
         state.withLock { $0[drive, default: Drive()].throttled = times }
+    }
+
+    static func shorten(_ drive: String, chunk: Int?) {
+        state.withLock { $0[drive, default: Drive()].shortChunk = chunk }
     }
 
     static func drive(_ name: String) -> Drive {
@@ -171,15 +179,18 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
     private func receiveChunk(_ token: String, _ id: String, _ body: Data) {
         let range = request.value(forHTTPHeaderField: "Content-Range") ?? ""
         let total = range.split(separator: "/").last.flatMap { Int($0) }
-        let done: Upload? = Self.state.withLock { state in
+        let upload: Upload? = Self.state.withLock { state in
             guard var upload = state[token]?.uploads[id] else { return nil }
-            upload.received.append(body)
-            state[token]!.uploads[id] = upload
-            guard let total, upload.received.count == total else { return nil }
-            state[token]!.uploads[id] = nil
+            upload.received.append(upload.chunks == state[token]!.shortChunk ? body.dropLast() : body)
+            upload.chunks += 1
+            state[token]!.uploads[id] = upload.received.count == total ? nil : upload
             return upload
         }
-        guard let done else { return respond(308, data: Data()) }
+        // Not done yet: Drive says how much of the file it holds.
+        guard let done = upload, done.received.count == total else {
+            let held = upload?.received.count ?? 0
+            return respond(308, headers: held > 0 ? ["Range": "bytes=0-\(held - 1)"] : [:], data: Data())
+        }
         let fileID: String
         if let existing = done.fileID {
             Self.state.withLock { state in

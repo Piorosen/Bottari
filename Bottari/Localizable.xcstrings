@@ -1101,6 +1101,16 @@
         }
       }
     },
+    "Drive가 파일을 다 받지 못했습니다": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drive didn’t receive the whole file"
+          }
+        }
+      }
+    },
     "Ed25519를 받지 않는 서버용(FIPS 모드 등).": {
       "localizations": {
         "en": {

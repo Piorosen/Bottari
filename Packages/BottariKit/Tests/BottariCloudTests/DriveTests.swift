@@ -70,6 +70,14 @@ import Testing
         #expect(try await drive.readData("/backup.tar") == Data("smaller".utf8))
     }
 
+    @Test(arguments: [0, 2])
+    func anUploadDriveDidNotTakeWholeFails(shortChunk: Int) async throws {
+        let drive = provider()
+        FakeDrive.shorten(self.drive, chunk: shortChunk)
+        let payload = Data(repeating: 7, count: GoogleDriveProvider.chunkSize * 2 + 1000)
+        await #expect(throws: ProviderError.self) { try await drive.write("/big.bin", data: payload) }
+    }
+
     @Test func movesCopiesTrashesAndDeletes() async throws {
         let drive = provider()
         try await drive.makeDirectory("/a")

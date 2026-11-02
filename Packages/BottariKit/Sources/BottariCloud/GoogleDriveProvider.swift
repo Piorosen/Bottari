@@ -152,7 +152,9 @@ public struct GoogleDriveProvider: FileProvider {
         return location
     }
 
-    /// Drive answers the last chunk with the file it made.
+    /// Drive answers the last chunk with the file it made, and every other
+    /// with 308 and how much of the file it holds, which can be less than
+    /// was sent.
     @discardableResult
     private func uploadChunk(_ data: Data, to session: String, at offset: Int64, total: Int64?, path: RemotePath) async throws -> Data {
         let range: String
@@ -161,7 +163,11 @@ public struct GoogleDriveProvider: FileProvider {
         } else {
             range = "bytes \(offset)-\(offset + Int64(data.count) - 1)/\(total.map(String.init) ?? "*")"
         }
-        return try await request("PUT", session, headers: ["Content-Range": range], body: data, allowing: [308], path: path).0
+        let (body, status, headers) = try await requestWithHeaders("PUT", session, headers: ["Content-Range": range], body: data, allowing: [308], path: path)
+        if status == 308, total != nil || (headers["Range"] ?? headers["range"]) != "bytes=0-\(offset + Int64(data.count) - 1)" {
+            throw ProviderError.io(String(localized: "Drive가 파일을 다 받지 못했습니다"))
+        }
+        return body
     }
 
     public func makeDirectory(_ path: RemotePath) async throws {
