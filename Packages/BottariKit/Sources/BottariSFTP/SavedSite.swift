@@ -241,6 +241,31 @@ public struct SiteStore: Sendable {
     }
 }
 
+/// Jump hosts are named by site name: sites going through one follow it to
+/// its new name instead of losing their way. A name retyped a keystroke at a
+/// time can be empty or another site's on the way; sites keep the last name
+/// that was this one's alone until the next one is.
+public struct JumpHostRenames: Sendable {
+    private var held: [SavedSite.ID: String] = [:]
+
+    public init() {}
+
+    /// `site`, already saved in `sites`, was called `previous`.
+    public mutating func follow(_ site: SavedSite, renamedFrom previous: String, in sites: inout [SavedSite]) {
+        let followed = held.removeValue(forKey: site.id) ?? previous
+        func isItsOwn(_ name: String) -> Bool {
+            !name.isEmpty && !sites.contains { $0.id != site.id && $0.name == name }
+        }
+        if !isItsOwn(site.name) {
+            if isItsOwn(followed) { held[site.id] = followed }
+        } else if followed != site.name, isItsOwn(followed) {
+            for other in sites.indices where sites[other].proxyJump.contains(followed) {
+                sites[other].proxyJump = sites[other].proxyJump.map { $0 == followed ? site.name : $0 }
+            }
+        }
+    }
+}
+
 /// Everything `SFTPFileProvider.connect` needs for a saved site.
 public struct ConnectionPlan: Equatable, Sendable {
     public var endpoint: SFTPEndpoint

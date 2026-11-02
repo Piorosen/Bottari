@@ -130,22 +130,11 @@ final class SiteLibrary {
         guard let index = sites.firstIndex(where: { $0.id == site.id }), sites[index] != site else { return }
         let previous = sites[index].name
         sites[index] = site
-        // Jump hosts are named by site name: sites going through this one
-        // follow it to its new name instead of losing their way. A name
-        // erased while retyping it is remembered until the new one is in.
-        var oldName = previous
-        if previous.isEmpty, let erased = erasedNames.removeValue(forKey: site.id) { oldName = erased }
-        if site.name.isEmpty {
-            if !previous.isEmpty { erasedNames[site.id] = previous }
-        } else if oldName != site.name, !oldName.isEmpty, !sites.contains(where: { $0.id != site.id && $0.name == oldName }) {
-            for other in sites.indices where sites[other].proxyJump.contains(oldName) {
-                sites[other].proxyJump = sites[other].proxyJump.map { $0 == oldName ? site.name : $0 }
-            }
-        }
+        renames.follow(site, renamedFrom: previous, in: &sites)
         persist()
     }
 
-    @ObservationIgnored private var erasedNames: [SavedSite.ID: String] = [:]
+    @ObservationIgnored private var renames = JumpHostRenames()
 
     /// The list as another Mac left it. Secrets stay in this Mac's Keychain,
     /// except those of sites the other Mac deleted.

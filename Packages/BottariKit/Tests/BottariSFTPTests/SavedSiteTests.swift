@@ -171,6 +171,33 @@ import Testing
         #expect(site.startLocation(home: "/home/deploy") == RemotePath(expected))
     }
 
+    /// The connection manager saves the name on every keystroke. Sites going
+    /// through a jump host follow it to the name it ends up with, even when
+    /// the name passes through another site's name or is erased on the way.
+    @Test func renamedJumpHostsKeepTheSitesThatGoThroughThem() {
+        func site(_ name: String, via jumps: [String] = []) -> SavedSite {
+            SavedSite(name: name, endpoint: SFTPEndpoint(host: "\(name).example.com", username: "u"), authentication: .password, proxyJump: jumps)
+        }
+        var sites = [site("bastion"), site("bastion2"), site("app", via: ["bastion2"]), site("dup"), site("dup"), site("web", via: ["dup"])]
+        var renames = JumpHostRenames()
+        func type(_ names: [String], into index: Int) {
+            for name in names {
+                let previous = sites[index].name
+                sites[index].name = name
+                renames.follow(sites[index], renamedFrom: previous, in: &sites)
+            }
+        }
+
+        type(["bastion", "bastion-", "bastion-e", "bastion-eu"], into: 1)
+        #expect(sites[2].proxyJump == ["bastion-eu"])
+        type(["bastion-e", "bastion-", "bastion", "bastio", "", "e", "eu"], into: 1)
+        #expect(sites[2].proxyJump == ["eu"])
+        // "dup" means whichever site of that name comes first; renaming the
+        // other one leaves "web" where it was.
+        type(["dup2"], into: 4)
+        #expect(sites[5].proxyJump == ["dup"])
+    }
+
     @Test func secretKeysAreScopedToTheSite() {
         let site = SavedSite(name: "a", endpoint: SFTPEndpoint(host: "a", username: "u"), authentication: .password)
         #expect(site.passwordKey == "site.\(site.id.uuidString).password")
