@@ -222,7 +222,6 @@ import Testing
     @Test func aNameNearTheLimitCanStillBeWritten() async throws {
         let dir = try makeTempDirectory()
         defer { cleanUp(dir) }
-        // 254 bytes, one short of the limit; its partial name would run past it.
         let file = dir.appending(String(repeating: "a", count: 250) + ".txt")
 
         try await provider.write(file, data: Data("x".utf8))

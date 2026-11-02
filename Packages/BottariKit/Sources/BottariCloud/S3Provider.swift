@@ -22,8 +22,6 @@ public struct S3Configuration: Codable, Hashable, Sendable {
         self.usesPathStyle = usesPathStyle
     }
 
-    /// The URL of `key` (empty for the bucket itself), with `query` already
-    /// encoded. A bucket, region or endpoint typed with a space inside makes none.
     func url(for key: String, query: [(String, String)] = []) throws -> URL {
         let encodedKey = AWSSigner.encode(key, keepingSlashes: true)
         var base: String
@@ -253,8 +251,6 @@ public struct S3Provider: FileProvider {
         _ = try await copyObjects(from, to: to)
     }
 
-    /// Copies `from` object by object and returns the keys copied, with the
-    /// folder's marker if it has one.
     private func copyObjects(_ from: RemotePath, to: RemotePath) async throws -> [String] {
         if (try? await stat(to)) != nil { throw ProviderError.alreadyExists(to) }
         let source = try await stat(from)

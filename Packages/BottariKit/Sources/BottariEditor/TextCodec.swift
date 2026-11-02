@@ -92,7 +92,6 @@ public enum TextCodec {
         }
     }
 
-    /// `text` with each line break, of whichever kind, as `\n`.
     private static func withLF(_ text: String) -> String {
         text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }

@@ -26,11 +26,9 @@ final class MemoryFileProvider: FileProvider {
         var damagedChecksums: Set<String> = []
         /// Names that cannot be deleted.
         var failingDeletes: Set<String> = []
-        /// Names that cannot be looked at, as if their folder were out of reach.
         var failingStats: Set<String> = []
         /// Writes still to fail as if the connection dropped midway.
         var droppedWrites = 0
-        /// Moves still to carry out and then fail as if the reply never came.
         var droppedMoves = 0
         /// How names count as the same, e.g. like the Mac's disk.
         var matching = NameMatching.exact

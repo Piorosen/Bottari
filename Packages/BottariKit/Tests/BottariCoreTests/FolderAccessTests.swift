@@ -52,8 +52,6 @@ private struct ScratchDisk {
         return folder
     }
 
-    /// A folder allowed on a disk that is not plugged in at the next launch,
-    /// nor while another folder is allowed, is allowed again once it is.
     @Test(.enabled(if: ScratchDisk.isAvailable), .timeLimit(.minutes(1)))
     func foldersOnADiskThatIsNotPluggedInStayAllowed() throws {
         let scratch = try scratchFolder()
@@ -84,7 +82,6 @@ private struct ScratchDisk {
         #expect(pluggedInAgain.paths == [RemotePath(onDisk.path), RemotePath(onMac.path)].sorted { $0.string < $1.string })
     }
 
-    /// A folder that is gone from a disk that is there is forgotten.
     @Test(.timeLimit(.minutes(1)))
     func foldersThatAreGoneAreForgotten() throws {
         let scratch = try scratchFolder()

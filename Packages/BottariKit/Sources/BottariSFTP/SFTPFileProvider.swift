@@ -175,8 +175,6 @@ public struct SFTPFileProvider: FileProvider {
                 try await sftp.setAttributes(at: temp.string, to: SFTPFileAttributes(size: UInt64(offset)))
                 file = try await sftp.openFile(filePath: temp.string, flags: [.write])
             } else {
-                // The partial file is this write's own: whatever is at its
-                // name, a stale copy or a planted link, is not it.
                 try? await sftp.remove(at: temp.string)
                 file = try await sftp.openFile(filePath: temp.string, flags: [.write, .create, .forceCreate])
             }
@@ -215,10 +213,6 @@ public struct SFTPFileProvider: FileProvider {
         return RemotePath(real)
     }
 
-    /// Whether `path` is no link: resolving it leads to its own name in its
-    /// resolved folder, which is how a link is told here, since Citadel sends
-    /// no lstat and SFTP cannot open a file without following links. False for
-    /// the root, which has no name to compare.
     private static func resolvesToOwnName(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
         guard let parent = path.parent else { return false }
         async let real = sftp.getRealPath(atPath: path.string)
@@ -365,9 +359,9 @@ public struct SFTPFileProvider: FileProvider {
     /// The command line that runs `script` with /bin/sh whatever the account's
     /// login shell is (csh and fish read `2>/dev/null` and `$(…)` differently,
     /// or not at all). That shell reads the line first, and csh refuses a
-    /// newline inside quotes and expands `!` there, while fish ends a quote
-    /// at `\'`. So the script travels as printf escapes, in a single-quoted
-    /// word that holds none of those.
+    /// newline inside quotes and expands `!` there, while fish reads `\'`
+    /// there as a quote that does not end it. So the script travels as printf
+    /// escapes, in a single-quoted word that holds none of those.
     static func shellCommand(_ script: String) -> String {
         var escaped = ""
         for scalar in script.unicodeScalars {
@@ -440,8 +434,6 @@ public struct SFTPFileProvider: FileProvider {
         } catch {
             let translated = Self.translate(error, path)
             if case ProviderError.notFound = translated { throw translated }
-            // A link that would not unlink is no folder to empty: listing it
-            // lists the folder it points to.
             guard let sftp = try? await link.live().sftp, (try? await Self.resolvesToOwnName(path, on: sftp)) == true, let children = try? await list(path) else { throw translated }
             for child in children {
                 try await delete(child.path)

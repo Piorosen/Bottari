@@ -107,7 +107,6 @@ import Testing
         let prod = SFTPEndpoint(host: "prod.example.com", username: "me")
         #expect(store.check(ed, for: prod))
 
-        // The server was rekeyed and ssh learned the new key after `ssh-keygen -R`.
         try "prod.example.com \(otherEd)\n".write(to: file, atomically: true, encoding: .utf8)
         #expect(!store.check(ed, for: prod))
         #expect(store.takeRejection(for: prod) == .hostKeyChangedInKnownHosts(

@@ -80,11 +80,9 @@ public final class TransferJob: Identifiable {
     /// Names are keyed by `nameMatching`, so Report.txt finds report.txt on a Mac.
     @ObservationIgnored var listings: [RemotePath: [String: FileItem]] = [:]
     @ObservationIgnored lazy var nameMatching = destination.provider.nameMatching(in: destinationFolder)
-    /// What the user picked, as against items found inside picked folders.
     @ObservationIgnored lazy var pickedPaths = Set(items.map(\.path))
     /// Free names handed out for "keep both" that are not written yet.
     @ObservationIgnored var reserved: Set<RemotePath> = []
-    /// Folders by their real path, each resolved once, to tell two spellings of one folder apart.
     @ObservationIgnored var realFolders: [RemotePath: RemotePath] = [:]
     /// Source folders a move emptied, to remove at the end.
     @ObservationIgnored var foldersToClean: [RemotePath] = []
@@ -134,7 +132,6 @@ public final class TransferJob: Identifiable {
         running.values.reduce(0) { $0 + $1.counter.total }
     }
 
-    /// Whether a running item is bound for `destination`, by the destination's own idea of a name.
     func isWriting(to destination: RemotePath) -> Bool {
         running.values.contains {
             $0.work.destination.parent == destination.parent && nameMatching.key($0.work.destination.name) == nameMatching.key(destination.name)

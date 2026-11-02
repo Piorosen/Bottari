@@ -77,8 +77,6 @@ public final class TransferQueue {
             } catch ProviderError.notFound {
                 gone.append(path)
             } catch {
-                // Out of reach for now (a folder the sandbox lost, a server that
-                // is down): planning looks again and fails it, for a retry.
                 items.append(FileItem(path: path, kind: .other))
             }
         }
@@ -279,7 +277,6 @@ public final class TransferQueue {
         do {
             existing = try await existingItem(at: destination, in: job)
             if sameLocation, try await isSameItem(item, at: destination, existing: existing, in: job) {
-                // Moving an item onto itself does nothing; copying it keeps both, like Finder.
                 guard job.kind == .copy else { return }
                 destination = try await freePath(for: destination, isDirectory: item.isDirectory, in: job)
                 existing = nil
@@ -337,8 +334,6 @@ public final class TransferQueue {
             return
         }
         if job.kind == .move, item.isSymbolicLink, wholeItem == .stream {
-            // Gone through file by file, the move would take apart the folder
-            // the link points to; only a rename or tar moves the link itself.
             job.skippedFiles += 1
             return
         }
@@ -421,9 +416,6 @@ public final class TransferQueue {
         return job.listings[parent]?[job.nameMatching.key(path.name)]
     }
 
-    /// Whether `item` is the very thing at `destination`: the same path, or
-    /// the same item reached another way, through a linked folder or /tmp
-    /// beside /private/tmp, where `existing` is what the listing shows there.
     private func isSameItem(_ item: FileItem, at destination: RemotePath, existing: FileItem?, in job: TransferJob) async throws -> Bool {
         if item.path == destination { return true }
         guard let existing else { return false }
@@ -431,7 +423,6 @@ public final class TransferQueue {
         return try await realPath(of: existing, on: job.destination.provider, in: job) == real
     }
 
-    /// `item`'s path with its folder's links resolved, each folder looked up once per job.
     private func realPath(of item: FileItem, on provider: any FileProvider, in job: TransferJob) async throws -> RemotePath {
         guard !item.isSymbolicLink, let parent = item.path.parent else { return try await provider.realPath(item.path) }
         if let real = job.realFolders[parent] { return real.appending(item.name) }
@@ -479,8 +470,6 @@ public final class TransferQueue {
     private func pump() {
         var active = jobs.reduce(0) { $0 + $1.running.count }
         for job in jobs where job.state == .running || job.state == .preparing {
-            // Two items bound for one name would share one partial file: the
-            // second waits, and then finds the first's file there as a clash.
             while active < maxConcurrentTransfers, let next = job.pending.firstIndex(where: { !job.isWriting(to: $0.destination) }) {
                 launch(job.pending.remove(at: next), in: job)
                 active += 1
@@ -579,7 +568,6 @@ public final class TransferQueue {
                 }
             case .rename, .providerCopy:
                 if work.action == .rename, work.automaticRetries > 0, try await alreadyMoved(work, from: source, to: destination) {
-                    // The last try's rename happened; only its reply was lost.
                     break
                 }
                 // Neither replaces an existing file, so clear the way first.
@@ -652,8 +640,6 @@ public final class TransferQueue {
         }
     }
 
-    /// Whether a rename went through although its reply was lost: the original
-    /// is gone and something is at the destination.
     private func alreadyMoved(_ work: WorkItem, from source: any FileProvider, to destination: any FileProvider) async throws -> Bool {
         do {
             _ = try await source.stat(work.source.path)

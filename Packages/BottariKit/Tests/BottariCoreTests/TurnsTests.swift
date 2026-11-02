@@ -1,12 +1,9 @@
 import Testing
 @testable import BottariCore
 
-/// A pane told to show one place after another, faster than they open.
 @MainActor @Suite struct TurnsTests {
     struct Refused: Error, Equatable {}
 
-    /// The user picked a server that is down, then another place before it
-    /// answered: the first one's failure is not reported over the second.
     @Test func anOvertakenStepThatFailsEndsAsCancelled() async {
         let turns = Turns()
         let first = turns.take()
@@ -18,7 +15,6 @@ import Testing
         }
     }
 
-    /// One that opens after it was overtaken is let go, not shown.
     @Test func anOvertakenStepThatOpensIsDiscarded() async {
         let turns = Turns()
         var discarded: [String] = []

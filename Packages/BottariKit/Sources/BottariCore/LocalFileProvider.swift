@@ -92,8 +92,6 @@ public struct LocalFileProvider: FileProvider {
     }
 
     public func write(_ given: RemotePath, from data: AsyncThrowingStream<Data, any Error>, resumingAt offset: Int64) async throws {
-        // Saving through a link writes the file it points to, as an editor
-        // would, instead of replacing the link with a plain file.
         let path = Self.followingLinks(given)
         guard let parent = path.parent else { throw ProviderError.permissionDenied(path) }
         try requireDirectory(parent)
@@ -138,8 +136,6 @@ public struct LocalFileProvider: FileProvider {
         }
     }
 
-    /// Where writing to `path` should land: the file a link there points to,
-    /// or `path` itself when it is no link or the link leads nowhere.
     private static func followingLinks(_ path: RemotePath) -> RemotePath {
         guard (try? FileManager.default.attributesOfItem(atPath: path.string))?[.type] as? FileAttributeType == .typeSymbolicLink,
               let real = try? resolve(path)
@@ -227,9 +223,6 @@ public struct LocalFileProvider: FileProvider {
         URL(fileURLWithPath: path.string)
     }
 
-    /// Opens the partial file as this write's own regular file. A fresh write
-    /// replaces whatever is at the name, a stale copy or a planted link, and
-    /// a resume never follows a link put there since.
     private static func openPartial(_ temp: RemotePath, fresh: Bool) throws -> FileHandle {
         if fresh { unlink(temp.string) }
         let descriptor = open(temp.string, fresh ? O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW : O_WRONLY | O_NOFOLLOW, 0o644)

@@ -12,9 +12,6 @@ import Testing
 struct OpenSSHTests {
     // MARK: Reading key files
 
-    /// A test server never takes another server's port for its own, so each
-    /// test logs in to the server it started. Run alongside other suites,
-    /// two servers draw the same random port now and then.
     @Test func aServerStartedOnATakenPortMovesToAnother() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -261,7 +258,6 @@ struct OpenSSHTests {
         let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
         let tree = RemotePath(folder.path).appending("tree")
         try FileManager.default.createDirectory(atPath: tree.string, withIntermediateDirectories: true)
-        // 254 bytes, one short of the limit; the partial and backup names would run past it.
         let name = String(repeating: "a", count: 250) + ".txt"
         let file = tree.appending(name)
 

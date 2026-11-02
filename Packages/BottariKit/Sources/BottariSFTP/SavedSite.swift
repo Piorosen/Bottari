@@ -271,7 +271,6 @@ public struct ConnectionPlan: Equatable, Sendable {
     public var endpoint: SFTPEndpoint
     public var credential: SFTPCredential
     public var hops: [SSHHop]
-    /// Where the site's password goes in the secret store.
     var passwordKey: String
 
     init(endpoint: SFTPEndpoint, credential: SFTPCredential, hops: [SSHHop], passwordKey: String) {
@@ -416,9 +415,6 @@ extension SavedSite {
         )
     }
 
-    /// Throws when `ssh` would reach this site through a ProxyCommand that
-    /// Bottari does not run: the site came from `sshConfig`, still points at
-    /// the address named there and has no jump host instead.
     func refuseUnrunProxyCommand(in sshConfig: SSHConfig) throws {
         guard proxyJump.isEmpty, let alias = sshConfigAlias else { return }
         let host = sshConfig.resolve(alias)
@@ -474,7 +470,6 @@ private struct HopResolver {
             let saved = sites.first { $0.name == name || $0.sshConfigAlias == name }
             let site = saved ?? configuredSite(for: name)
             try site.refuseUnrunProxyCommand(in: sshConfig)
-            // A jump host can have its own jump hosts; those come first.
             hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
             hops.append(SSHHop(
                 endpoint: site.endpoint,

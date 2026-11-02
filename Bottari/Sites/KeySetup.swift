@@ -58,11 +58,6 @@ extension SiteLibrary {
         }
     }
 
-    /// Makes a key of `kind`, puts it on the server in place of the Bottari
-    /// key the site had (see `SavedSite.install`), then keeps it in this
-    /// Mac's Keychain and switches the site to it. The saved password goes
-    /// too when `forgettingPassword`. Until the key is known to work, the
-    /// site stays as it was.
     func switchToKey(
         _ site: SavedSite,
         kind: NewSSHKey.Kind,

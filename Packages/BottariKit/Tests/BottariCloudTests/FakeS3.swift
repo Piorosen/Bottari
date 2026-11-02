@@ -12,9 +12,7 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
         var log: [String] = []
         /// Copies answer 200 with an error in the body, as S3 sometimes does.
         var copiesFail = false
-        /// An object someone else writes while the next copy runs.
         var landsDuringCopy: (key: String, data: Data)?
-        /// Listings carry keys as they are even when asked to URL-encode them.
         var ignoresEncodingType = false
     }
 

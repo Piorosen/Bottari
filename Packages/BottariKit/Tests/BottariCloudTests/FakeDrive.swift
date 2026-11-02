@@ -33,8 +33,6 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
         var counter = 0
         /// Requests still to be refused with "rate limit exceeded".
         var throttled = 0
-        /// The chunk of each upload, counted from 0, that Drive keeps one
-        /// byte short of, as it may.
         var shortChunk: Int?
     }
 
@@ -186,7 +184,6 @@ final class FakeDrive: URLProtocol, @unchecked Sendable {
             state[token]!.uploads[id] = upload.received.count == total ? nil : upload
             return upload
         }
-        // Not done yet: Drive says how much of the file it holds.
         guard let done = upload, done.received.count == total else {
             let held = upload?.received.count ?? 0
             return respond(308, headers: held > 0 ? ["Range": "bytes=0-\(held - 1)"] : [:], data: Data())

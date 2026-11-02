@@ -110,7 +110,6 @@ public protocol FileProvider: Sendable {
 extension FileProvider {
     public var isLocal: Bool { locationID == LocalFileProvider.locationID }
 
-    /// A place without links has one spelling per item.
     public func realPath(_ path: RemotePath) async throws -> RemotePath {
         path
     }

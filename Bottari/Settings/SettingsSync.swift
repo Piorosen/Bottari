@@ -287,7 +287,6 @@ final class SettingsSync {
         return outcome
     }
 
-    /// Writes what the merge changed, now that it is in place here.
     nonisolated private static func commit(_ outcome: Outcome) -> [String] {
         var errors: [String] = []
         func attempt(_ body: () throws -> Void) {
@@ -321,10 +320,6 @@ final class SettingsSync {
         return others + [me]
     }
 
-    /// Puts the merged settings in place and says whether it did. Anything
-    /// edited here while the merge ran (typing a host name, say) is left as it
-    /// now is and merged again right after, rather than swapped for the older
-    /// copy the merge started from; that merge is then dropped uncommitted.
     private func apply(_ outcome: Outcome, mergedFrom snapshot: Snapshot) -> Bool {
         isApplying = true
         defer { isApplying = false }

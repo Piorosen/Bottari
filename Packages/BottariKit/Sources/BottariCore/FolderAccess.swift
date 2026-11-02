@@ -71,9 +71,6 @@ public final class FolderAccess: @unchecked Sendable {
         defaults.set(bookmarks, forKey: key)
     }
 
-    /// Whether `bookmark` is on a volume that is not mounted now (a disk not
-    /// plugged in, a share not connected), rather than on one where what it
-    /// points at is gone. The bookmark is kept for when the volume is back.
     private static func isOnAbsentVolume(_ bookmark: Data) -> Bool {
         guard let volume = URL.resourceValues(forKeys: [.volumeURLKey], fromBookmarkData: bookmark)?.volume else { return false }
         return (try? volume.resourceValues(forKeys: [.volumeURLKey]))?.volume?.path != volume.path

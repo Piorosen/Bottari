@@ -36,7 +36,6 @@ public struct SyncFolder: Sendable {
         }
     }
 
-    /// For a value synced with `sync(_:value:)`.
     public struct ValueOutcome<Value> {
         public let value: Value
         /// Both Macs changed it differently since they last agreed.
@@ -58,7 +57,6 @@ public struct SyncFolder: Sendable {
 
     // MARK: - Lists
 
-    /// Merges `local` with the list in `name`.
     public func sync<Item: Codable & Identifiable & Equatable>(_ name: String, local: [Item]) throws -> Outcome<Item> {
         try merge(
             local: local,
@@ -167,7 +165,6 @@ public struct SyncFolder: Sendable {
 extension SyncFolder.Outcome: Sendable where Item: Sendable {}
 extension SyncFolder.ValueOutcome: Sendable where Value: Sendable {}
 
-/// A change to one file, held until the merge it came from is in place.
 private enum Write: Sendable {
     case replace(URL, Data)
     case delete(URL)

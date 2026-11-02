@@ -165,9 +165,6 @@ final class SiteLibrary {
         }
     }
 
-    /// Opens whatever the site is: an SFTP server, an S3 bucket or a Google Drive.
-    /// `typedSecrets` were just typed by the user: they win over stored ones,
-    /// and those the user chose to keep are stored once the connection works.
     func connect(_ site: SavedSite, typedSecrets: TypedSecrets = TypedSecrets()) async throws -> any FileProvider {
         switch site.kind {
         case .sftp:

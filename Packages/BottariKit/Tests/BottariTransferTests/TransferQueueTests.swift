@@ -252,7 +252,6 @@ import Testing
         #expect(job.state == .finished)
         #expect((try? String(contentsOf: root.appending(path: "target/a.txt"), encoding: .utf8)) == "a")
         #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: root.appending(path: "src/link").path)) == "../target")
-        // Left for the user, as a linked folder found inside a picked one is.
         #expect(job.skippedFiles == 1)
     }
 
@@ -305,7 +304,6 @@ import Testing
 
         #expect((try? String(contentsOf: root.appending(path: "d/a.txt"), encoding: .utf8)) == "keep")
         #expect(job.failures.isEmpty)
-        // Copying onto itself keeps both, like Finder; moving onto itself does nothing.
         #expect(FileManager.default.fileExists(atPath: root.appending(path: "d/a 2.txt").path) == (kind == .copy))
     }
 
@@ -554,7 +552,6 @@ import Testing
         #expect(job.failures.map(\.path) == ["/a.txt"])
         #expect(mac.text("/a.txt") == "a")
 
-        // Once the folder can be looked at again, a retry moves it.
         mac.state.withLock { $0.failingStats = [] }
         queue.retryFailures(of: job)
         try await eventually { job.state == .finished }

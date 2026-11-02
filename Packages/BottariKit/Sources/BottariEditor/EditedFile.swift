@@ -19,7 +19,6 @@ public final class EditedFile {
         public let modified: Date?
         /// Both edits combined, when they touched different lines.
         public let merged: String?
-        /// The server's bytes as found.
         let server: Data
 
         init(base: String, mine: String, server: Data, modified: Date?) {
@@ -52,8 +51,6 @@ public final class EditedFile {
     /// When the server's copy was last changed, as of opening or the last save.
     public private(set) var remoteModified: Date?
     private var remoteSize: Int64?
-    /// The server's copy as last opened, saved or put back: the base for
-    /// merging, and what a failed check puts back.
     private var savedText = ""
     private var savedData = Data()
 

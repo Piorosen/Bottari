@@ -65,14 +65,12 @@ import Testing
         #expect(throws: refused) {
             try piped.connectionPlan(sites: [piped], sshConfig: config, secrets: InMemorySecretStore(), readFile: { _ in nil })
         }
-        // Nor on the way to another server, saved or not.
         for sites in [[piped], []] {
             let behind = SavedSite(name: "app", endpoint: SFTPEndpoint(host: "app.internal", username: "me"), authentication: .defaultKeys, proxyJump: ["piped"])
             #expect(throws: refused) {
                 try behind.connectionPlan(sites: sites + [behind], sshConfig: config, secrets: InMemorySecretStore(), readFile: { _ in nil })
             }
         }
-        // Pointed somewhere else by hand, the site is the user's own route.
         var moved = piped
         moved.endpoint.host = "10.0.0.9"
         #expect(try moved.connectionPlan(sites: [moved], sshConfig: config, secrets: InMemorySecretStore(), readFile: { _ in nil }).hops.isEmpty)
@@ -171,9 +169,6 @@ import Testing
         #expect(site.startLocation(home: "/home/deploy") == RemotePath(expected))
     }
 
-    /// The connection manager saves the name on every keystroke. Sites going
-    /// through a jump host follow it to the name it ends up with, even when
-    /// the name passes through another site's name or is erased on the way.
     @Test func renamedJumpHostsKeepTheSitesThatGoThroughThem() {
         func site(_ name: String, via jumps: [String] = []) -> SavedSite {
             SavedSite(name: name, endpoint: SFTPEndpoint(host: "\(name).example.com", username: "u"), authentication: .password, proxyJump: jumps)
@@ -192,8 +187,6 @@ import Testing
         #expect(sites[2].proxyJump == ["bastion-eu"])
         type(["bastion-e", "bastion-", "bastion", "bastio", "", "e", "eu"], into: 1)
         #expect(sites[2].proxyJump == ["eu"])
-        // "dup" means whichever site of that name comes first; renaming the
-        // other one leaves "web" where it was.
         type(["dup2"], into: 4)
         #expect(sites[5].proxyJump == ["dup"])
     }

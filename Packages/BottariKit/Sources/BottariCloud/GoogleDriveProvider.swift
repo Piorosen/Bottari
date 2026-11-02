@@ -276,8 +276,6 @@ public struct GoogleDriveProvider: FileProvider {
         return target
     }
 
-    /// A folder's children with the names they show under (see `DriveIndex`),
-    /// from a listing at most `DriveIndex.lifetime` old unless `fresh`.
     func children(of folder: DriveFile, at path: RemotePath, fresh: Bool = false) async throws -> [DriveEntry] {
         if !fresh, let cached = await index.entries(in: folder.id) { return cached }
         var files: [DriveFile] = []
@@ -419,14 +417,8 @@ private struct DriveError: Decodable {
     let error: Detail
 }
 
-/// Folder listings by folder ID, so a path is not looked up folder by folder
-/// on every request. They are kept briefly, since Drive changes from elsewhere,
-/// but the names they gave out stay: a repeat keeps its " (n)" while it stays
-/// in the folder under the same name, so a path still means the same file
-/// after others of that name come or go.
 actor DriveIndex {
     static let lifetime: Duration = .seconds(30)
-    /// `at` is nil once the listing is out of date; its names still hold.
     private var listings: [String: (entries: [DriveEntry], at: ContinuousClock.Instant?)] = [:]
 
     func entries(in id: String) -> [DriveEntry]? {
@@ -434,9 +426,6 @@ actor DriveIndex {
         return listing.entries
     }
 
-    /// Takes in a folder's files, each with the name it shows as. A file
-    /// listed before keeps its name; another repeat gets " (2)", " (3)",
-    /// skipping names already taken.
     func store(_ files: [(DriveFile, String)], in id: String) -> [DriveEntry] {
         var before: [String: DriveEntry] = [:]
         for entry in listings[id]?.entries ?? [] { before[entry.file.id] = entry }
@@ -469,8 +458,6 @@ actor DriveIndex {
 
     func forget(children id: String) { listings[id]?.at = nil }
 
-    /// `name`, or if that is used, the first "name (2)", "name (3)", … that
-    /// is neither used nor in `taken`.
     private static func unused(_ name: String, isFolder: Bool, used: Set<String>, taken: Set<String>) -> String {
         guard used.contains(name) else { return name }
         let ext = isFolder ? "" : RemotePath("/" + name).pathExtension
@@ -485,10 +472,6 @@ actor DriveIndex {
     }
 }
 
-/// What one download has found so far. Its path is looked up once, so every
-/// chunk comes from that file whatever the path names later; a converted
-/// document is fetched once. The stream asks from one task at a time, which
-/// is what makes the mutable state safe.
 private final class DriveDownload: @unchecked Sendable {
     var file: DriveFile?
     var exported = false

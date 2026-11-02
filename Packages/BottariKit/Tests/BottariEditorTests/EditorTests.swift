@@ -101,7 +101,6 @@ struct CheckFailed: Error {}
 @MainActor @Suite struct EditedFileTests {
     let folder = FileManager.default.temporaryDirectory.appending(path: "BottariEditorTests-\(UUID().uuidString)")
 
-    /// `contents` in a file of its own, opened for editing.
     func open(_ contents: String) async throws -> (file: EditedFile, url: URL, text: String) {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appending(path: "nginx.conf")
@@ -114,7 +113,6 @@ struct CheckFailed: Error {}
     @Test func aServerCopyThatIsNoLongerTextIsNeitherMergedAwayNorKeptEmpty() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         let (file, url, text) = try await open("a\nb\n")
-        // cp1252 "é ", which is text in neither UTF-8 nor CP949.
         let theirs = Data([0xE9, 0x20])
         try theirs.write(to: url)
 
@@ -131,7 +129,6 @@ struct CheckFailed: Error {}
     @Test func aFailedCheckAfterAMergePutsBackTheServersNewerCopy() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         let (file, url, _) = try await open("a\nb\nc\n")
-        // A colleague adds a line while this edit changes the first one.
         let theirs = "a\nb\nc\nd\n"
         try Data(theirs.utf8).write(to: url)
         guard case .conflict(let conflict) = try await file.save("A\nb\nc\n", check: nil), let merged = conflict.merged else {
@@ -147,7 +144,6 @@ struct CheckFailed: Error {}
         let afterMerge = try String(contentsOf: url, encoding: .utf8)
         #expect(afterMerge == theirs)
 
-        // The next try fails its check too, and the colleague's copy is still what goes back.
         guard case .checkFailed = try await file.save(merged + "e\n", check: failing) else {
             Issue.record("the check did not fail the second save")
             return
@@ -158,7 +154,6 @@ struct CheckFailed: Error {}
 }
 
 @MainActor @Suite struct TextReplacementTests {
-    /// Hands the text view an undo manager, as its window does.
     @MainActor final class Window: NSObject, NSTextViewDelegate {
         let undo = UndoManager()
 

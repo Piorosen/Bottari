@@ -87,8 +87,6 @@ final class OpenSSHServer {
         self.ended = ended
     }
 
-    /// `ports` are tried in turn; a test picks them only to prove that a
-    /// port another server holds is passed over.
     static func start(authorizing publicKeys: [String], extraConfig: [String] = [], ports: [Int] = (0..<5).map { _ in Int.random(in: 30000..<60000) }) async throws -> OpenSSHServer {
         let folder = try OpenSSH.scratch()
         let hostKey = folder.appending(path: "host_ed25519")
@@ -116,16 +114,12 @@ final class OpenSSHServer {
             let server = OpenSSHServer(folder: folder, port: port, process: process, ended: ended)
             if await server.waitUntilListening() { return server }
             lastError = TestFailure("sshd did not start: \((try? String(contentsOf: folder.appending(path: "sshd.log"), encoding: .utf8)) ?? "")")
-            // The next port is tried with the same host key and keys.
             process.stop(waitingOn: ended)
         }
         try? FileManager.default.removeItem(at: folder)
         throw lastError ?? TestFailure("sshd did not start")
     }
 
-    /// Whether this sshd holds its port, as its own log says. Connecting to
-    /// the port proves nothing: an sshd that failed to bind is still running
-    /// for a moment, while another test's server answers there.
     private func waitUntilListening() async -> Bool {
         let log = folder.appending(path: "sshd.log")
         for _ in 0..<100 {

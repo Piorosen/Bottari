@@ -58,13 +58,10 @@ public enum ThreeWaySync {
                 if let agreed { newBase.append(agreed) }
             }
         }
-        // The shared file keeps its own order, so a Mac that merely orders
-        // things differently has nothing to write to it.
         let newRemote = ids(remote.map(\.id), then: order).compactMap { forRemote[$0] }
         return Result(merged: merged, conflicts: conflicts, remote: newRemote, base: newBase)
     }
 
-    /// `first`, then whatever `rest` adds, each id once.
     private static func ids<ID: Hashable>(_ first: [ID], then rest: [ID]) -> [ID] {
         var seen = Set<ID>()
         return (first + rest).filter { seen.insert($0).inserted }

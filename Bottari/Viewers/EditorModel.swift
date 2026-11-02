@@ -84,8 +84,6 @@ final class EditorModel {
 
     // MARK: - Saving
 
-    /// Uploads the text, unless the server's copy changed since it was opened
-    /// (then `conflict` is set); over `newer`, that overwrites the server's copy it found.
     func save(over newer: EditedFile.Conflict? = nil) async {
         guard !isReadOnly else {
             notice = String(localized: "읽기 전용 서버에는 저장할 수 없습니다.")
@@ -115,7 +113,6 @@ final class EditorModel {
         }
     }
 
-    /// The post-save command, when there is one and the server can run it.
     private var postSaveCheck: (@Sendable () async throws -> Void)? {
         let command = postSaveCommand.trimmingCharacters(in: .whitespaces)
         guard !command.isEmpty, let server = provider as? SFTPFileProvider, server.canRunCommands else { return nil }

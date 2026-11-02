@@ -19,7 +19,6 @@ import Testing
         // 1 changed here, 2 changed there, 3 removed there, 4 added here, 5 added there.
         let expected = [Site(id: 1, port: 2222), Site(id: 2, port: 8022), Site(id: 4, port: 22), Site(id: 5, port: 22)]
         #expect(result.merged == expected)
-        // The shared file keeps its order, so 4, new there, goes last.
         #expect(result.remote == [Site(id: 1, port: 2222), Site(id: 2, port: 8022), Site(id: 5, port: 22), Site(id: 4, port: 22)])
         #expect(result.base == expected)
         #expect(result.conflicts.isEmpty)
@@ -98,7 +97,6 @@ import Testing
         _ = try b.synced("sites.json", local: [Site(id: 2, port: 22)])
         _ = try a.synced("sites.json", local: [Site(id: 1, port: 22), Site(id: 2, port: 22)])
 
-        // From here on A keeps [1, 2], B keeps [2, 1], and neither has anything new to tell the other.
         let file = cloud.appending(path: "sites.json")
         func modified() throws -> Date { try #require(FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date) }
         var last = try modified()
@@ -119,8 +117,6 @@ import Testing
         _ = try a.synced("sites.json", local: [Site(id: 1, port: 22)])
         _ = try b.synced("sites.json", local: [Site(id: 1, port: 22), Site(id: 2, port: 22)])
 
-        // The user types on A while this merge runs, so its result is never put in place
-        // nor committed: A still has only 1, and syncs again with the edit.
         _ = try a.sync("sites.json", local: [Site(id: 1, port: 22)])
         let edited = try a.synced("sites.json", local: [Site(id: 1, port: 2222)])
         #expect(edited.items.map(\.id) == [1, 2])
@@ -208,7 +204,6 @@ import Testing
 }
 
 private extension SyncFolder {
-    /// Syncs and commits at once, as the app does when nothing was edited meanwhile.
     func synced<Item: Codable & Identifiable & Equatable>(_ name: String, local: [Item]) throws -> Outcome<Item> {
         let outcome = try sync(name, local: local)
         try outcome.commit()

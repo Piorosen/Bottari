@@ -76,8 +76,6 @@ import Testing
         }
     }
 
-    /// Each password typed into the sheet is kept or not as its own toggle
-    /// said, whatever is typed after it.
     @Test func onlyTheTypedSecretsChosenToBeKeptAreSaved() throws {
         let bastion = site("bastion", .password)
         let target = site("prod", .password, via: ["bastion"])
@@ -293,10 +291,6 @@ import Testing
         }
     }
 
-    /// Two saved sites for one server, and the second named as the jump
-    /// host: the refusal is that second site's, whose password the hop reads.
-    /// An ~/.ssh/config alias at the same address is no saved site at all.
-    /// A tunnel's server put in front is the tunnel's site.
     @Test func aRefusedJumpHostIsTheSiteNamedOnTheWay() async throws {
         try await withJumpAndTarget { jump, target in
             let bastion = SavedSite(name: "bastion", endpoint: jump.endpoint, authentication: .password)

@@ -59,9 +59,6 @@ struct KeySetupTests {
         }
     }
 
-    /// A new key for a site takes the key Bottari made for it before off the
-    /// server, once the new one is known to log in. A key the user brought in
-    /// from a key file of their own stays on the server.
     @Test func aNewKeyRetiresTheOneBottariMadeBefore() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -75,8 +72,6 @@ struct KeySetupTests {
             let plan = try site.connectionPlan(sites: [], sshConfig: SSHConfig(text: "", directory: ""), secrets: typed.over(secrets))
             return try await SFTPFileProvider.connect(to: plan.endpoint, credential: plan.credential, hostKeys: .acceptAnything, via: plan.hops)
         }
-        // As the app does it: the key Bottari keeps for the site is replaced
-        // once the new one is in and checked.
         func switchToNewKey() async throws -> NewSSHKey {
             let key = try NewSSHKey.generate(.ed25519, comment: "bottari@test")
             let previous = try secrets.secret(for: site.privateKeyKey).flatMap { NewSSHKey(privateKey: $0) }
@@ -84,7 +79,6 @@ struct KeySetupTests {
             try secrets.setSecret(key.privateKey, for: site.privateKeyKey)
             return key
         }
-        // The user's own key, copied into the Keychain from ~/.ssh.
         try secrets.setSecret(own.privateKey, for: site.privateKeyKey)
 
         let first = try await switchToNewKey()
@@ -97,9 +91,6 @@ struct KeySetupTests {
         }
     }
 
-    /// Deleting a site takes the key Bottari made for it off the server. A key
-    /// the user brought in from a key file of their own stays, since it still
-    /// opens that server from their terminal and their other machines.
     @Test func deletingASiteTakesOffOnlyAKeyBottariMade() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -123,8 +114,6 @@ struct KeySetupTests {
         #expect(lines == [own.publicKey])
     }
 
-    /// Behind a jump host whose password was typed and not saved, the new
-    /// key is checked through that jump host with the typed password.
     @Test func aNewKeyIsCheckedThroughAJumpHostWithItsTypedPassword() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

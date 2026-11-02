@@ -60,9 +60,7 @@ final class PaneModel {
     private var backStack: [RemotePath] = []
     private var forwardStack: [RemotePath] = []
     private var siteID: SavedSite.ID?
-    /// Every listing takes a turn, so only the newest one shows.
     private let loads = Turns()
-    /// Every connect and switch takes a turn, so only the newest one lands.
     private let places = Turns()
     /// Ended transfers this pane has already reloaded for.
     @ObservationIgnored private var seenTransfers: Set<TransferJob.ID> = []
@@ -120,11 +118,6 @@ final class PaneModel {
         await load(path)
     }
 
-    /// Connects to a saved site and shows it in this pane. `typedSecrets` are
-    /// passwords the user just typed for it (see `SiteLibrary.connect`).
-    /// A connect overtaken by a newer place (the user clicked elsewhere
-    /// meanwhile) closes what it opened and throws `CancellationError`,
-    /// whether it got in or failed.
     func connect(to site: SavedSite, typedSecrets: TypedSecrets = TypedSecrets()) async throws {
         let turn = places.take()
         connectingSite = site
@@ -135,9 +128,6 @@ final class PaneModel {
         guard await switchProvider(to: provider, site: site) else { throw CancellationError() }
     }
 
-    /// Shows a different location in this pane, starting at the site's start
-    /// folder or the provider's home, and closes the connection the pane was
-    /// using before. False when a newer place was chosen before it opened.
     @discardableResult
     func switchProvider(to newProvider: any FileProvider, site: SavedSite? = nil) async -> Bool {
         let turn = places.take()
@@ -611,8 +601,6 @@ final class PaneModel {
         case shown, failed, overtaken
     }
 
-    /// Lists `destination` and shows it. Unless it is shown, the pane stays
-    /// where it was: the listing failed, or a newer one started meanwhile.
     @discardableResult
     private func load(_ destination: RemotePath, keepingSelection: Bool = false) async -> Landing {
         let turn = loads.take()
