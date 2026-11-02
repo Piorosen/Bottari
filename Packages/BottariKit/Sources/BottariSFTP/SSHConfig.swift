@@ -207,13 +207,17 @@ public struct SSHConfig: Sendable {
             case "include":
                 guard depth < 8 else { continue }
                 // As in ssh, an Include inside a Host or Match block counts only
-                // where that block applies, and the lines after it go back to
-                // that block rather than to the included file's last one.
+                // where that block applies, and each included file, like the
+                // lines after the Include, starts in that block rather than in
+                // the last one the file before it opened.
                 let around = blocks[blocks.count - 1]
                 let before = blocks.count
                 for pattern in arguments {
                     for path in Self.includedFiles(pattern, directory: directory, home: home) {
                         guard let included = readFile(path) else { continue }
+                        if blocks.count != before {
+                            blocks.append(Block(condition: around.condition, options: [], enclosing: around.enclosing))
+                        }
                         parse(included, directory: directory, home: home, readFile: readFile, depth: depth + 1, enclosing: around.enclosing + [around.condition], into: &blocks)
                     }
                 }

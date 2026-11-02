@@ -130,6 +130,20 @@ import Testing
         #expect(parsed.resolve("other").user == "me")
     }
 
+    @Test func eachIncludedFileStartsWhereTheIncludeIs() {
+        let parsed = config(
+            "Include a.conf b.conf\n",
+            files: [
+                "/Users/me/.ssh/a.conf": "Host x\n  User ax\n",
+                "/Users/me/.ssh/b.conf": "User admin\nHost y\n  Port 2222\n",
+            ]
+        )
+        // b.conf's first line comes before any Host of its own, so it applies everywhere.
+        #expect(parsed.resolve("y").user == "admin")
+        #expect(parsed.resolve("other").user == "admin")
+        #expect(parsed.resolve("x").user == "ax")
+    }
+
     @Test func percentTokensExpandInIdentityFiles() {
         let parsed = config("""
         Host box
