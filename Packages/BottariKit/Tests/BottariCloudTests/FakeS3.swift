@@ -12,6 +12,8 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
         var log: [String] = []
         /// Copies answer 200 with an error in the body, as S3 sometimes does.
         var copiesFail = false
+        /// An object someone else writes while the next copy runs.
+        var landsDuringCopy: (key: String, data: Data)?
     }
 
     static let state = Mutex<[String: Bucket]>([:])
@@ -25,6 +27,10 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
 
     static func failCopies(in bucket: String, _ fail: Bool) {
         state.withLock { $0[bucket, default: Bucket()].copiesFail = fail }
+    }
+
+    static func land(_ key: String, _ data: Data, duringNextCopyIn bucket: String) {
+        state.withLock { $0[bucket, default: Bucket()].landsDuringCopy = (key, data) }
     }
 
     static func put(_ key: String, _ data: Data, in bucket: String) {
@@ -79,6 +85,11 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
             }
         case ("PUT", false):
             if let source = request.value(forHTTPHeaderField: "x-amz-copy-source") {
+                Self.state.withLock { state in
+                    guard let late = state[bucket]?.landsDuringCopy else { return }
+                    state[bucket]!.objects[late.key] = (late.data, Date())
+                    state[bucket]!.landsDuringCopy = nil
+                }
                 // "/bucket/key/with/slashes"
                 let sourceKey = source.drop { $0 == "/" }.split(separator: "/", maxSplits: 1).last.map { String($0).removingPercentEncoding ?? String($0) } ?? ""
                 guard let object = Self.bucket(bucket).objects[sourceKey] else { return respond(404) }

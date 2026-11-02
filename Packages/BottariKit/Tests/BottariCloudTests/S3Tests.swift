@@ -92,6 +92,17 @@ import Testing
         await #expect(throws: ProviderError.alreadyExists("/v3")) { try await provider.copy("/v3", to: "/v3") }
     }
 
+    @Test func aFileWrittenIntoAFolderWhileItMovesIsKept() async throws {
+        let provider = provider
+        try await provider.write("/a/1.txt", data: Data("1".utf8))
+        FakeS3.land("a/late.txt", Data("late".utf8), duringNextCopyIn: bucket)
+
+        try await provider.move("/a", to: "/b")
+        #expect(try await provider.readData("/b/1.txt") == Data("1".utf8))
+        let names = try await provider.list("/a").map(\.name) + provider.list("/b").map(\.name)
+        #expect(names.contains("late.txt"))
+    }
+
     @Test func aCopyThatFailsAfterAnsweringKeepsTheOriginal() async throws {
         let provider = provider
         try await provider.write("/only.txt", data: Data("precious".utf8))

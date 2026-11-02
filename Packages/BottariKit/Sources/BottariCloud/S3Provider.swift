@@ -250,6 +250,12 @@ public struct S3Provider: FileProvider {
     }
 
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
+        _ = try await copyObjects(from, to: to)
+    }
+
+    /// Copies `from` object by object and returns the keys copied, with the
+    /// folder's marker if it has one.
+    private func copyObjects(_ from: RemotePath, to: RemotePath) async throws -> [String] {
         if (try? await stat(to)) != nil { throw ProviderError.alreadyExists(to) }
         let source = try await stat(from)
         if source.isDirectory {
@@ -259,7 +265,8 @@ public struct S3Provider: FileProvider {
             marker.httpBody = Data()
             _ = try await send(&marker, path: to, payload: Data())
         }
-        for (old, new, size) in try await keys(of: source, movingTo: to) where !(source.isDirectory && old == Self.prefix(from)) {
+        let keys = try await keys(of: source, movingTo: to)
+        for (old, new, size) in keys where !(source.isDirectory && old == Self.prefix(from)) {
             if let size, size > largestSingleCopy {
                 try await copyInParts(old, to: new, size: size, path: from)
             } else {
@@ -272,6 +279,7 @@ public struct S3Provider: FileProvider {
                 try Self.checkForError(in: data, path: from)
             }
         }
+        return keys.map(\.0)
     }
 
     private func copySource(_ key: String) -> String {
@@ -304,19 +312,25 @@ public struct S3Provider: FileProvider {
         }
     }
 
-    /// S3 has no rename: copy, then delete the originals.
+    /// S3 has no rename: copy, then delete the originals. Only the objects
+    /// copied go, so one written into the folder meanwhile stays.
     public func move(_ from: RemotePath, to: RemotePath) async throws {
-        try await copy(from, to: to)
-        try await delete(from)
+        for key in try await copyObjects(from, to: to) {
+            try await deleteObject(key, path: from)
+        }
     }
 
     public func delete(_ path: RemotePath) async throws {
         let item = try await stat(path)
         for (key, _, _) in try await keys(of: item, movingTo: path) {
-            var request = URLRequest(url: try configuration.url(for: key))
-            request.httpMethod = "DELETE"
-            _ = try await send(&request, path: path, allowing: [404])
+            try await deleteObject(key, path: path)
         }
+    }
+
+    private func deleteObject(_ key: String, path: RemotePath) async throws {
+        var request = URLRequest(url: try configuration.url(for: key))
+        request.httpMethod = "DELETE"
+        _ = try await send(&request, path: path, allowing: [404])
     }
 
     /// Every object under `item` (itself for a file; for a folder its contents
