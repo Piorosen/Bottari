@@ -118,7 +118,7 @@ public final class KnownHosts: @unchecked Sendable {
                 rejections[id] = .hostKeyRevoked(host: id)
                 Log.connection.error("\(id): known_hosts에서 폐기된 호스트 키")
                 return false
-            case .changed(let expected) where keys[id] == nil:
+            case .changed(let expected):
                 Log.connection.error("\(id): known_hosts와 다른 호스트 키")
                 rejections[id] = .hostKeyChangedInKnownHosts(
                     host: id,
@@ -132,7 +132,7 @@ public final class KnownHosts: @unchecked Sendable {
                 Log.connection.error("\(id): known_hosts에 다른 종류의 호스트 키만 있음")
                 rejections[id] = .hostKeyNotListed(host: id, known: known.map(Self.fingerprint(ofOpenSSHKey:)), presented: presented)
                 return false
-            case .changed, .otherKinds, .unknown:
+            case .otherKinds, .unknown:
                 break
             }
             guard let trusted = keys[id] else {

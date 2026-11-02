@@ -97,6 +97,29 @@ import Testing
         #expect(!fresh.check(ed, for: new))
     }
 
+    @Test func aKeyKnownHostsReplacedIsRefusedThoughBottariRememberedIt() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bt-kh-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "known_hosts")
+        try "".write(to: file, atomically: true, encoding: .utf8)
+        let store = KnownHosts(fileURL: nil, openSSHFiles: [file])
+        let prod = SFTPEndpoint(host: "prod.example.com", username: "me")
+        #expect(store.check(ed, for: prod))
+
+        // The server was rekeyed and ssh learned the new key after `ssh-keygen -R`.
+        try "prod.example.com \(otherEd)\n".write(to: file, atomically: true, encoding: .utf8)
+        #expect(!store.check(ed, for: prod))
+        #expect(store.takeRejection(for: prod) == .hostKeyChangedInKnownHosts(
+            host: "prod.example.com",
+            expected: KnownHosts.fingerprint(ofOpenSSHKey: otherEd),
+            presented: KnownHosts.fingerprint(ofOpenSSHKey: ed)
+        ))
+
+        #expect(store.check(otherEd, for: prod))
+        #expect(store.trustedKey(for: prod) == otherEd)
+    }
+
     @Test func aKindKnownHostsDoesNotListWaitsForTheUser() throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "bt-kh-\(UUID().uuidString.prefix(8))")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
