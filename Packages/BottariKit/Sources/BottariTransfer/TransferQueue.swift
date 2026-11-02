@@ -72,10 +72,14 @@ public final class TransferQueue {
         var items: [FileItem] = []
         var gone: [RemotePath] = []
         for path in record.items {
-            if let item = try? await source.provider.stat(path) {
-                items.append(item)
-            } else {
+            do {
+                items.append(try await source.provider.stat(path))
+            } catch ProviderError.notFound {
                 gone.append(path)
+            } catch {
+                // Out of reach for now (a folder the sandbox lost, a server that
+                // is down): planning looks again and fails it, for a retry.
+                items.append(FileItem(path: path, kind: .other))
             }
         }
         let job = TransferJob(
@@ -232,7 +236,7 @@ public final class TransferQueue {
         startTicker()
         for item in job.items {
             guard job.state != .cancelled else { break }
-            await plan(item, to: job.destinationFolder.appending(item.name), in: job, pickedByUser: true)
+            await plan(item, to: job.destinationFolder.appending(item.name), in: job)
         }
         job.isPreparing = false
         if job.state == .preparing { job.state = .running }
@@ -243,17 +247,27 @@ public final class TransferQueue {
     /// stream, or a folder to create (or merge into) and look through.
     /// `throughMac` streams the item whatever the job's route, e.g. a renamed
     /// copy, which a direct route cannot make.
-    private func plan(_ given: FileItem, to destination: RemotePath, in job: TransferJob, pickedByUser: Bool = false, throughMac: Bool = false) async {
+    private func plan(_ given: FileItem, to destination: RemotePath, in job: TransferJob, throughMac: Bool = false) async {
         var item = given
         var destination = destination
         if item.kind == .other {
             // Something the listing did not resolve, e.g. a link into a privacy-guarded
             // folder. Look at it now if the user picked it, skip it otherwise.
-            guard pickedByUser, let resolved = try? await job.source.provider.stat(item.path), resolved.kind != .other else {
+            guard job.pickedPaths.contains(item.path) else {
                 job.skippedFiles += 1
                 return
             }
-            item = resolved
+            do {
+                let resolved = try await job.source.provider.stat(item.path)
+                guard resolved.kind != .other else {
+                    job.skippedFiles += 1
+                    return
+                }
+                item = resolved
+            } catch {
+                fail(item, error.localizedDescription, retry: WorkItem(source: item, destination: destination, action: .scan), in: job)
+                return
+            }
         }
         let rescan = WorkItem(source: item, destination: destination, action: .scan)
         let sameLocation = job.source.provider.locationID == job.destination.provider.locationID

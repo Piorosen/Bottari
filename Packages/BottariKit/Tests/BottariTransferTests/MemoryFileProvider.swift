@@ -26,6 +26,8 @@ final class MemoryFileProvider: FileProvider {
         var damagedChecksums: Set<String> = []
         /// Names that cannot be deleted.
         var failingDeletes: Set<String> = []
+        /// Names that cannot be looked at, as if their folder were out of reach.
+        var failingStats: Set<String> = []
         /// Writes still to fail as if the connection dropped midway.
         var droppedWrites = 0
         /// Moves still to carry out and then fail as if the reply never came.
@@ -112,6 +114,7 @@ final class MemoryFileProvider: FileProvider {
 
     func stat(_ path: RemotePath) async throws -> FileItem {
         try state.withLock { state in
+            guard !state.failingStats.contains(path.name) else { throw ProviderError.permissionDenied(path) }
             guard let entry = state.entries[path] else { throw ProviderError.notFound(path) }
             return item(path, entry)
         }

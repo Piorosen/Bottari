@@ -539,6 +539,29 @@ import Testing
         #expect(!mac.exists("/left"))
     }
 
+    @Test func aResumedMoveDoesNotCallAnUnreadableOriginalMoved() async throws {
+        mac.addFile("/a.txt", "a")
+        mac.state.withLock { $0.failingStats = ["a.txt"] }
+        let record = TransferRecord(
+            id: UUID(), kind: .move, items: ["/a.txt"],
+            source: .init(place: "local", name: "Mac"), destination: .init(place: "site:nas", name: "NAS"),
+            folder: .root, policy: .ask, verifiesChecksums: false,
+            done: [], unfinished: [], totalFiles: 1, totalBytes: 1, transferredBytes: 0, savedAt: Date()
+        )
+        let job = try await finished(await queue.resume(record, from: TransferEndpoint(mac, place: "local"), to: TransferEndpoint(server, place: "site:nas")))
+
+        #expect(job.state == .failed)
+        #expect(job.failures.map(\.path) == ["/a.txt"])
+        #expect(mac.text("/a.txt") == "a")
+
+        // Once the folder can be looked at again, a retry moves it.
+        mac.state.withLock { $0.failingStats = [] }
+        queue.retryFailures(of: job)
+        try await eventually { job.state == .finished }
+        #expect(server.text("/a.txt") == "a")
+        #expect(!mac.exists("/a.txt"))
+    }
+
     @Test func cancellingLeavesNothingHalfWritten() async throws {
         mac.addFile("/movie.mp4", Data(count: 40_000))
         mac.addFile("/later.txt", "later")
