@@ -82,6 +82,8 @@ public final class TransferJob: Identifiable {
     @ObservationIgnored lazy var nameMatching = destination.provider.nameMatching(in: destinationFolder)
     /// Free names handed out for "keep both" that are not written yet.
     @ObservationIgnored var reserved: Set<RemotePath> = []
+    /// Folders by their real path, each resolved once, to tell two spellings of one folder apart.
+    @ObservationIgnored var realFolders: [RemotePath: RemotePath] = [:]
     /// Source folders a move emptied, to remove at the end.
     @ObservationIgnored var foldersToClean: [RemotePath] = []
     @ObservationIgnored var isPreparing = false

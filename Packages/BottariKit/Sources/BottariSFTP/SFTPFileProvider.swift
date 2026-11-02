@@ -132,6 +132,14 @@ public struct SFTPFileProvider: FileProvider {
         }
     }
 
+    public func realPath(_ path: RemotePath) async throws -> RemotePath {
+        do {
+            return RemotePath(try await link.retrying { try await $0.sftp.getRealPath(atPath: path.string) })
+        } catch {
+            throw Self.translate(error, path)
+        }
+    }
+
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
         let reader = Reader(link: link, path: path, start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max)
         return AsyncThrowingStream(unfolding: {

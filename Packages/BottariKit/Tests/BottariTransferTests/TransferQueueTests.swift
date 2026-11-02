@@ -272,6 +272,24 @@ import Testing
         #expect(server.text("/notes 2.md") == "# notes")
     }
 
+    @Test(arguments: [TransferKind.copy, .move])
+    func anItemIsNotOverwrittenWithItselfThroughALinkedFolder(kind: TransferKind) async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "bottari-linked-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appending(path: "d"), withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: root.appending(path: "d/a.txt"))
+        try FileManager.default.createSymbolicLink(atPath: root.appending(path: "link").path, withDestinationPath: "d")
+        let local = LocalFileProvider()
+        let file = try await local.stat(RemotePath(root.appending(path: "d/a.txt").path))
+
+        let job = try await finished(queue.enqueue(kind, [file], from: TransferEndpoint(local), to: TransferEndpoint(local), into: RemotePath(root.appending(path: "link").path), policy: .overwrite))
+
+        #expect((try? String(contentsOf: root.appending(path: "d/a.txt"), encoding: .utf8)) == "keep")
+        #expect(job.failures.isEmpty)
+        // Copying onto itself keeps both, like Finder; moving onto itself does nothing.
+        #expect(FileManager.default.fileExists(atPath: root.appending(path: "d/a 2.txt").path) == (kind == .copy))
+    }
+
     @Test func aFolderCannotGoInsideItself() async throws {
         server.addFile("/a/b/file", "x")
 

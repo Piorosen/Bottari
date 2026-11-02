@@ -261,19 +261,15 @@ public final class TransferQueue {
             fail(item, String(localized: "폴더를 자신의 하위 폴더로 이동하거나 복사할 수 없습니다: \(item.path.string)"), retry: nil, in: job)
             return
         }
-        if sameLocation, item.path == destination {
-            // Moving an item onto itself does nothing; copying it keeps both, like Finder.
-            guard job.kind == .copy else { return }
-            do {
-                destination = try await freePath(for: destination, isDirectory: item.isDirectory, in: job)
-            } catch {
-                fail(item, error.localizedDescription, retry: rescan, in: job)
-                return
-            }
-        }
-        let existing: FileItem?
+        var existing: FileItem?
         do {
             existing = try await existingItem(at: destination, in: job)
+            if sameLocation, try await isSameItem(item, at: destination, existing: existing, in: job) {
+                // Moving an item onto itself does nothing; copying it keeps both, like Finder.
+                guard job.kind == .copy else { return }
+                destination = try await freePath(for: destination, isDirectory: item.isDirectory, in: job)
+                existing = nil
+            }
         } catch {
             fail(item, error.localizedDescription, retry: rescan, in: job)
             return
@@ -403,6 +399,25 @@ public final class TransferQueue {
             }
         }
         return job.listings[parent]?[job.nameMatching.key(path.name)]
+    }
+
+    /// Whether `item` is the very thing at `destination`: the same path, or
+    /// the same item reached another way, through a linked folder or /tmp
+    /// beside /private/tmp, where `existing` is what the listing shows there.
+    private func isSameItem(_ item: FileItem, at destination: RemotePath, existing: FileItem?, in job: TransferJob) async throws -> Bool {
+        if item.path == destination { return true }
+        guard let existing else { return false }
+        let real = try await realPath(of: item, on: job.source.provider, in: job)
+        return try await realPath(of: existing, on: job.destination.provider, in: job) == real
+    }
+
+    /// `item`'s path with its folder's links resolved, each folder looked up once per job.
+    private func realPath(of item: FileItem, on provider: any FileProvider, in job: TransferJob) async throws -> RemotePath {
+        guard !item.isSymbolicLink, let parent = item.path.parent else { return try await provider.realPath(item.path) }
+        if let real = job.realFolders[parent] { return real.appending(item.name) }
+        let real = try await provider.realPath(parent)
+        job.realFolders[parent] = real
+        return real.appending(item.name)
     }
 
     /// A name next to `path` that nothing uses or has claimed, claimed for the caller.

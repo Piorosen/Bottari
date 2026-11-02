@@ -34,6 +34,14 @@ public struct LocalFileProvider: FileProvider {
         try mapErrors(path) { try item(at: path, followingGuardedLinks: true) }
     }
 
+    public func realPath(_ path: RemotePath) async throws -> RemotePath {
+        guard let resolved = realpath(path.string, nil) else {
+            throw Self.translate(POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO), path)
+        }
+        defer { free(resolved) }
+        return RemotePath(String(cString: resolved))
+    }
+
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
         let reader = Reader(start: range?.lowerBound ?? 0, end: range?.upperBound ?? .max) {
             try requireFile(path)

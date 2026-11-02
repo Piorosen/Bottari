@@ -65,6 +65,9 @@ public protocol FileProvider: Sendable {
     /// Entries of the directory at `path`, in Finder order.
     func list(_ path: RemotePath) async throws -> [FileItem]
     func stat(_ path: RemotePath) async throws -> FileItem
+    /// `path` with the symbolic links in it resolved, so that two spellings
+    /// of one item compare equal. Fails when nothing is at `path`.
+    func realPath(_ path: RemotePath) async throws -> RemotePath
     /// Streams the file's bytes, or only `range` of them when given. Bytes are read
     /// as the consumer asks for them, so a slow consumer does not pile a whole
     /// file up in memory.
@@ -106,6 +109,11 @@ public protocol FileProvider: Sendable {
 
 extension FileProvider {
     public var isLocal: Bool { locationID == LocalFileProvider.locationID }
+
+    /// A place without links has one spelling per item.
+    public func realPath(_ path: RemotePath) async throws -> RemotePath {
+        path
+    }
 
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
         throw ProviderError.unsupported(String(localized: "서버 내 복사"))
