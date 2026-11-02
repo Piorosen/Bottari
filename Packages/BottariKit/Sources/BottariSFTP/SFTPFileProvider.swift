@@ -168,10 +168,18 @@ public struct SFTPFileProvider: FileProvider {
         let file: SFTPFile
         do {
             if offset > 0 {
+                guard try await Self.isOwnFile(temp, on: sftp) else {
+                    throw ProviderError.io(String(localized: "이어받을 임시 파일 자리에 링크가 있습니다: \(temp.string)"))
+                }
                 // Drop anything past the point the caller resumes from.
                 try await sftp.setAttributes(at: temp.string, to: SFTPFileAttributes(size: UInt64(offset)))
+                file = try await sftp.openFile(filePath: temp.string, flags: [.write])
+            } else {
+                // The partial file is this write's own: whatever is at its
+                // name, a stale copy or a planted link, is not it.
+                try? await sftp.remove(at: temp.string)
+                file = try await sftp.openFile(filePath: temp.string, flags: [.write, .create, .forceCreate])
             }
-            file = try await sftp.openFile(filePath: temp.string, flags: offset > 0 ? [.write] : [.write, .create, .truncate])
         } catch {
             // A folder where only its files may be written (a group-writable
             // config under /etc, say) has no room for a file beside them, so
@@ -205,6 +213,15 @@ public struct SFTPFileProvider: FileProvider {
               let real = try? await sftp.getRealPath(atPath: path.string), real.hasPrefix("/")
         else { return path }
         return RemotePath(real)
+    }
+
+    /// Whether the partial file at `temp` is a file of its own and not a link
+    /// put at its name since the write was cut off. SFTP cannot open a file
+    /// without following links, so the real path is compared instead.
+    private static func isOwnFile(_ temp: RemotePath, on sftp: SFTPClient) async throws -> Bool {
+        let real = try await sftp.getRealPath(atPath: temp.string)
+        let folder = try await sftp.getRealPath(atPath: (temp.parent ?? .root).string)
+        return RemotePath(real) == RemotePath(folder).appending(temp.name)
     }
 
     /// Truncates and rewrites the file itself. Not safe against a dropped

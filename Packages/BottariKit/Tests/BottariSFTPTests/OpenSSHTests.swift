@@ -221,6 +221,40 @@ struct OpenSSHTests {
         }
     }
 
+    @Test func aLinkPlantedAtThePartialNameIsNotWrittenThrough() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let fm = FileManager.default
+        let shared = RemotePath(folder.path).appending("shared")
+        let victim = URL(fileURLWithPath: shared.appending("victim.txt").string)
+        try fm.createDirectory(atPath: shared.string, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: victim)
+        let upload = shared.appending("up.txt")
+        let resumed = shared.appending("resumed.txt")
+        for path in [upload, resumed] {
+            try fm.createSymbolicLink(atPath: path.partialWritePath.string, withDestinationPath: "victim.txt")
+        }
+
+        try await withServer(authorizing: [key.publicKey]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+
+            try await provider.write(upload, data: Data("new".utf8))
+            #expect(try String(contentsOf: victim, encoding: .utf8) == "keep")
+            #expect(try String(contentsOf: URL(fileURLWithPath: upload.string), encoding: .utf8) == "new")
+            #expect((try? fm.destinationOfSymbolicLink(atPath: upload.string)) == nil)
+
+            await #expect(throws: (any Error).self) {
+                try await provider.write(resumed, from: AsyncThrowingStream { continuation in
+                    continuation.yield(Data("23".utf8))
+                    continuation.finish()
+                }, resumingAt: 2)
+            }
+            #expect(try String(contentsOf: victim, encoding: .utf8) == "keep")
+        }
+    }
+
     @Test func aFolderAsSFTPShowsItIsFoundForTheShell() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

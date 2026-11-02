@@ -185,6 +185,40 @@ import Testing
         #expect(try await provider.list(dir).map(\.name) == ["video.mp4"])
     }
 
+    @Test func aLinkPlantedAtThePartialNameIsNotWrittenThrough() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let victim = dir.appending("victim.txt")
+        try await provider.write(victim, data: Data("keep".utf8))
+        let target = dir.appending("up.txt")
+        try FileManager.default.createSymbolicLink(atPath: target.partialWritePath.string, withDestinationPath: "victim.txt")
+
+        try await provider.write(target, data: Data("new".utf8))
+
+        #expect(try await provider.readData(victim) == Data("keep".utf8))
+        #expect(try await provider.readData(target) == Data("new".utf8))
+        #expect(try await provider.stat(target).isSymbolicLink == false)
+    }
+
+    @Test func aResumeRefusesALinkPlantedAtThePartialName() async throws {
+        let dir = try makeTempDirectory()
+        defer { cleanUp(dir) }
+        let victim = dir.appending("victim.txt")
+        try await provider.write(victim, data: Data("keep it all".utf8))
+        let target = dir.appending("up.txt")
+        try FileManager.default.createSymbolicLink(atPath: target.partialWritePath.string, withDestinationPath: "victim.txt")
+
+        await #expect(throws: (any Error).self) {
+            try await provider.write(target, from: AsyncThrowingStream { continuation in
+                continuation.yield(Data("56789".utf8))
+                continuation.finish()
+            }, resumingAt: 5)
+        }
+
+        #expect(try await provider.readData(victim) == Data("keep it all".utf8))
+        #expect(!FileManager.default.fileExists(atPath: target.string))
+    }
+
     @Test func checksumAndModificationTime() async throws {
         let dir = try makeTempDirectory()
         defer { cleanUp(dir) }

@@ -107,10 +107,7 @@ public struct LocalFileProvider: FileProvider {
         // What was written stays in the partial file so a retry can resume.
         let temp = path.partialWritePath
         do {
-            if offset == 0 {
-                try mapErrors(parent) { try Data().write(to: url(temp)) }
-            }
-            let handle = try FileHandle(forWritingTo: url(temp))
+            let handle = try mapErrors(parent) { try Self.openPartial(temp, fresh: offset == 0) }
             try handle.truncate(atOffset: UInt64(offset))
             try handle.seek(toOffset: UInt64(offset))
             do {
@@ -225,6 +222,19 @@ public struct LocalFileProvider: FileProvider {
 
     private func url(_ path: RemotePath) -> URL {
         URL(fileURLWithPath: path.string)
+    }
+
+    /// Opens the partial file as this write's own regular file. A fresh write
+    /// replaces whatever is at the name, a stale copy or a planted link, and
+    /// a resume never follows a link put there since.
+    private static func openPartial(_ temp: RemotePath, fresh: Bool) throws -> FileHandle {
+        if fresh { unlink(temp.string) }
+        let descriptor = open(temp.string, fresh ? O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW : O_WRONLY | O_NOFOLLOW, 0o644)
+        guard descriptor >= 0 else {
+            if errno == ELOOP { throw ProviderError.io(String(localized: "이어받을 임시 파일 자리에 링크가 있습니다: \(temp.string)")) }
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
     /// Describes `path`. Without `followingGuardedLinks`, a link into a privacy-guarded
