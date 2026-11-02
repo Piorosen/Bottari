@@ -70,7 +70,7 @@ struct CodeTextView: NSViewRepresentable {
         textView.isEditable = isEditable
         if context.coordinator.revision != revision {
             context.coordinator.revision = revision
-            textView.string = text
+            textView.replaceAllText(with: text)
             scrollView.verticalRulerView?.needsDisplay = true
         }
     }
