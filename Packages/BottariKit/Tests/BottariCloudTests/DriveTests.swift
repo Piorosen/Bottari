@@ -129,6 +129,27 @@ import Testing
         #expect(try await drive.readData("/x (2)") == Data("real".utf8))
     }
 
+    @Test(arguments: [false, true])
+    func removingRepeatsRemovesTheOnesChosen(permanently: Bool) async throws {
+        for content in ["1", "2", "3", "4"] {
+            FakeDrive.add(drive, name: "x.txt", data: Data(content.utf8))
+        }
+        let drive = provider()
+        _ = try await drive.list(.root)
+        #expect(try await drive.readData("/x (3).txt") == Data("3".utf8))
+
+        for path: RemotePath in ["/x (2).txt", "/x (3).txt"] {
+            if permanently {
+                try await drive.delete(path)
+            } else {
+                try await drive.trash(path)
+            }
+        }
+        let left = FakeDrive.drive(self.drive).files.values.filter { !$0.trashed }.map { String(decoding: $0.data, as: UTF8.self) }
+        #expect(left.sorted() == ["1", "4"])
+        #expect(try await drive.readData("/x (4).txt") == Data("4".utf8))
+    }
+
     @Test func refreshingShowsChangesMadeElsewhere() async throws {
         let drive = provider()
         try await drive.write("/a.txt", data: Data("a".utf8))

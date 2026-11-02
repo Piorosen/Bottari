@@ -132,7 +132,7 @@ public struct GoogleDriveProvider: FileProvider {
         // The folder's listing takes the new file in, instead of being fetched
         // again for each of a thousand uploads into it.
         if let file = try? JSONDecoder.drive.decode(DriveFile.self, from: finished) {
-            await index.put(file, in: parent.id)
+            await index.put(file, shownAs: shownName(file), in: parent.id)
         } else {
             await index.forget(children: parent.id)
         }
@@ -171,7 +171,7 @@ public struct GoogleDriveProvider: FileProvider {
         let body = try JSONSerialization.data(withJSONObject: ["name": name, "mimeType": Self.folderType, "parents": [parent.id]] as [String: Any])
         let (data, _) = try await request("POST", "\(Self.api)/files", query: [("supportsAllDrives", "true"), ("fields", Self.fields)], headers: ["Content-Type": "application/json"], body: body, path: path)
         if let folder = try? JSONDecoder.drive.decode(DriveFile.self, from: data) {
-            await index.put(folder, in: parent.id)
+            await index.put(folder, shownAs: shownName(folder), in: parent.id)
         } else {
             await index.forget(children: parent.id)
         }
@@ -263,10 +263,10 @@ public struct GoogleDriveProvider: FileProvider {
         return target
     }
 
-    /// A folder's children with the names they show under (see `entries`),
+    /// A folder's children with the names they show under (see `DriveIndex`),
     /// from a listing at most `DriveIndex.lifetime` old unless `fresh`.
     func children(of folder: DriveFile, at path: RemotePath, fresh: Bool = false) async throws -> [DriveEntry] {
-        if !fresh, let cached = await index.files(in: folder.id) { return entries(cached) }
+        if !fresh, let cached = await index.entries(in: folder.id) { return cached }
         var files: [DriveFile] = []
         var token: String?
         repeat {
@@ -284,37 +284,18 @@ public struct GoogleDriveProvider: FileProvider {
             files += page.files.filter { $0.mimeType != "application/vnd.google-apps.shortcut" }
             token = page.nextPageToken
         } while token != nil
-        await index.store(files, in: folder.id)
-        return entries(files)
+        return await index.store(files.map { ($0, shownName($0)) }, in: folder.id)
     }
 
-    /// Names as they show in a path: converted documents get their export
-    /// extension; "/", "." and ".." (which Drive allows in a name) become
-    /// look-alikes; repeats get " (2)", " (3)", skipping names already taken.
-    func entries(_ files: [DriveFile]) -> [DriveEntry] {
-        let shown = files.map { file in
-            var name = Self.pathSafe(file.name)
-            if file.isGoogleDocument, let export = exportFormat.export(for: file.mimeType) {
-                name += "." + export.ext
-            }
-            return name
+    /// The name `file` shows under in a path, before any " (n)" for a
+    /// repeat: converted documents get their export extension; "/", "." and
+    /// ".." (which Drive allows in a name) become look-alikes.
+    func shownName(_ file: DriveFile) -> String {
+        var name = Self.pathSafe(file.name)
+        if file.isGoogleDocument, let export = exportFormat.export(for: file.mimeType) {
+            name += "." + export.ext
         }
-        var used = Set<String>()
-        let taken = Set(shown)
-        return zip(files, shown).map { file, name in
-            var display = name
-            if used.contains(display) {
-                let ext = file.isFolder ? "" : RemotePath("/" + name).pathExtension
-                let stem = ext.isEmpty ? name : String(name.dropLast(ext.count + 1))
-                var count = 2
-                repeat {
-                    display = ext.isEmpty ? "\(stem) (\(count))" : "\(stem) (\(count)).\(ext)"
-                    count += 1
-                } while used.contains(display) || taken.contains(display)
-            }
-            used.insert(display)
-            return DriveEntry(file: file, displayName: display)
-        }
+        return name
     }
 
     /// A name that stays one path component.
@@ -426,30 +407,69 @@ private struct DriveError: Decodable {
 }
 
 /// Folder listings by folder ID, so a path is not looked up folder by folder
-/// on every request. They are kept briefly, since Drive changes from elsewhere.
+/// on every request. They are kept briefly, since Drive changes from elsewhere,
+/// but the names they gave out stay: a repeat keeps its " (n)" while it stays
+/// in the folder under the same name, so a path still means the same file
+/// after others of that name come or go.
 actor DriveIndex {
     static let lifetime: Duration = .seconds(30)
-    private var listings: [String: (files: [DriveFile], at: ContinuousClock.Instant)] = [:]
+    /// `at` is nil once the listing is out of date; its names still hold.
+    private var listings: [String: (entries: [DriveEntry], at: ContinuousClock.Instant?)] = [:]
 
-    func files(in id: String) -> [DriveFile]? {
-        guard let listing = listings[id], .now - listing.at < Self.lifetime else { return nil }
-        return listing.files
+    func entries(in id: String) -> [DriveEntry]? {
+        guard let listing = listings[id], let at = listing.at, .now - at < Self.lifetime else { return nil }
+        return listing.entries
     }
 
-    func store(_ files: [DriveFile], in id: String) { listings[id] = (files, .now) }
+    /// Takes in a folder's files, each with the name it shows as. A file
+    /// listed before keeps its name; another repeat gets " (2)", " (3)",
+    /// skipping names already taken.
+    func store(_ files: [(DriveFile, String)], in id: String) -> [DriveEntry] {
+        var before: [String: DriveEntry] = [:]
+        for entry in listings[id]?.entries ?? [] { before[entry.file.id] = entry }
+        var kept: [String: String] = [:]
+        for (file, _) in files {
+            if let old = before[file.id], old.file.name == file.name { kept[file.id] = old.displayName }
+        }
+        var used = Set(kept.values)
+        let taken = Set(files.map(\.1))
+        let entries = files.map { file, name in
+            let shown = kept[file.id] ?? Self.unused(name, isFolder: file.isFolder, used: used, taken: taken)
+            used.insert(shown)
+            return DriveEntry(file: file, displayName: shown)
+        }
+        listings[id] = (entries, .now)
+        return entries
+    }
 
     /// Adds or updates one file in a folder's listing, if it is kept.
-    func put(_ file: DriveFile, in id: String) {
+    func put(_ file: DriveFile, shownAs name: String, in id: String) {
         guard var listing = listings[id] else { return }
-        if let index = listing.files.firstIndex(where: { $0.id == file.id }) {
-            listing.files[index] = file
+        if let index = listing.entries.firstIndex(where: { $0.file.id == file.id }) {
+            listing.entries[index] = DriveEntry(file: file, displayName: listing.entries[index].displayName)
         } else {
-            listing.files.append(file)
+            let used = Set(listing.entries.map(\.displayName))
+            listing.entries.append(DriveEntry(file: file, displayName: Self.unused(name, isFolder: file.isFolder, used: used, taken: [])))
         }
         listings[id] = listing
     }
 
-    func forget(children id: String) { listings[id] = nil }
+    func forget(children id: String) { listings[id]?.at = nil }
+
+    /// `name`, or if that is used, the first "name (2)", "name (3)", … that
+    /// is neither used nor in `taken`.
+    private static func unused(_ name: String, isFolder: Bool, used: Set<String>, taken: Set<String>) -> String {
+        guard used.contains(name) else { return name }
+        let ext = isFolder ? "" : RemotePath("/" + name).pathExtension
+        let stem = ext.isEmpty ? name : String(name.dropLast(ext.count + 1))
+        var count = 2
+        var numbered: String
+        repeat {
+            numbered = ext.isEmpty ? "\(stem) (\(count))" : "\(stem) (\(count)).\(ext)"
+            count += 1
+        } while used.contains(numbered) || taken.contains(numbered)
+        return numbered
+    }
 }
 
 /// A converted document is fetched once per stream.
