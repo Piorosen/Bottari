@@ -72,6 +72,33 @@ extension SavedSite {
         }
         await probe.disconnect()
     }
+
+    /// The key that deleting the site takes off its server, if any.
+    public func removableKey(in secrets: any SecretStore) -> NewSSHKey? {
+        guard let text = try? secrets.readableSecret(for: privateKeyKey) else { return nil }
+        return NewSSHKey(privateKey: text)
+    }
+
+    /// Logs in with `removableKey(in:)` over a connection `connect` opens and
+    /// takes that key out of the server's `file` (`~/.ssh/authorized_keys`),
+    /// before the site is deleted. Returns the key taken out.
+    public func removeKey(
+        in secrets: any SecretStore,
+        from file: String = ".ssh/authorized_keys",
+        isolation: isolated (any Actor)? = #isolation,
+        connect: (SavedSite) async throws -> SFTPFileProvider
+    ) async throws -> NewSSHKey? {
+        guard let key = removableKey(in: secrets) else { return nil }
+        let provider = try await connect(self)
+        do {
+            try await provider.unauthorize(publicKey: key.publicKey, in: file)
+        } catch {
+            await provider.disconnect()
+            throw error
+        }
+        await provider.disconnect()
+        return key
+    }
 }
 
 extension SFTPFileProvider {

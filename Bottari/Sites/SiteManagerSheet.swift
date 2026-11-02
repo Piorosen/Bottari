@@ -111,7 +111,7 @@ struct SiteManagerSheet: View {
             presenting: pendingDelete
         ) { site in
             Button("삭제", role: .destructive) { delete(site) }
-            if site.authentication == .storedKey, library.storedKey(of: site) != nil {
+            if site.authentication == .storedKey, site.removableKey(in: library.secrets) != nil {
                 Button("서버의 authorized_keys에서도 지우고 삭제", role: .destructive) {
                     Task {
                         do {

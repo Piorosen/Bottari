@@ -89,15 +89,7 @@ extension SiteLibrary {
     /// Logs in with the site's Bottari key and takes that key out of the
     /// server's `~/.ssh/authorized_keys`, before the site is deleted.
     func removeKeyFromServer(_ site: SavedSite) async throws {
-        guard let key = storedKey(of: site) else { return }
-        let provider = try await connectSFTP(site)
-        do {
-            try await provider.unauthorize(publicKey: key.publicKey)
-        } catch {
-            await provider.disconnect()
-            throw error
-        }
-        await provider.disconnect()
+        guard let key = try await site.removeKey(in: secrets, connect: { try await self.connectSFTP($0) }) else { return }
         Log.connection.info("\(site.name): 서버의 authorized_keys에서 Bottari 키를 지움 (\(key.fingerprint))")
     }
 
