@@ -444,8 +444,10 @@ public final class TransferQueue {
     private func pump() {
         var active = jobs.reduce(0) { $0 + $1.running.count }
         for job in jobs where job.state == .running || job.state == .preparing {
-            while active < maxConcurrentTransfers, !job.pending.isEmpty {
-                launch(job.pending.removeFirst(), in: job)
+            // Two items bound for one name would share one partial file: the
+            // second waits, and then finds the first's file there as a clash.
+            while active < maxConcurrentTransfers, let next = job.pending.firstIndex(where: { !job.isWriting(to: $0.destination) }) {
+                launch(job.pending.remove(at: next), in: job)
                 active += 1
             }
             if job.state == .running, !job.isPreparing, job.pending.isEmpty, job.running.isEmpty, job.waitingToRetry == 0 {

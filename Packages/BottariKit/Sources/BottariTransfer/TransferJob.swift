@@ -130,6 +130,13 @@ public final class TransferJob: Identifiable {
         running.values.reduce(0) { $0 + $1.counter.total }
     }
 
+    /// Whether a running item is bound for `destination`, by the destination's own idea of a name.
+    func isWriting(to destination: RemotePath) -> Bool {
+        running.values.contains {
+            $0.work.destination.parent == destination.parent && nameMatching.key($0.work.destination.name) == nameMatching.key(destination.name)
+        }
+    }
+
     /// The job as far as it got, while it has something left to do and both
     /// places can be found again; nil otherwise.
     public var record: TransferRecord? {

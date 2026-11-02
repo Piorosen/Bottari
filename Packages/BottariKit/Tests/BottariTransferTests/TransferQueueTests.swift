@@ -194,6 +194,21 @@ import Testing
         #expect(server.text("/b.txt") == "old b")
     }
 
+    @Test func twoFilesBoundForOneNameTakeTurnsSoTheSecondIsAClash() async throws {
+        server.addFile("/a/app.log", "from a")
+        server.addFile("/b/app.log", "from b")
+        server.state.withLock { state in
+            state.chunkSize = 1
+            state.chunkDelay = .milliseconds(2)
+        }
+
+        let job = try await finished(try await transfer(.copy, ["/a/app.log", "/b/app.log"], from: server, to: mac, policy: .skip))
+
+        #expect(job.state == .finished)
+        #expect(job.completedFiles == 1 && job.skippedFiles == 1)
+        #expect(mac.text("/app.log") == "from a")
+    }
+
     @Test func aFileNeverReplacesAFolder() async throws {
         mac.addFile("/assets", "a file")
         server.addFolder("/assets")
