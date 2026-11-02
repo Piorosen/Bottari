@@ -19,7 +19,8 @@ import Testing
         // 1 changed here, 2 changed there, 3 removed there, 4 added here, 5 added there.
         let expected = [Site(id: 1, port: 2222), Site(id: 2, port: 8022), Site(id: 4, port: 22), Site(id: 5, port: 22)]
         #expect(result.merged == expected)
-        #expect(result.remote == expected)
+        // The shared file keeps its order, so 4, new there, goes last.
+        #expect(result.remote == [Site(id: 1, port: 2222), Site(id: 2, port: 8022), Site(id: 5, port: 22), Site(id: 4, port: 22)])
         #expect(result.base == expected)
         #expect(result.conflicts.isEmpty)
     }
@@ -88,6 +89,28 @@ import Testing
         // The file stays readable JSON.
         let text = try String(contentsOf: cloud.appending(path: "sites.json"), encoding: .utf8)
         #expect(text.contains("\"port\" : 2222"))
+    }
+
+    @Test func macsThatOnlyOrderThingsDifferentlyWriteNothing() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = mac("a"), b = mac("b")
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try b.synced("sites.json", local: [Site(id: 2, port: 22)])
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 22), Site(id: 2, port: 22)])
+
+        // From here on A keeps [1, 2], B keeps [2, 1], and neither has anything new to tell the other.
+        let file = cloud.appending(path: "sites.json")
+        func modified() throws -> Date { try #require(FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date) }
+        var last = try modified()
+        var writes = 0
+        for _ in 1...3 {
+            for (mac, order) in [(b, [2, 1]), (a, [1, 2])] {
+                _ = try mac.synced("sites.json", local: order.map { Site(id: $0, port: 22) })
+                let now = try modified()
+                if now != last { writes += 1; last = now }
+            }
+        }
+        #expect(writes == 0)
     }
 
     @Test func aMergeLeftUnappliedKeepsTheOtherMacsSite() throws {

@@ -17,7 +17,8 @@ public enum ThreeWaySync {
         /// What this Mac keeps: every change, and its own side of each conflict.
         public let merged: [Item]
         public let conflicts: [Conflict<Item>]
-        /// What to leave for the other Mac: every change, and its side of each conflict.
+        /// What to leave for the other Mac: every change, and its side of each
+        /// conflict, in the shared file's order with new items last.
         public let remote: [Item]
         /// The new agreed state: every change, and conflicts as last agreed, so
         /// they stay conflicts until resolved.
@@ -29,11 +30,10 @@ public enum ThreeWaySync {
         let localByID = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let remoteByID = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         // This Mac's order first, then what only the other Mac has, in its order.
-        var order = local.map(\.id)
-        var seen = Set(order)
-        for item in remote + base where seen.insert(item.id).inserted { order.append(item.id) }
+        let order = ids(local.map(\.id), then: (remote + base).map(\.id))
 
-        var merged: [Item] = [], newRemote: [Item] = [], newBase: [Item] = []
+        var merged: [Item] = [], newBase: [Item] = []
+        var forRemote: [Item.ID: Item] = [:]
         var conflicts: [Conflict<Item>] = []
         for id in order {
             let mine = localByID[id], theirs = remoteByID[id], agreed = baseByID[id]
@@ -48,17 +48,26 @@ public enum ThreeWaySync {
             if let settled {
                 if let item = settled {
                     merged.append(item)
-                    newRemote.append(item)
+                    forRemote[id] = item
                     newBase.append(item)
                 }
             } else {
                 conflicts.append(Conflict(local: mine, remote: theirs))
                 if let mine { merged.append(mine) }
-                if let theirs { newRemote.append(theirs) }
+                if let theirs { forRemote[id] = theirs }
                 if let agreed { newBase.append(agreed) }
             }
         }
+        // The shared file keeps its own order, so a Mac that merely orders
+        // things differently has nothing to write to it.
+        let newRemote = ids(remote.map(\.id), then: order).compactMap { forRemote[$0] }
         return Result(merged: merged, conflicts: conflicts, remote: newRemote, base: newBase)
+    }
+
+    /// `first`, then whatever `rest` adds, each id once.
+    private static func ids<ID: Hashable>(_ first: [ID], then rest: [ID]) -> [ID] {
+        var seen = Set<ID>()
+        return (first + rest).filter { seen.insert($0).inserted }
     }
 }
 
