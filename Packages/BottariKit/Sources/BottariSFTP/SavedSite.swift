@@ -281,6 +281,9 @@ public enum SiteConnectError: Error, Equatable, Sendable {
     case storedKeyMissing(site: String, key: String)
     /// Jump hosts refer back to each other.
     case jumpLoop(String)
+    /// `~/.ssh/config` reaches the site named `site` through `command`, which
+    /// Bottari does not run; its address alone may lead somewhere else.
+    case proxyCommandNotRun(site: String, command: String)
 }
 
 extension SiteConnectError: LocalizedError {
@@ -291,6 +294,7 @@ extension SiteConnectError: LocalizedError {
         case .keyFileUnreadable(let path, _, _): String(localized: "키 파일을 읽을 수 없습니다: \(path)")
         case .storedKeyMissing(let site, _): String(localized: "이 Mac에는 \(site)의 Bottari 키가 없습니다. 비밀번호로 로그인하면 이 Mac의 키를 만들어 설치할 수 있습니다.")
         case .jumpLoop(let name): String(localized: "점프 호스트가 서로를 참조하고 있습니다: \(name)")
+        case .proxyCommandNotRun(let site, let command): String(localized: "~/.ssh/config에서 \(site)의 연결은 ProxyCommand를 거칩니다: \(command)\nBottari는 이 명령을 실행하지 않으며, 주소로 바로 연결하면 다른 컴퓨터에 닿을 수 있어 연결하지 않았습니다.")
         }
     }
 }
@@ -352,8 +356,10 @@ extension SavedSite {
     }
 
     /// The endpoint, credential and jump hosts to connect to this site. Each
-    /// ProxyJump name is looked up among `sites`, then in `sshConfig`, and is
-    /// otherwise read as `[user@]host[:port]` and tried with the default key files.
+    /// ProxyJump name is looked up among `sites`, and is otherwise read as
+    /// `[user@]host[:port]` with what `sshConfig` says for that host. A site
+    /// or hop `ssh` would reach through a ProxyCommand Bottari does not run
+    /// is refused rather than dialled directly.
     public func connectionPlan(
         sites: [SavedSite],
         sshConfig: SSHConfig,
@@ -363,11 +369,22 @@ extension SavedSite {
         readFile: @escaping FileReader = SavedSite.readFile
     ) throws -> ConnectionPlan {
         let resolver = HopResolver(sites: sites, sshConfig: sshConfig, secrets: secrets, defaultUser: defaultUser, readFile: readFile)
+        try refuseUnrunProxyCommand(in: sshConfig)
         return ConnectionPlan(
             endpoint: endpoint,
             credential: try credential(secrets: secrets, password: password, sshDirectory: sshConfig.directory, readFile: readFile),
             hops: try resolver.hops(for: proxyJump, visiting: [name])
         )
+    }
+
+    /// Throws when `ssh` would reach this site through a ProxyCommand that
+    /// Bottari does not run: the site came from `sshConfig`, still points at
+    /// the address named there and has no jump host instead.
+    func refuseUnrunProxyCommand(in sshConfig: SSHConfig) throws {
+        guard proxyJump.isEmpty, let alias = sshConfigAlias else { return }
+        let host = sshConfig.resolve(alias)
+        guard host.hostName == endpoint.host, let command = host.proxyCommand, Self.jumpHost(inProxyCommand: command) == nil else { return }
+        throw SiteConnectError.proxyCommandNotRun(site: name, command: command)
     }
 
     /// The site logging in with `text`, a private key file's contents, kept in
@@ -416,6 +433,7 @@ private struct HopResolver {
         for name in names {
             guard !visiting.contains(name) else { throw SiteConnectError.jumpLoop(name) }
             let site = sites.first { $0.name == name || $0.sshConfigAlias == name } ?? configuredSite(for: name)
+            try site.refuseUnrunProxyCommand(in: sshConfig)
             // A jump host can have its own jump hosts; those come first.
             hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
             hops.append(SSHHop(

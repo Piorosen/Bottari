@@ -59,6 +59,25 @@ import Testing
         #expect(added[3].proxyJump.isEmpty)
     }
 
+    @Test func aHostSshReachesThroughACommandIsNotDialledDirectly() throws {
+        let piped = SiteStore.importing(config, into: [], only: ["piped"], defaultUser: "me", fileExists: fileExists).added[0]
+        let refused = SiteConnectError.proxyCommandNotRun(site: "piped", command: "cloudflared access ssh --hostname %h")
+        #expect(throws: refused) {
+            try piped.connectionPlan(sites: [piped], sshConfig: config, secrets: InMemorySecretStore(), readFile: { _ in nil })
+        }
+        // Nor on the way to another server, saved or not.
+        for sites in [[piped], []] {
+            let behind = SavedSite(name: "app", endpoint: SFTPEndpoint(host: "app.internal", username: "me"), authentication: .defaultKeys, proxyJump: ["piped"])
+            #expect(throws: refused) {
+                try behind.connectionPlan(sites: sites + [behind], sshConfig: config, secrets: InMemorySecretStore(), readFile: { _ in nil })
+            }
+        }
+        // Pointed somewhere else by hand, the site is the user's own route.
+        var moved = piped
+        moved.endpoint.host = "10.0.0.9"
+        #expect(try moved.connectionPlan(sites: [moved], sshConfig: config, secrets: InMemorySecretStore(), readFile: { _ in nil }).hops.isEmpty)
+    }
+
     @Test func importTakesOnlyTheChosenHosts() {
         let (sites, added) = SiteStore.importing(config, into: [], only: ["nas", "piped"], defaultUser: "me", fileExists: fileExists)
         #expect(added.map(\.name) == ["nas", "piped"])

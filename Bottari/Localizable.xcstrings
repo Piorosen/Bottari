@@ -2335,6 +2335,16 @@
         }
       }
     },
+    "~/.ssh/config에서 %@의 연결은 ProxyCommand를 거칩니다: %@\nBottari는 이 명령을 실행하지 않으며, 주소로 바로 연결하면 다른 컴퓨터에 닿을 수 있어 연결하지 않았습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~/.ssh/config reaches %1$@ through a ProxyCommand: %2$@\nBottari doesn’t run that command, and going straight to the address could reach a different computer, so it didn’t connect."
+          }
+        }
+      }
+    },
     "~/.ssh/config의 새 호스트": {
       "localizations": {
         "en": {
