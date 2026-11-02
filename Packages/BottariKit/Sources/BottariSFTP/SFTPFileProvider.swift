@@ -310,10 +310,14 @@ public struct SFTPFileProvider: FileProvider {
         return hash.lowercased()
     }
 
-    /// Packs items of one folder into a .tar.gz `archive` in that folder.
+    /// Packs items inside the folder of `archive` into it, each under its path
+    /// from that folder, so search results from subfolders keep theirs.
     public func compress(_ items: [RemotePath], into archive: RemotePath) async throws {
         guard let folder = archive.parent else { throw ProviderError.permissionDenied(archive) }
-        let names = items.map { Self.quote($0.name) }.joined(separator: " ")
+        let names = try items.map { item in
+            guard folder.isAncestor(of: item) else { throw ProviderError.permissionDenied(item) }
+            return Self.quote(item.components.dropFirst(folder.components.count).joined(separator: "/"))
+        }.joined(separator: " ")
         _ = try await run("cd \(Self.quote(folder.string)) && tar -czf \(Self.quote(archive.name)) -- \(names)")
     }
 

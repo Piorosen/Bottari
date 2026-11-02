@@ -81,6 +81,21 @@ import Testing
         }
     }
 
+    @Test func compressingSearchResultsPacksTheFilesFoundInSubfolders() async throws {
+        try await withConnection { server, provider in
+            try server.makeDirectory("/root/sub")
+            try server.makeFile("/root/x.txt", "top")
+            try server.makeFile("/root/sub/x.txt", "deep")
+
+            try await provider.compress(["/root/sub/x.txt"], into: "/root/found.tar.gz")
+            try await provider.extract("/root/found.tar.gz", into: "/root/found")
+
+            let packed = try server.names(in: "/root/found")
+            #expect(packed == ["sub"])
+            #expect(try server.contents("/root/found/sub/x.txt") == "deep")
+        }
+    }
+
     @Test func resumesACutOffUploadAndKeepsTheModificationTime() async throws {
         try await withConnection { server, provider in
             struct Dropped: Error {}
