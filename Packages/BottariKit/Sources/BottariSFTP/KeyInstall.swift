@@ -49,11 +49,12 @@ extension SavedSite {
 
         progress(.checking)
         // The key alone, the way the next connection logs in: a stand-in
-        // site has no saved password to fall back on.
+        // site has no saved password to fall back on. Jump hosts on the way
+        // take the passwords typed for them.
         var probeSite = self
         probeSite.id = UUID()
         probeSite.authentication = .storedKey
-        var probeSecrets = TypedSecrets()
+        var probeSecrets = typed
         probeSecrets.set(key.privateKey, for: probeSite.privateKeyKey, keeping: false)
         let probe: SFTPFileProvider
         do {

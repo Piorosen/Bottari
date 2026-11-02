@@ -97,6 +97,34 @@ struct KeySetupTests {
         }
     }
 
+    /// Behind a jump host whose password was typed and not saved, the new
+    /// key is checked through that jump host with the typed password.
+    @Test func aNewKeyIsCheckedThroughAJumpHostWithItsTypedPassword() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let own = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let server = try await OpenSSHServer.start(authorizing: [own.publicKey])
+        defer { server.stop() }
+        let jump = try await TestSFTPServer.start(forwarding: true)
+        let bastion = SavedSite(name: "bastion", endpoint: jump.endpoint, authentication: .password)
+        let site = SavedSite(name: "box", endpoint: server.endpoint, authentication: .storedKey, proxyJump: ["bastion"])
+        let secrets = InMemorySecretStore([site.privateKeyKey: own.privateKey])
+        func connect(_ site: SavedSite, _ typed: TypedSecrets) async throws -> SFTPFileProvider {
+            let plan = try site.connectionPlan(sites: [bastion, site], sshConfig: SSHConfig(text: "", directory: ""), secrets: typed.over(secrets))
+            return try await SFTPFileProvider.connect(to: plan.endpoint, credential: plan.credential, hostKeys: .acceptAnything, via: plan.hops)
+        }
+        var typed = TypedSecrets()
+        typed.set(TestSFTPServer.password, for: bastion.passwordKey, keeping: false)
+        let key = try NewSSHKey.generate(.ed25519, comment: "bottari@test")
+        let authorized = server.folder.appending(path: "authorized_keys")
+
+        let installed = await Result { try await site.install(key, replacing: nil, over: nil, typed: typed, in: authorized.path, connect: connect) { _ in } }
+        await jump.stop()
+
+        #expect(throws: Never.self) { try installed.get() }
+        #expect(try String(contentsOf: authorized, encoding: .utf8).split(separator: "\n").map(String.init) == [own.publicKey, key.publicKey])
+    }
+
     /// Some servers and appliances take RSA only with SHA-256.
     @Test func rsaKeysAlsoSignWithSHA256() async throws {
         let key = try NewSSHKey.generate(.rsa, comment: "bottari@test")
