@@ -237,6 +237,25 @@ import Testing
         #expect(mac.tree == ["/out/", "/out/clash/", "/out/clash/c.txt"])
     }
 
+    @Test func movingALinkedFolderLeavesItsTargetAlone() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "bottari-linkmove-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appending(path: "target"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appending(path: "src"), withIntermediateDirectories: true)
+        try Data("a".utf8).write(to: root.appending(path: "target/a.txt"))
+        try FileManager.default.createSymbolicLink(atPath: root.appending(path: "src/link").path, withDestinationPath: "../target")
+        let local = LocalFileProvider()
+        let link = try await local.stat(RemotePath(root.appending(path: "src/link").path))
+
+        let job = try await finished(queue.enqueue(.move, [link], from: TransferEndpoint(local), to: TransferEndpoint(server), into: .root))
+
+        #expect(job.state == .finished)
+        #expect((try? String(contentsOf: root.appending(path: "target/a.txt"), encoding: .utf8)) == "a")
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: root.appending(path: "src/link").path)) == "../target")
+        // Left for the user, as a linked folder found inside a picked one is.
+        #expect(job.skippedFiles == 1)
+    }
+
     @Test func movingWithinALocationRenamesWholeFolders() async throws {
         server.addFile("/releases/v1/app.tar", "v1")
         server.addFolder("/archive")

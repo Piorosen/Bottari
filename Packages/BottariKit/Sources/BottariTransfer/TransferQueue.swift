@@ -322,6 +322,12 @@ public final class TransferQueue {
             }
             return
         }
+        if job.kind == .move, item.isSymbolicLink, wholeItem == .stream {
+            // Gone through file by file, the move would take apart the folder
+            // the link points to; only a rename or tar moves the link itself.
+            job.skippedFiles += 1
+            return
+        }
         if let existing {
             guard existing.isDirectory else {
                 fail(item, String(localized: "같은 이름의 파일이 이미 있습니다: \(destination.string)"), retry: nil, in: job)
