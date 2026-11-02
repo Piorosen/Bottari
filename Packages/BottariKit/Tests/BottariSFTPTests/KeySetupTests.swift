@@ -144,7 +144,13 @@ struct KeySetupTests {
         let key = try NewSSHKey.generate(.ed25519, comment: "bottari@test")
         let authorized = server.folder.appending(path: "authorized_keys")
 
-        let installed = await Result { try await site.install(key, replacing: nil, over: nil, typed: typed, in: authorized.path, connect: connect) { _ in } }
+        let installed: Result<Void, any Error>
+        do {
+            try await site.install(key, replacing: nil, over: nil, typed: typed, in: authorized.path, connect: connect) { _ in }
+            installed = .success(())
+        } catch {
+            installed = .failure(error)
+        }
         await jump.stop()
 
         #expect(throws: Never.self) { try installed.get() }
