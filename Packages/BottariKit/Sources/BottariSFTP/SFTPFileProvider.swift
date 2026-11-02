@@ -331,13 +331,29 @@ public struct SFTPFileProvider: FileProvider {
         "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// Runs `command` with /bin/sh whatever the account's login shell is
-    /// (csh and fish read `2>/dev/null` and `$(…)` differently, or not at all).
+    /// The command line that runs `script` with /bin/sh whatever the account's
+    /// login shell is (csh and fish read `2>/dev/null` and `$(…)` differently,
+    /// or not at all). That shell reads the line first, and csh refuses a
+    /// newline inside quotes and expands `!` there, while fish ends a quote
+    /// at `\'`. So the script travels as printf escapes, in a single-quoted
+    /// word that holds none of those.
+    static func shellCommand(_ script: String) -> String {
+        var escaped = ""
+        for scalar in script.unicodeScalars {
+            if scalar.isASCII, scalar.value < 0x20 || scalar.value == 0x7F || "'\"\\$`!".unicodeScalars.contains(scalar) {
+                escaped += String(format: "\\0%03o", scalar.value)
+            } else {
+                escaped.unicodeScalars.append(scalar)
+            }
+        }
+        return "/bin/sh -c 'eval \"$(printf %b \"\(escaped)\")\"'"
+    }
+
     static func run(_ command: String, on connection: SFTPConnection) async throws -> String {
         var output = ByteBuffer()
         var errors = ByteBuffer()
         do {
-            for try await chunk in try await connection.client.executeCommandStream("/bin/sh -c " + quote(command)) {
+            for try await chunk in try await connection.client.executeCommandStream(shellCommand(command)) {
                 switch chunk {
                 case .stdout(let buffer): output.writeImmutableBuffer(buffer)
                 case .stderr(let buffer): errors.writeImmutableBuffer(buffer)

@@ -240,6 +240,30 @@ struct OpenSSHTests {
         }
     }
 
+    @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: "/bin/tcsh")))
+    func commandsRunTheSameForAnAccountWhoseShellIsTcsh() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let odd = folder.appending(path: "it's \"odd\" $HOME !x \\y\nz.txt")
+        try Data("odd\n".utf8).write(to: odd)
+        // sshd runs a command with the account's login shell and -c, here tcsh's.
+        try await withServer(authorizing: [key.publicKey], extraConfig: ["ForceCommand exec /bin/tcsh -f -c \"$SSH_ORIGINAL_COMMAND\""]) { server in
+            let provider = try await SFTPFileProvider.connect(to: server.endpoint, credential: .privateKey(key.privateKey), hostKeys: .acceptAnything)
+            defer { Task { await provider.disconnect() } }
+            #expect(provider.canRunCommands)
+
+            let keys = folder.appending(path: "new .ssh/authorized_keys")
+            try await provider.authorize(publicKey: key.publicKey, in: keys.path)
+            #expect(try String(contentsOf: keys, encoding: .utf8) == key.publicKey + "\n")
+
+            let copy = RemotePath(folder.path).appending("copy of " + odd.lastPathComponent)
+            try await provider.copy(RemotePath(odd.path), to: copy)
+            #expect(try String(contentsOfFile: copy.string, encoding: .utf8) == "odd\n")
+            #expect(try await provider.checksum(copy) == "80a3ef2f5539b0a6b5ee045e2a1de83bfb38550da54aa4d60dc1b9526b4b0805")
+        }
+    }
+
     // MARK: Agent forwarding
 
     @Test func aCommandCanUseTheForwardedAgent() async throws {
@@ -365,6 +389,32 @@ struct OpenSSHTests {
         #expect(try String(contentsOfFile: tree.appending("to/note.txt").string, encoding: .utf8) == "via the bastion")
         await from.disconnect()
         await to.disconnect()
+    }
+
+    @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: "/bin/tcsh")), arguments: [(true, false), (false, true)])
+    func serversWhoseShellIsTcshSendStraightToEachOther(sourceTcsh: Bool, destinationTcsh: Bool) async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let sourceLogin = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let destinationLogin = try OpenSSH.makeKey(in: folder, type: "ecdsa", bits: 256)
+        let tree = RemotePath(folder.path)
+        try FileManager.default.createDirectory(atPath: tree.appending("from").string, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: tree.appending("to !it's").string, withIntermediateDirectories: true)
+        try "wow".write(toFile: tree.appending("from/wow!.txt").string, atomically: true, encoding: .utf8)
+
+        let tcsh = ["ForceCommand exec /bin/tcsh -f -c \"$SSH_ORIGINAL_COMMAND\""]
+        let source = try await OpenSSHServer.start(authorizing: [sourceLogin.publicKey], extraConfig: sourceTcsh ? tcsh : [])
+        defer { source.stop() }
+        let destination = try await OpenSSHServer.start(authorizing: [destinationLogin.publicKey], extraConfig: destinationTcsh ? tcsh : [])
+        defer { destination.stop() }
+        let knownHosts = KnownHosts(fileURL: nil)
+        let from = try await SFTPFileProvider.connect(to: source.endpoint, credential: .privateKey(sourceLogin.privateKey), hostKeys: .knownHosts(knownHosts))
+        let to = try await SFTPFileProvider.connect(to: destination.endpoint, credential: .privateKey(destinationLogin.privateKey), hostKeys: .knownHosts(knownHosts))
+        defer { Task { await from.disconnect(); await to.disconnect() } }
+        #expect(from.canSend(directlyTo: to))
+
+        try await from.send(try await from.list(tree.appending("from")), directlyTo: to, into: tree.appending("to !it's"))
+        #expect(try String(contentsOfFile: tree.appending("to !it's/wow!.txt").string, encoding: .utf8) == "wow")
     }
 
     @Test func nestedProxyCommandsExpandTokensAtTheirOwnLevel() {

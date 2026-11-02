@@ -82,7 +82,7 @@ extension SFTPFileProvider {
         defer { Task { await connection.close() } }
         let command = Self.directCopyCommand(names: items.map(\.name), from: parent, to: folder, reach: reach)
         Log.transfer.info("서버 간 직접 전송: \(endpoint.hostKeyID):\(parent.string) → \(reach.endpoint.hostKeyID):\(folder.string), \(items.count)개 항목")
-        let result = try await connection.run("/bin/sh -c " + Self.quote(command), forwarding: reach.agent)
+        let result = try await connection.run(Self.shellCommand(command), forwarding: reach.agent)
         let message = result.errors.trimmingCharacters(in: .whitespacesAndNewlines)
         switch result.exitStatus {
         case 0?:
@@ -105,7 +105,7 @@ extension SFTPFileProvider {
     /// (the copy was cancelled), everything the script started is stopped.
     static func directCopyCommand(names: [String], from parent: RemotePath, to folder: RemotePath, reach: DirectReach) -> String {
         let ssh = sshCommand(to: reach.endpoint, through: reach.hops, checkingKeys: reach.knownHosts != nil)
-            + " " + quote("tar -C \(quote(folder.string)) -xpf -")
+            + " " + quote(shellCommand("tar -C \(quote(folder.string)) -xpf -"))
         let lines = (reach.knownHosts ?? []).map(quote).joined(separator: " ")
         return """
         command -v ssh >/dev/null && command -v tar >/dev/null || exit 127

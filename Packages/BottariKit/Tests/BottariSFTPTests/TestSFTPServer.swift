@@ -361,8 +361,9 @@ private final class LocalFile: SFTPFileHandle {
 }
 
 /// Runs exec requests with /bin/sh as if the test root were the server's `/`.
-/// Bottari single-quotes every absolute path it puts in a command, so turning
-/// `'/` into `'<root>/` is enough.
+/// Bottari single-quotes every absolute path it puts in a command, and the
+/// quote reaches the server as the printf escape `\0047`, so turning
+/// `\0047/` into `\0047<root>/` is enough.
 private final class ShellExecDelegate: ExecDelegate {
     let root: URL
 
@@ -373,7 +374,7 @@ private final class ShellExecDelegate: ExecDelegate {
     func start(command: String, outputHandler: ExecOutputHandler) async throws -> ExecCommandContext {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", command.replacingOccurrences(of: "'/", with: "'\(root.path)/")]
+        process.arguments = ["-c", command.replacingOccurrences(of: #"\0047/"#, with: #"\0047"# + root.path + "/")]
         process.currentDirectoryURL = root
         process.standardInput = outputHandler.stdinPipe
         process.standardOutput = outputHandler.stdoutPipe
