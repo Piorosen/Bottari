@@ -72,8 +72,8 @@ private struct EditorView: View {
             Text("\(model.site?.name ?? "") · \(model.item.path.string)")
         }
         .sheet(isPresented: $showsDiff) {
-            if let conflict = model.conflict {
-                DiffSheet(theirs: conflict.theirs, mine: model.text)
+            if let theirs = model.conflict?.theirs {
+                DiffSheet(theirs: theirs, mine: model.text)
             }
         }
     }
@@ -246,12 +246,17 @@ private struct EditorView: View {
                     .font(.ui(.caption))
                     .foregroundStyle(.secondary)
             }
-            if conflict.merged != nil {
+            if conflict.theirs == nil {
+                Text("서버의 파일을 더 이상 텍스트로 읽을 수 없어 비교하거나 병합할 수 없습니다.")
+                    .font(.ui(.caption))
+            } else if conflict.merged != nil {
                 Text("변경된 줄이 겹치지 않아 두 버전을 병합할 수 있습니다.")
                     .font(.ui(.caption))
             }
             HStack {
-                Button("차이 보기") { showsDiff = true }
+                if conflict.theirs != nil {
+                    Button("차이 보기") { showsDiff = true }
+                }
                 Button("서버 버전 다시 열기") { Task { await model.reloadServerVersion() } }
                 Button("내 버전으로 덮어쓰기", role: .destructive) { Task { await model.overwriteServerVersion() } }
                 if conflict.merged != nil {

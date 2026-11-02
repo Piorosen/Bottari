@@ -5879,6 +5879,16 @@
         }
       }
     },
+    "서버의 파일을 더 이상 텍스트로 읽을 수 없어 비교하거나 병합할 수 없습니다.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server’s file can no longer be read as text, so it can’t be compared or merged."
+          }
+        }
+      }
+    },
     "선 아이콘 대신 Finder의 색 아이콘": {
       "localizations": {
         "en": {

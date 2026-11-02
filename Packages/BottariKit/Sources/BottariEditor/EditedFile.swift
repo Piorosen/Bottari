@@ -14,10 +14,25 @@ public final class EditedFile {
 
     /// The server's copy changed while it was being edited.
     public struct Conflict: Sendable {
-        public let theirs: String
+        /// The server's text, or nil when its bytes are no longer text.
+        public let theirs: String?
         public let modified: Date?
         /// Both edits combined, when they touched different lines.
         public let merged: String?
+        /// The server's bytes as found.
+        let server: Data
+
+        init(base: String, mine: String, server: Data, modified: Date?) {
+            self.server = server
+            self.modified = modified
+            theirs = TextCodec.decode(server)?.text
+            merged = theirs.flatMap { theirs in
+                switch ThreeWayMerge.merge(base: base, mine: mine, theirs: theirs) {
+                case .merged(let text): text
+                case .conflict: nil
+                }
+            }
+        }
     }
 
     public enum SaveResult {
@@ -69,12 +84,8 @@ public final class EditedFile {
         if conflict == nil {
             let current = try await provider.stat(item.path)
             if current.modified != remoteModified || current.size != remoteSize {
-                let theirs = TextCodec.decode(try await provider.readData(item.path))?.text ?? ""
-                let merged: String? = switch ThreeWayMerge.merge(base: savedText, mine: text, theirs: theirs) {
-                case .merged(let text): text
-                case .conflict: nil
-                }
-                return .conflict(Conflict(theirs: theirs, modified: current.modified, merged: merged))
+                let server = try await provider.readData(item.path)
+                return .conflict(Conflict(base: savedText, mine: text, server: server, modified: current.modified))
             }
         }
         let previous = savedData
@@ -106,7 +117,7 @@ public final class EditedFile {
         let url = folder.appending(path: "\(stamp) \(item.name)")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try Data(conflict.theirs.utf8).write(to: url)
+            try conflict.server.write(to: url)
             return url
         } catch {
             return nil

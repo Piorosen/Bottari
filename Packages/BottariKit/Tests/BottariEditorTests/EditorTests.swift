@@ -1,3 +1,4 @@
+import BottariCore
 import Foundation
 import Testing
 @testable import BottariEditor
@@ -91,5 +92,36 @@ import Testing
         #expect(SyntaxHighlighting.language(forFileNamed: "Dockerfile") == "dockerfile")
         #expect(SyntaxHighlighting.language(forFileNamed: ".env.production") == "bash")
         #expect(SyntaxHighlighting.language(forFileNamed: "notes.txt") == nil)
+    }
+}
+
+@MainActor @Suite struct EditedFileTests {
+    let folder = FileManager.default.temporaryDirectory.appending(path: "BottariEditorTests-\(UUID().uuidString)")
+
+    /// `contents` in a file of its own, opened for editing.
+    func open(_ contents: String) async throws -> (file: EditedFile, url: URL, text: String) {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appending(path: "nginx.conf")
+        try Data(contents.utf8).write(to: url)
+        let provider = LocalFileProvider()
+        let file = EditedFile(provider: provider, item: try await provider.stat(RemotePath(url.path)))
+        return (file, url, try await file.open(sizeLimit: 1 << 20))
+    }
+
+    @Test func aServerCopyThatIsNoLongerTextIsNeitherMergedAwayNorKeptEmpty() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (file, url, text) = try await open("a\nb\n")
+        // cp1252 "é ", which is text in neither UTF-8 nor CP949.
+        let theirs = Data([0xE9, 0x20])
+        try theirs.write(to: url)
+
+        guard case .conflict(let conflict) = try await file.save(text, check: nil) else {
+            Issue.record("the server's change went unnoticed")
+            return
+        }
+        #expect(conflict.merged == nil)
+        let kept = try #require(file.keepCopy(of: conflict, in: folder.appending(path: "Replaced")))
+        let keptBytes = try Data(contentsOf: kept)
+        #expect(keptBytes == theirs)
     }
 }
