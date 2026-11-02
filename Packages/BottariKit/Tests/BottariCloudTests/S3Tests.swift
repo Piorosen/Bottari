@@ -21,12 +21,12 @@ import Testing
         #expect(request.value(forHTTPHeaderField: "Authorization")?.hasSuffix("Signature=34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7") == true)
     }
 
-    @Test func urlsForAWSAndCompatibleStores() {
-        #expect(S3Configuration(bucket: "b", region: "ap-northeast-2", accessKey: "k").url(for: "a b/한.txt").absoluteString
+    @Test func urlsForAWSAndCompatibleStores() throws {
+        #expect(try S3Configuration(bucket: "b", region: "ap-northeast-2", accessKey: "k").url(for: "a b/한.txt").absoluteString
                 == "https://b.s3.ap-northeast-2.amazonaws.com/a%20b/%ED%95%9C.txt")
-        #expect(S3Configuration(bucket: "b", endpoint: "http://minio.local:9000", accessKey: "k", usesPathStyle: true).url(for: "x", query: [("uploads", "")]).absoluteString
+        #expect(try S3Configuration(bucket: "b", endpoint: "http://minio.local:9000", accessKey: "k", usesPathStyle: true).url(for: "x", query: [("uploads", "")]).absoluteString
                 == "http://minio.local:9000/b/x?uploads=")
-        #expect(S3Configuration(bucket: "b", endpoint: "https://acct.r2.cloudflarestorage.com", accessKey: "k").url(for: "x").absoluteString
+        #expect(try S3Configuration(bucket: "b", endpoint: "https://acct.r2.cloudflarestorage.com", accessKey: "k").url(for: "x").absoluteString
                 == "https://b.acct.r2.cloudflarestorage.com/x")
     }
 }
@@ -122,6 +122,28 @@ import Testing
         FakeS3.put("a/z.txt", Data("z".utf8), in: bucket)
         // "/a" must not list itself, or walking it would never end.
         #expect(try await provider.list("/a").map(\.name) == ["z.txt"])
+    }
+
+    @Test func aPastedSpaceOrNewlineInTheAddressStillConnects() async {
+        await #expect(processExitsWith: .success) {
+            let aws = S3Configuration(bucket: "pasted ", region: "us-east-1\n", accessKey: FakeS3.signer.accessKey)
+            let minio = S3Configuration(bucket: " pasted", endpoint: "http://minio.local:9000 ", accessKey: FakeS3.signer.accessKey, usesPathStyle: true)
+            do {
+                try await S3Provider(configuration: aws, secretKey: "bottari-secret", session: FakeS3.session()).write("/a.txt", data: Data("a".utf8))
+                #expect(try await S3Provider(configuration: minio, secretKey: "bottari-secret", session: FakeS3.session()).list(.root).map(\.name) == ["a.txt"])
+            } catch {
+                Issue.record(error)
+            }
+        }
+    }
+
+    @Test func anAddressThatIsNoURLFailsInsteadOfCrashing() async {
+        await #expect(processExitsWith: .success) {
+            let spaced = S3Configuration(bucket: "my bucket", accessKey: FakeS3.signer.accessKey)
+            await #expect(throws: ProviderError.self) {
+                try await S3Provider(configuration: spaced, secretKey: "bottari-secret", session: FakeS3.session()).list(.root)
+            }
+        }
     }
 
     @Test func aWrongSecretIsRefused() async throws {

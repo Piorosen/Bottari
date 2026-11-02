@@ -12,16 +12,19 @@ public struct S3Configuration: Codable, Hashable, Sendable {
     /// Bucket in the path (`host/bucket/key`) instead of the host name; MinIO wants this.
     public var usesPathStyle: Bool
 
+    /// Spaces and line breaks around the bucket, region and endpoint, as they
+    /// come when pasted, are left out.
     public init(bucket: String, region: String = "us-east-1", endpoint: String = "", accessKey: String, usesPathStyle: Bool = false) {
-        self.bucket = bucket
-        self.region = region
-        self.endpoint = endpoint
+        self.bucket = bucket.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.region = region.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.endpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         self.accessKey = accessKey
         self.usesPathStyle = usesPathStyle
     }
 
-    /// The URL of `key` (empty for the bucket itself), with `query` already encoded.
-    func url(for key: String, query: [(String, String)] = []) -> URL {
+    /// The URL of `key` (empty for the bucket itself), with `query` already
+    /// encoded. A bucket, region or endpoint typed with a space inside makes none.
+    func url(for key: String, query: [(String, String)] = []) throws -> URL {
         let encodedKey = AWSSigner.encode(key, keepingSlashes: true)
         var base: String
         if endpoint.isEmpty {
@@ -41,7 +44,10 @@ public struct S3Configuration: Codable, Hashable, Sendable {
         if !query.isEmpty {
             text += "?" + query.map { "\(AWSSigner.encode($0.0))=\(AWSSigner.encode($0.1))" }.joined(separator: "&")
         }
-        return URL(string: text)!
+        guard let url = URL(string: text) else {
+            throw ProviderError.io(String(localized: "버킷, 리전, 엔드포인트로 S3 주소를 만들 수 없습니다. 연결 관리에서 확인하십시오."))
+        }
+        return url
     }
 }
 
@@ -78,7 +84,7 @@ public struct S3Provider: FileProvider {
         }
     }
 
-    public var locationID: String { "s3://\(configuration.bucket)@\(configuration.url(for: "").host() ?? "")" }
+    public var locationID: String { "s3://\(configuration.bucket)@\((try? configuration.url(for: ""))?.host() ?? "")" }
     public var capabilities: ProviderCapabilities { [.rangeRead, .serverSideCopy] }
     public var home: RemotePath { .root }
 
@@ -109,7 +115,7 @@ public struct S3Provider: FileProvider {
 
     public func stat(_ path: RemotePath) async throws -> FileItem {
         if path.isRoot { return FileItem(path: path, kind: .directory) }
-        var request = URLRequest(url: configuration.url(for: Self.key(path)))
+        var request = URLRequest(url: try configuration.url(for: Self.key(path)))
         request.httpMethod = "HEAD"
         let (_, response) = try await send(&request, path: path, allowing: [404])
         if response.statusCode == 200 {
@@ -130,7 +136,7 @@ public struct S3Provider: FileProvider {
         let reader = RangeReader(start: range?.lowerBound ?? 0, end: range?.upperBound)
         return AsyncThrowingStream(unfolding: { [self] in
             guard let (from, to) = reader.nextRange(Self.chunkSize) else { return nil }
-            var request = URLRequest(url: configuration.url(for: Self.key(path)))
+            var request = URLRequest(url: try configuration.url(for: Self.key(path)))
             request.setValue("bytes=\(from)-\(to)", forHTTPHeaderField: "Range")
             let (data, response) = try await send(&request, path: path, allowing: [416])
             // 416: asked past the end, which happens when the size was unknown.
@@ -166,7 +172,7 @@ public struct S3Provider: FileProvider {
             // transfer) just stops, as if the file had ended there.
             try Task.checkCancellation()
             guard let uploadID else {
-                var request = URLRequest(url: configuration.url(for: key))
+                var request = URLRequest(url: try configuration.url(for: key))
                 request.httpMethod = "PUT"
                 request.setValue(Self.contentType(of: path), forHTTPHeaderField: "Content-Type")
                 request.httpBody = buffer
@@ -186,7 +192,7 @@ public struct S3Provider: FileProvider {
     /// S3 can answer 200 and still have failed, with the error in the body.
     private func completeMultipart(_ key: String, uploadID: String, parts: [(Int, String)], path: RemotePath) async throws {
         let body = "<CompleteMultipartUpload>" + parts.map { "<Part><PartNumber>\($0.0)</PartNumber><ETag>\($0.1)</ETag></Part>" }.joined() + "</CompleteMultipartUpload>"
-        var request = URLRequest(url: configuration.url(for: key, query: [("uploadId", uploadID)]))
+        var request = URLRequest(url: try configuration.url(for: key, query: [("uploadId", uploadID)]))
         request.httpMethod = "POST"
         request.httpBody = Data(body.utf8)
         let (data, _) = try await send(&request, path: path, payload: request.httpBody!)
@@ -197,11 +203,11 @@ public struct S3Provider: FileProvider {
     /// billed) unseen. The upload may have stopped because its task was
     /// cancelled, so this runs in a task of its own that is not.
     private func abortMultipart(_ key: String, uploadID: String, path: RemotePath) async {
-        await Task.detached { [self] in
-            var abort = URLRequest(url: configuration.url(for: key, query: [("uploadId", uploadID)]))
+        _ = await Task.detached { [self] in
+            var abort = URLRequest(url: try configuration.url(for: key, query: [("uploadId", uploadID)]))
             abort.httpMethod = "DELETE"
-            _ = try? await send(&abort, path: path, allowing: [404])
-        }.value
+            try await send(&abort, path: path, allowing: [404])
+        }.result
     }
 
     /// What browsers and CDNs serving the object are told it is, from its
@@ -218,7 +224,7 @@ public struct S3Provider: FileProvider {
     }
 
     private func startMultipart(_ key: String, path: RemotePath) async throws -> String {
-        var request = URLRequest(url: configuration.url(for: key, query: [("uploads", "")]))
+        var request = URLRequest(url: try configuration.url(for: key, query: [("uploads", "")]))
         request.httpMethod = "POST"
         request.setValue(Self.contentType(of: path), forHTTPHeaderField: "Content-Type")
         let (data, _) = try await send(&request, path: path)
@@ -227,7 +233,7 @@ public struct S3Provider: FileProvider {
     }
 
     private func uploadPart(_ key: String, uploadID: String, number: Int, data: Data, path: RemotePath) async throws -> String {
-        var request = URLRequest(url: configuration.url(for: key, query: [("partNumber", String(number)), ("uploadId", uploadID)]))
+        var request = URLRequest(url: try configuration.url(for: key, query: [("partNumber", String(number)), ("uploadId", uploadID)]))
         request.httpMethod = "PUT"
         request.httpBody = data
         let (_, response) = try await send(&request, path: path, payload: data)
@@ -237,7 +243,7 @@ public struct S3Provider: FileProvider {
     /// An empty "folder/" object, as the AWS console makes.
     public func makeDirectory(_ path: RemotePath) async throws {
         if (try? await stat(path)) != nil { throw ProviderError.alreadyExists(path) }
-        var request = URLRequest(url: configuration.url(for: Self.prefix(path)))
+        var request = URLRequest(url: try configuration.url(for: Self.prefix(path)))
         request.httpMethod = "PUT"
         request.httpBody = Data()
         _ = try await send(&request, path: path, payload: Data())
@@ -248,7 +254,7 @@ public struct S3Provider: FileProvider {
         let source = try await stat(from)
         if source.isDirectory {
             // The folder exists at the destination even if the source had no marker.
-            var marker = URLRequest(url: configuration.url(for: Self.prefix(to)))
+            var marker = URLRequest(url: try configuration.url(for: Self.prefix(to)))
             marker.httpMethod = "PUT"
             marker.httpBody = Data()
             _ = try await send(&marker, path: to, payload: Data())
@@ -257,7 +263,7 @@ public struct S3Provider: FileProvider {
             if let size, size > largestSingleCopy {
                 try await copyInParts(old, to: new, size: size, path: from)
             } else {
-                var request = URLRequest(url: configuration.url(for: new))
+                var request = URLRequest(url: try configuration.url(for: new))
                 request.httpMethod = "PUT"
                 request.setValue(copySource(old), forHTTPHeaderField: "x-amz-copy-source")
                 let (data, _) = try await send(&request, path: from)
@@ -281,7 +287,7 @@ public struct S3Provider: FileProvider {
             while offset < size {
                 let end = min(offset + Self.copyPartSize, size) - 1
                 let number = parts.count + 1
-                var request = URLRequest(url: configuration.url(for: new, query: [("partNumber", String(number)), ("uploadId", uploadID)]))
+                var request = URLRequest(url: try configuration.url(for: new, query: [("partNumber", String(number)), ("uploadId", uploadID)]))
                 request.httpMethod = "PUT"
                 request.setValue(copySource(old), forHTTPHeaderField: "x-amz-copy-source")
                 request.setValue("bytes=\(offset)-\(end)", forHTTPHeaderField: "x-amz-copy-source-range")
@@ -307,7 +313,7 @@ public struct S3Provider: FileProvider {
     public func delete(_ path: RemotePath) async throws {
         let item = try await stat(path)
         for (key, _, _) in try await keys(of: item, movingTo: path) {
-            var request = URLRequest(url: configuration.url(for: key))
+            var request = URLRequest(url: try configuration.url(for: key))
             request.httpMethod = "DELETE"
             _ = try await send(&request, path: path, allowing: [404])
         }
@@ -338,7 +344,7 @@ public struct S3Provider: FileProvider {
             var query = [("list-type", "2"), ("prefix", prefix)]
             if let delimiter { query.append(("delimiter", delimiter)) }
             if let token { query.append(("continuation-token", token)) }
-            var request = URLRequest(url: configuration.url(for: "", query: query))
+            var request = URLRequest(url: try configuration.url(for: "", query: query))
             let (data, _) = try await send(&request, path: RemotePath("/" + prefix))
             let page = S3XML.parse(data)
             listing.folders += page.values["Prefix", default: []].filter { $0 != prefix }

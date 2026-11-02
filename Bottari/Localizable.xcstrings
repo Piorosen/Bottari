@@ -4639,6 +4639,16 @@
         }
       }
     },
+    "버킷, 리전, 엔드포인트로 S3 주소를 만들 수 없습니다. 연결 관리에서 확인하십시오.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bucket, region and endpoint don’t make an S3 address. Check them in Connections."
+          }
+        }
+      }
+    },
     "버퍼링 중…": {
       "localizations": {
         "en": {
