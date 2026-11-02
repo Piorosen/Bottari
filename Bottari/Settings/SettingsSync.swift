@@ -223,8 +223,8 @@ final class SettingsSync {
         var sites: SyncFolder.Outcome<SavedSite>?
         var favorites: SyncFolder.Outcome<Favorites.Favorite>?
         var presets: SyncFolder.Outcome<BottariBundle.Preset>?
-        var keymap: (value: Keymap.Saved, conflict: (local: Keymap.Saved, remote: Keymap.Saved)?)?
-        var theme: (value: Theme, conflict: (local: Theme, remote: Theme)?)?
+        var keymap: SyncFolder.ValueOutcome<Keymap.Saved>?
+        var theme: SyncFolder.ValueOutcome<Theme>?
         var themes: SyncFolder.Outcome<Theme>?
         var devices: [Device] = []
         var errors: [String] = []
@@ -254,7 +254,13 @@ final class SettingsSync {
         let shared = SyncFolder(folder: folder, baseFolder: baseFolder)
         Task {
             let outcome = await Task.detached { Self.run(shared, snapshot) }.value
-            apply(outcome, mergedFrom: snapshot)
+            if apply(outcome, mergedFrom: snapshot) {
+                errors += await Task.detached { Self.commit(outcome) }.value
+                if errors.isEmpty {
+                    lastSync = .now
+                    defaults.set(lastSync, forKey: "sync.last")
+                }
+            }
             isSyncing = false
             if syncAgain {
                 syncAgain = false
@@ -281,6 +287,21 @@ final class SettingsSync {
         return outcome
     }
 
+    /// Writes what the merge changed, now that it is in place here.
+    nonisolated private static func commit(_ outcome: Outcome) -> [String] {
+        var errors: [String] = []
+        func attempt(_ body: () throws -> Void) {
+            do { try body() } catch { errors.append(error.localizedDescription) }
+        }
+        attempt { try outcome.sites?.commit() }
+        attempt { try outcome.favorites?.commit() }
+        attempt { try outcome.presets?.commit() }
+        attempt { try outcome.keymap?.commit() }
+        attempt { try outcome.theme?.commit() }
+        attempt { try outcome.themes?.commit() }
+        return errors
+    }
+
     /// Writes this Mac into `devices/` and reads the others.
     nonisolated private static func register(_ device: Device, in folder: URL) throws -> [Device] {
         let directory = folder.appending(path: "devices", directoryHint: .isDirectory)
@@ -300,10 +321,11 @@ final class SettingsSync {
         return others + [me]
     }
 
-    /// Puts the merged settings in place. Anything edited here while the merge
-    /// ran (typing a host name, say) is left as it now is and merged again
-    /// right after, rather than swapped for the older copy the merge started from.
-    private func apply(_ outcome: Outcome, mergedFrom snapshot: Snapshot) {
+    /// Puts the merged settings in place and says whether it did. Anything
+    /// edited here while the merge ran (typing a host name, say) is left as it
+    /// now is and merged again right after, rather than swapped for the older
+    /// copy the merge started from; that merge is then dropped uncommitted.
+    private func apply(_ outcome: Outcome, mergedFrom snapshot: Snapshot) -> Bool {
         isApplying = true
         defer { isApplying = false }
         devices = outcome.devices
@@ -314,7 +336,7 @@ final class SettingsSync {
             || sources.theme.get() != snapshot.theme || sources.themes.get() != snapshot.themes
         if editedMeanwhile {
             syncAgain = true
-            return
+            return false
         }
 
         if let sites = outcome.sites {
@@ -346,10 +368,7 @@ final class SettingsSync {
             found += themes.conflicts.map { listConflict($0, item: .themes, file: "themes.json", source: sources.themes, title: \.name, detail: { _, _, _ in String(localized: "색 또는 글꼴이 다름") }, copy: { var c = $0; c.name += " (\($1))"; return c }) }
         }
         conflicts = found
-        if outcome.errors.isEmpty {
-            lastSync = .now
-            defaults.set(lastSync, forKey: "sync.last")
-        }
+        return true
     }
 
     /// Answers a conflict, then syncs so the other Macs get the answer.

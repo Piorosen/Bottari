@@ -76,80 +76,96 @@ import Testing
         let a = mac("a"), b = mac("b")
 
         // A goes first and writes its list; B adds its own.
-        #expect(try a.sync("sites.json", local: [Site(id: 1, port: 22)]).items.map(\.id) == [1])
-        #expect(try b.sync("sites.json", local: [Site(id: 2, port: 22)]).items.map(\.id) == [2, 1])
-        #expect(try a.sync("sites.json", local: [Site(id: 1, port: 22)]).items.map(\.id) == [1, 2])
+        #expect(try a.synced("sites.json", local: [Site(id: 1, port: 22)]).items.map(\.id) == [1])
+        #expect(try b.synced("sites.json", local: [Site(id: 2, port: 22)]).items.map(\.id) == [2, 1])
+        #expect(try a.synced("sites.json", local: [Site(id: 1, port: 22)]).items.map(\.id) == [1, 2])
 
         // A changes 1, B removes 2: both arrive.
-        _ = try a.sync("sites.json", local: [Site(id: 1, port: 2222), Site(id: 2, port: 22)])
-        let onB = try b.sync("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 2222), Site(id: 2, port: 22)])
+        let onB = try b.synced("sites.json", local: [Site(id: 1, port: 22)])
         #expect(onB.items == [Site(id: 1, port: 2222)])
-        #expect(try a.sync("sites.json", local: [Site(id: 1, port: 2222), Site(id: 2, port: 22)]).items == [Site(id: 1, port: 2222)])
+        #expect(try a.synced("sites.json", local: [Site(id: 1, port: 2222), Site(id: 2, port: 22)]).items == [Site(id: 1, port: 2222)])
         // The file stays readable JSON.
         let text = try String(contentsOf: cloud.appending(path: "sites.json"), encoding: .utf8)
         #expect(text.contains("\"port\" : 2222"))
     }
 
+    @Test func aMergeLeftUnappliedKeepsTheOtherMacsSite() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = mac("a"), b = mac("b")
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try b.synced("sites.json", local: [Site(id: 1, port: 22), Site(id: 2, port: 22)])
+
+        // The user types on A while this merge runs, so its result is never put in place
+        // nor committed: A still has only 1, and syncs again with the edit.
+        _ = try a.sync("sites.json", local: [Site(id: 1, port: 22)])
+        let edited = try a.synced("sites.json", local: [Site(id: 1, port: 2222)])
+        #expect(edited.items.map(\.id) == [1, 2])
+
+        let onB = try b.synced("sites.json", local: [Site(id: 1, port: 22), Site(id: 2, port: 22)])
+        #expect(onB.items == [Site(id: 1, port: 2222), Site(id: 2, port: 22)])
+    }
+
     @Test func conflictsWaitForAnAnswer() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let a = mac("a"), b = mac("b")
-        _ = try a.sync("sites.json", local: [Site(id: 1, port: 22)])
-        _ = try b.sync("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try b.synced("sites.json", local: [Site(id: 1, port: 22)])
 
-        _ = try a.sync("sites.json", local: [Site(id: 1, port: 2200)])
-        let first = try b.sync("sites.json", local: [Site(id: 1, port: 2222)])
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 2200)])
+        let first = try b.synced("sites.json", local: [Site(id: 1, port: 2222)])
         #expect(first.conflicts.count == 1)
         #expect(first.items == [Site(id: 1, port: 2222)])
         // Still a conflict until B decides; A, whose version is the shared one, keeps it meanwhile.
-        #expect(try b.sync("sites.json", local: [Site(id: 1, port: 2222)]).conflicts.count == 1)
-        let meanwhile = try a.sync("sites.json", local: [Site(id: 1, port: 2200)])
+        #expect(try b.synced("sites.json", local: [Site(id: 1, port: 2222)]).conflicts.count == 1)
+        let meanwhile = try a.synced("sites.json", local: [Site(id: 1, port: 2200)])
         #expect(meanwhile.conflicts.isEmpty && meanwhile.items == [Site(id: 1, port: 2200)])
 
         // B keeps its own: agreeing on A's version makes B's the one change.
         try b.setBase("sites.json", [Site(id: 1, port: 2200)])
-        let kept = try b.sync("sites.json", local: [Site(id: 1, port: 2222)])
+        let kept = try b.synced("sites.json", local: [Site(id: 1, port: 2222)])
         #expect(kept.conflicts.isEmpty && kept.items == [Site(id: 1, port: 2222)])
-        #expect(try a.sync("sites.json", local: [Site(id: 1, port: 2200)]).items == [Site(id: 1, port: 2222)])
+        #expect(try a.synced("sites.json", local: [Site(id: 1, port: 2200)]).items == [Site(id: 1, port: 2222)])
     }
 
     @Test func aDeletedFileIsWrittenAgainNotEmptied() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let a = mac("a")
-        _ = try a.sync("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 22)])
         try FileManager.default.removeItem(at: cloud)
 
-        #expect(try a.sync("sites.json", local: [Site(id: 1, port: 22)]).items.map(\.id) == [1])
+        #expect(try a.synced("sites.json", local: [Site(id: 1, port: 22)]).items.map(\.id) == [1])
         #expect(FileManager.default.fileExists(atPath: cloud.appending(path: "sites.json").path))
     }
 
     @Test func aBrokenFileIsLeftAlone() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let a = mac("a")
-        _ = try a.sync("sites.json", local: [Site(id: 1, port: 22)])
+        _ = try a.synced("sites.json", local: [Site(id: 1, port: 22)])
         try Data("{ not json".utf8).write(to: cloud.appending(path: "sites.json"))
 
-        #expect(throws: SyncFolder.Unreadable.self) { try a.sync("sites.json", local: [Site(id: 1, port: 22)]) }
+        #expect(throws: SyncFolder.Unreadable.self) { try a.synced("sites.json", local: [Site(id: 1, port: 22)]) }
         #expect(try String(contentsOf: cloud.appending(path: "sites.json"), encoding: .utf8) == "{ not json")
     }
 
     @Test func singleValues() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let a = mac("a"), b = mac("b")
-        _ = try a.sync("keymap.json", value: "finder")
-        #expect(try b.sync("keymap.json", value: "finder").value == "finder")
-        _ = try a.sync("keymap.json", value: "commander")
-        #expect(try b.sync("keymap.json", value: "finder").value == "commander")
+        _ = try a.synced("keymap.json", value: "finder")
+        #expect(try b.synced("keymap.json", value: "finder").value == "finder")
+        _ = try a.synced("keymap.json", value: "commander")
+        #expect(try b.synced("keymap.json", value: "finder").value == "commander")
         #expect(try String(contentsOf: cloud.appending(path: "keymap.json"), encoding: .utf8) == "\"commander\"")
 
-        _ = try a.sync("keymap.json", value: "vim")
-        let clash = try b.sync("keymap.json", value: "finder-custom")
+        _ = try a.synced("keymap.json", value: "vim")
+        let clash = try b.synced("keymap.json", value: "finder-custom")
         #expect(clash.conflict?.local == "finder-custom" && clash.conflict?.remote == "vim")
     }
 
     @Test func oneFilePerItemInADirectory() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let a = mac("a"), b = mac("b")
-        _ = try a.sync(directory: "themes", local: [Theme(name: "종이", accent: "#3651C9"), Theme(name: "쪽빛 밤", accent: "#0F7C78")])
+        _ = try a.synced(directory: "themes", local: [Theme(name: "종이", accent: "#3651C9"), Theme(name: "쪽빛 밤", accent: "#0F7C78")])
         let files = try FileManager.default.contentsOfDirectory(atPath: cloud.appending(path: "themes").path).sorted()
         #expect(files == ["종이.json", "쪽빛 밤.json"])
 
@@ -157,13 +173,34 @@ import Testing
         let dropped = cloud.appending(path: "themes/dropped.json")
         try JSONEncoder().encode(Theme(name: "모시", accent: "#9A6700")).write(to: dropped)
         try FileManager.default.removeItem(at: cloud.appending(path: "themes/종이.json"))
-        let onA = try a.sync(directory: "themes", local: [Theme(name: "종이", accent: "#3651C9"), Theme(name: "쪽빛 밤", accent: "#0F7C78")])
+        let onA = try a.synced(directory: "themes", local: [Theme(name: "종이", accent: "#3651C9"), Theme(name: "쪽빛 밤", accent: "#0F7C78")])
         #expect(onA.items.map(\.name) == ["쪽빛 밤", "모시"])
 
         // B changes the dropped one; it is written back to the same file.
-        _ = try b.sync(directory: "themes", local: [Theme]())
-        _ = try b.sync(directory: "themes", local: [Theme(name: "쪽빛 밤", accent: "#0F7C78"), Theme(name: "모시", accent: "#B0306A")])
+        _ = try b.synced(directory: "themes", local: [Theme]())
+        _ = try b.synced(directory: "themes", local: [Theme(name: "쪽빛 밤", accent: "#0F7C78"), Theme(name: "모시", accent: "#B0306A")])
         let reread = try JSONDecoder().decode(Theme.self, from: Data(contentsOf: dropped))
         #expect(reread.accent == "#B0306A")
+    }
+}
+
+private extension SyncFolder {
+    /// Syncs and commits at once, as the app does when nothing was edited meanwhile.
+    func synced<Item: Codable & Identifiable & Equatable>(_ name: String, local: [Item]) throws -> Outcome<Item> {
+        let outcome = try sync(name, local: local)
+        try outcome.commit()
+        return outcome
+    }
+
+    func synced<Value: Codable & Equatable>(_ name: String, value: Value) throws -> ValueOutcome<Value> {
+        let outcome = try sync(name, value: value)
+        try outcome.commit()
+        return outcome
+    }
+
+    func synced<Item: Codable & Identifiable & Equatable>(directory name: String, local: [Item]) throws -> Outcome<Item> where Item.ID == String {
+        let outcome = try sync(directory: name, local: local)
+        try outcome.commit()
+        return outcome
     }
 }
