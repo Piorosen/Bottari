@@ -97,6 +97,32 @@ struct KeySetupTests {
         }
     }
 
+    /// Deleting a site takes the key Bottari made for it off the server. A key
+    /// the user brought in from a key file of their own stays, since it still
+    /// opens that server from their terminal and their other machines.
+    @Test func deletingASiteTakesOffOnlyAKeyBottariMade() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let own = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let made = try NewSSHKey.generate(.ed25519, comment: NewSSHKey.bottariComment)
+        let server = try await OpenSSHServer.start(authorizing: [own.publicKey, made.publicKey])
+        defer { server.stop() }
+        let authorized = server.folder.appending(path: "authorized_keys")
+        let secrets = InMemorySecretStore()
+        func connect(_ site: SavedSite) async throws -> SFTPFileProvider {
+            let plan = try site.connectionPlan(sites: [], sshConfig: SSHConfig(text: "", directory: ""), secrets: secrets)
+            return try await SFTPFileProvider.connect(to: plan.endpoint, credential: plan.credential, hostKeys: .acceptAnything, via: plan.hops)
+        }
+        let imported = try SavedSite(name: "own", endpoint: server.endpoint, authentication: .defaultKeys).keepingKey(own.privateKey, in: secrets)
+        let bottari = try SavedSite(name: "made", endpoint: server.endpoint, authentication: .defaultKeys).keepingKey(made.privateKey, in: secrets)
+
+        #expect(try await imported.removeKey(in: secrets, from: authorized.path, connect: connect) == nil)
+        #expect(try await bottari.removeKey(in: secrets, from: authorized.path, connect: connect) == made)
+
+        let lines = try String(contentsOf: authorized, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(lines == [own.publicKey])
+    }
+
     /// Behind a jump host whose password was typed and not saved, the new
     /// key is checked through that jump host with the typed password.
     @Test func aNewKeyIsCheckedThroughAJumpHostWithItsTypedPassword() async throws {

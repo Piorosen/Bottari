@@ -73,10 +73,14 @@ extension SavedSite {
         await probe.disconnect()
     }
 
-    /// The key that deleting the site takes off its server, if any.
+    /// The key that deleting the site takes off its server: the one Bottari
+    /// made for it. A key copied in from one of the user's key files stays,
+    /// since it opens that server from elsewhere too.
     public func removableKey(in secrets: any SecretStore) -> NewSSHKey? {
-        guard let text = try? secrets.readableSecret(for: privateKeyKey) else { return nil }
-        return NewSSHKey(privateKey: text)
+        guard let text = try? secrets.readableSecret(for: privateKeyKey),
+              let key = NewSSHKey(privateKey: text), key.isBottariKey
+        else { return nil }
+        return key
     }
 
     /// Logs in with `removableKey(in:)` over a connection `connect` opens and
