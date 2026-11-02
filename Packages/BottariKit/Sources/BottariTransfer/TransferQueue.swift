@@ -558,6 +558,10 @@ public final class TransferQueue {
                     try? await destination.setModified(modified, at: work.destination)
                 }
             case .rename, .providerCopy:
+                if work.action == .rename, work.automaticRetries > 0, try await alreadyMoved(work, from: source, to: destination) {
+                    // The last try's rename happened; only its reply was lost.
+                    break
+                }
                 // Neither replaces an existing file, so clear the way first.
                 if work.settled == .overwrite {
                     try await destination.delete(work.destination)
@@ -625,6 +629,22 @@ public final class TransferQueue {
             return try await (expected, actual)
         } catch ProviderError.unsupported {
             return nil
+        }
+    }
+
+    /// Whether a rename went through although its reply was lost: the original
+    /// is gone and something is at the destination.
+    private func alreadyMoved(_ work: WorkItem, from source: any FileProvider, to destination: any FileProvider) async throws -> Bool {
+        do {
+            _ = try await source.stat(work.source.path)
+            return false
+        } catch ProviderError.notFound {
+            do {
+                _ = try await destination.stat(work.destination)
+            } catch ProviderError.notFound {
+                throw ProviderError.notFound(work.source.path)
+            }
+            return true
         }
     }
 

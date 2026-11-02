@@ -365,6 +365,19 @@ import Testing
         #expect(server.state.withLock { $0.droppedWrites } == 10 - 1 - TransferQueue.automaticRetries)
     }
 
+    @Test func aMoveWhoseReplyWasLostIsNotUndoneByItsRetry() async throws {
+        TransferQueue.retryPause = .milliseconds(1)
+        server.addFile("/src/x.txt", "new")
+        server.addFile("/dst/x.txt", "old")
+        server.state.withLock { $0.droppedMoves = 1 }
+
+        let job = try await finished(try await transfer(.move, ["/src/x.txt"], from: server, to: server, into: "/dst", policy: .overwrite))
+
+        #expect(job.state == .finished)
+        #expect(server.text("/dst/x.txt") == "new")
+        #expect(!server.exists("/src/x.txt"))
+    }
+
     @Test func failedFilesCanBeSkipped() async throws {
         mac.addFile("/bad.txt", "bad")
         server.state.withLock { $0.failingWrites = ["bad.txt"] }
