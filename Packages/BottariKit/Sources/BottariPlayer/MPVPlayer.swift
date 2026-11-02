@@ -178,6 +178,16 @@ public final class MPVPlayer: @unchecked Sendable {
         command("sub-add", url.path, "select")
     }
 
+    /// The subtitle files among `siblings` that belong to `video`, such as
+    /// "movie.srt" or "movie.ko.ass" next to "movie.mkv".
+    public static func subtitles(for video: FileItem, among siblings: [FileItem]) -> [FileItem] {
+        let stem = (video.name as NSString).deletingPathExtension
+        return siblings.filter { sibling in
+            ["srt", "ass", "ssa", "vtt", "sub"].contains(sibling.path.pathExtension.lowercased())
+                && sibling.name.hasPrefix(stem)
+        }
+    }
+
     // MARK: - mpv plumbing
 
     fileprivate func takeStream(for uri: String) -> ProviderStream? {

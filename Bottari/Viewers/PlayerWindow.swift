@@ -73,12 +73,7 @@ final class PlayerModel {
 
     /// "movie.srt" or "movie.ko.ass" next to "movie.mkv" loads by itself.
     private func loadMatchingSubtitles(for item: FileItem) {
-        let stem = (item.name as NSString).deletingPathExtension
-        let subtitles = siblings.filter { sibling in
-            ["srt", "ass", "ssa", "vtt", "sub"].contains(sibling.path.pathExtension.lowercased())
-                && sibling.name.hasPrefix(stem)
-        }
-        for subtitle in subtitles {
+        for subtitle in MPVPlayer.subtitles(for: item, among: siblings) {
             Task {
                 guard let url = try? await AppServices.fileCache.localURL(for: subtitle, from: provider), current == item else { return }
                 player?.addSubtitle(url)
