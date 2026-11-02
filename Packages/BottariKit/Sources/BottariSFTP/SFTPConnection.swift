@@ -81,7 +81,8 @@ public enum SFTPConnectError: Error, Equatable, Sendable {
     /// A jump host on the way failed; `reason` says how.
     case jumpHostFailed(host: String, reason: String)
     /// A jump host on the way refused the login: its password or key.
-    case jumpHostRefusedLogin(SFTPEndpoint)
+    /// `passwordKey` is the hop's (see `SSHHop`).
+    case jumpHostRefusedLogin(SFTPEndpoint, passwordKey: String? = nil)
     /// The jump host `jumpHost` could not reach `address` behind it, e.g. a
     /// machine that is off or a reverse tunnel (`ssh -R`) that has gone.
     case unreachableBehindJumpHost(address: String, jumpHost: String, detail: String)
@@ -203,7 +204,7 @@ extension SFTPConnectError: LocalizedError {
             String(localized: "~/.ssh에 암호 없이 쓸 수 있는 기본 키 파일(id_ed25519, id_ecdsa, id_rsa)이 없거나 읽을 수 없습니다. 설정 › 폴더 접근에서 홈 폴더나 ~/.ssh를 허용하거나, 연결 관리에서 키 파일을 선택하십시오.")
         case .jumpHostFailed(let host, let reason):
             String(localized: "점프 호스트 \(host)에서 연결에 실패했습니다. \(reason)")
-        case .jumpHostRefusedLogin(let endpoint):
+        case .jumpHostRefusedLogin(let endpoint, _):
             String(localized: "점프 호스트 \(endpoint.username)@\(endpoint.hostKeyID)에 로그인할 수 없습니다. 사용자 이름과 비밀번호 또는 키를 확인하십시오.")
         case .unreachableBehindJumpHost(let address, let jumpHost, let detail):
             String(localized: "점프 호스트 \(jumpHost)에서 \(address)에 닿지 못했습니다(\(detail)). 그 컴퓨터가 켜져 있는지, 리버스 터널(ssh -R)로 들어간다면 그 터널이 열려 있는지 확인하십시오.")
@@ -229,10 +230,13 @@ extension SFTPConnectError: LocalizedError {
 public struct SSHHop: Equatable, Sendable {
     public var endpoint: SFTPEndpoint
     public var credential: SFTPCredential
+    /// Where its password goes in the secret store, when it is a saved site.
+    public var passwordKey: String?
 
-    public init(endpoint: SFTPEndpoint, credential: SFTPCredential) {
+    public init(endpoint: SFTPEndpoint, credential: SFTPCredential, passwordKey: String? = nil) {
         self.endpoint = endpoint
         self.credential = credential
+        self.passwordKey = passwordKey
     }
 }
 
@@ -301,7 +305,7 @@ final class SFTPConnection: @unchecked Sendable {
                 } catch let error as SFTPConnectError {
                     switch error {
                     case .hostKeyChanged, .hostKeyChangedInKnownHosts, .hostKeyRevoked, .hostKeyNotListed: throw error
-                    case .authenticationFailed: throw SFTPConnectError.jumpHostRefusedLogin(hop.endpoint)
+                    case .authenticationFailed: throw SFTPConnectError.jumpHostRefusedLogin(hop.endpoint, passwordKey: hop.passwordKey)
                     default: break
                     }
                     throw SFTPConnectError.jumpHostFailed(host: hop.endpoint.hostKeyID, reason: error.localizedDescription)

@@ -282,7 +282,7 @@ final class SiteLibrary {
         }.value
         if let detour {
             let via = try await Task.detached {
-                try detour.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: stored)
+                try detour.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: typedSecrets.over(stored))
             }.value
             plan = plan.through(via)
         }

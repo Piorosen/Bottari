@@ -246,11 +246,14 @@ public struct ConnectionPlan: Equatable, Sendable {
     public var endpoint: SFTPEndpoint
     public var credential: SFTPCredential
     public var hops: [SSHHop]
+    /// Where the site's password goes in the secret store.
+    var passwordKey: String
 
-    init(endpoint: SFTPEndpoint, credential: SFTPCredential, hops: [SSHHop]) {
+    init(endpoint: SFTPEndpoint, credential: SFTPCredential, hops: [SSHHop], passwordKey: String) {
         self.endpoint = endpoint
         self.credential = credential
         self.hops = hops
+        self.passwordKey = passwordKey
     }
 
     /// This plan reached through `via`'s server, which becomes the first hop.
@@ -258,7 +261,8 @@ public struct ConnectionPlan: Equatable, Sendable {
         ConnectionPlan(
             endpoint: endpoint,
             credential: credential,
-            hops: via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential)] + hops
+            hops: via.hops + [SSHHop(endpoint: via.endpoint, credential: via.credential, passwordKey: via.passwordKey)] + hops,
+            passwordKey: passwordKey
         )
     }
 }
@@ -296,6 +300,15 @@ extension SiteConnectError: LocalizedError {
         case .jumpLoop(let name): String(localized: "점프 호스트가 서로를 참조하고 있습니다: \(name)")
         case .proxyCommandNotRun(let site, let command): String(localized: "~/.ssh/config에서 \(site)의 연결은 ProxyCommand를 거칩니다: \(command)\nBottari는 이 명령을 실행하지 않으며, 주소로 바로 연결하면 다른 컴퓨터에 닿을 수 있어 연결하지 않았습니다.")
         }
+    }
+}
+
+extension SFTPConnectError {
+    /// The saved site a refused jump host is, so its password can be asked
+    /// for and kept; nil for any other error, or a jump host no saved site is.
+    public func refusedJumpHost(among sites: [SavedSite]) -> SavedSite? {
+        guard case .jumpHostRefusedLogin(_, let key?) = self else { return nil }
+        return sites.first { $0.passwordKey == key }
     }
 }
 
@@ -373,7 +386,8 @@ extension SavedSite {
         return ConnectionPlan(
             endpoint: endpoint,
             credential: try credential(secrets: secrets, password: password, sshDirectory: sshConfig.directory, readFile: readFile),
-            hops: try resolver.hops(for: proxyJump, visiting: [name])
+            hops: try resolver.hops(for: proxyJump, visiting: [name]),
+            passwordKey: passwordKey
         )
     }
 
@@ -432,13 +446,15 @@ private struct HopResolver {
         var hops: [SSHHop] = []
         for name in names {
             guard !visiting.contains(name) else { throw SiteConnectError.jumpLoop(name) }
-            let site = sites.first { $0.name == name || $0.sshConfigAlias == name } ?? configuredSite(for: name)
+            let saved = sites.first { $0.name == name || $0.sshConfigAlias == name }
+            let site = saved ?? configuredSite(for: name)
             try site.refuseUnrunProxyCommand(in: sshConfig)
             // A jump host can have its own jump hosts; those come first.
             hops += try self.hops(for: site.proxyJump, visiting: visiting.union([name]))
             hops.append(SSHHop(
                 endpoint: site.endpoint,
-                credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile)
+                credential: try site.credential(secrets: secrets, sshDirectory: sshConfig.directory, readFile: readFile),
+                passwordKey: saved?.passwordKey
             ))
         }
         return hops

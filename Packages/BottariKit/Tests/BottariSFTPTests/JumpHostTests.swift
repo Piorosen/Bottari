@@ -134,7 +134,7 @@ import Testing
         // Hops without a key of their own try the default key file, as `ssh` would.
         #expect(plan.hops == [
             SSHHop(endpoint: SFTPEndpoint(host: "bastion.example.com", username: "me"), credential: .privateKey("BASTION KEY", passphrase: nil)),
-            SSHHop(endpoint: relay.endpoint, credential: .defaultKeys(["BASTION KEY"])),
+            SSHHop(endpoint: relay.endpoint, credential: .defaultKeys(["BASTION KEY"]), passwordKey: relay.passwordKey),
             SSHHop(endpoint: SFTPEndpoint(host: "edge.example.com", port: 2200, username: "admin"), credential: .defaultKeys(["BASTION KEY"])),
         ])
     }
@@ -290,6 +290,54 @@ import Testing
                 // A refused login, not a network problem: Bottari asks for that host's password.
                 error as? SFTPConnectError == .jumpHostRefusedLogin(jump.endpoint)
             }
+        }
+    }
+
+    /// Two saved sites for one server, and the second named as the jump
+    /// host: the refusal is that second site's, whose password the hop reads.
+    /// An ~/.ssh/config alias at the same address is no saved site at all.
+    /// A tunnel's server put in front is the tunnel's site.
+    @Test func aRefusedJumpHostIsTheSiteNamedOnTheWay() async throws {
+        try await withJumpAndTarget { jump, target in
+            let bastion = SavedSite(name: "bastion", endpoint: jump.endpoint, authentication: .password)
+            let named = SavedSite(name: "jump", endpoint: jump.endpoint, authentication: .password)
+            let tunnel = SavedSite(name: "tunnel", endpoint: jump.endpoint, authentication: .password)
+            let app = SavedSite(name: "app", endpoint: target.endpoint, authentication: .password, proxyJump: ["jump"])
+            let viaAlias = SavedSite(name: "web", endpoint: target.endpoint, authentication: .password, proxyJump: ["gw"])
+            let direct = SavedSite(name: "db", endpoint: target.endpoint, authentication: .password)
+            let sites = [bastion, named, tunnel, app, viaAlias, direct]
+            let config = SSHConfig(text: """
+            Host gw
+              HostName 127.0.0.1
+              Port \(jump.port)
+              User \(TestSFTPServer.username)
+              IdentityFile /keys/gw
+            """, directory: "/keys", home: "/home/me", localUser: "me")
+            let refusedKey = try NewSSHKey.generate(.ed25519, comment: "").privateKey
+            let secrets = InMemorySecretStore([
+                app.passwordKey: TestSFTPServer.password,
+                viaAlias.passwordKey: TestSFTPServer.password,
+                direct.passwordKey: TestSFTPServer.password,
+                named.passwordKey: "wrong",
+                tunnel.passwordKey: "wrong",
+            ])
+            func refusal(_ site: SavedSite, detour: SavedSite? = nil) async throws -> SFTPConnectError? {
+                let readFile: SavedSite.FileReader = { $0 == "/keys/gw" ? refusedKey : nil }
+                var plan = try site.connectionPlan(sites: sites, sshConfig: config, secrets: secrets, readFile: readFile)
+                if let detour {
+                    plan = plan.through(try detour.connectionPlan(sites: sites, sshConfig: config, secrets: secrets, readFile: readFile))
+                }
+                return await #expect(throws: SFTPConnectError.self) {
+                    _ = try await SFTPFileProvider.connect(to: plan.endpoint, credential: plan.credential, hostKeys: .acceptAnything, via: plan.hops)
+                }
+            }
+
+            let refusedOnTheWayToApp = try #require(try await refusal(app))
+            let refusedOnTheWayToWeb = try #require(try await refusal(viaAlias))
+            let refusedOnTheDetour = try #require(try await refusal(direct, detour: tunnel))
+            #expect(refusedOnTheWayToApp.refusedJumpHost(among: sites)?.name == "jump")
+            #expect(refusedOnTheWayToWeb.refusedJumpHost(among: sites)?.name == nil)
+            #expect(refusedOnTheDetour.refusedJumpHost(among: sites)?.name == "tunnel")
         }
     }
 
