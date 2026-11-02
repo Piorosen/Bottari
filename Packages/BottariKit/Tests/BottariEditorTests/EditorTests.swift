@@ -95,6 +95,8 @@ import Testing
     }
 }
 
+struct CheckFailed: Error {}
+
 @MainActor @Suite struct EditedFileTests {
     let folder = FileManager.default.temporaryDirectory.appending(path: "BottariEditorTests-\(UUID().uuidString)")
 
@@ -123,5 +125,33 @@ import Testing
         let kept = try #require(file.keepCopy(of: conflict, in: folder.appending(path: "Replaced")))
         let keptBytes = try Data(contentsOf: kept)
         #expect(keptBytes == theirs)
+    }
+
+    @Test func aFailedCheckAfterAMergePutsBackTheServersNewerCopy() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (file, url, _) = try await open("a\nb\nc\n")
+        // A colleague adds a line while this edit changes the first one.
+        let theirs = "a\nb\nc\nd\n"
+        try Data(theirs.utf8).write(to: url)
+        guard case .conflict(let conflict) = try await file.save("A\nb\nc\n", check: nil), let merged = conflict.merged else {
+            Issue.record("no merge was offered")
+            return
+        }
+        let failing: @Sendable () async throws -> Void = { throw CheckFailed() }
+
+        guard case .checkFailed = try await file.save(merged, over: conflict, check: failing) else {
+            Issue.record("the check did not fail the save")
+            return
+        }
+        let afterMerge = try String(contentsOf: url, encoding: .utf8)
+        #expect(afterMerge == theirs)
+
+        // The next try fails its check too, and the colleague's copy is still what goes back.
+        guard case .checkFailed = try await file.save(merged + "e\n", check: failing) else {
+            Issue.record("the check did not fail the second save")
+            return
+        }
+        let afterRetry = try String(contentsOf: url, encoding: .utf8)
+        #expect(afterRetry == theirs)
     }
 }

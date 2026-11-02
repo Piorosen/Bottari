@@ -41,8 +41,8 @@ public final class EditedFile {
         case conflict(Conflict)
         /// The text has characters the file's encoding cannot hold; nothing was written.
         case unencodable
-        /// The check after writing failed, and the previous version was put
-        /// back unless `restoreError` says why not.
+        /// The check after writing failed, and the version written over was
+        /// put back unless `restoreError` says why not.
         case checkFailed(any Error, restoreError: (any Error)?)
     }
 
@@ -52,7 +52,8 @@ public final class EditedFile {
     /// When the server's copy was last changed, as of opening or the last save.
     public private(set) var remoteModified: Date?
     private var remoteSize: Int64?
-    /// The text as last opened or saved: the base for merging and for undoing a failed check.
+    /// The server's copy as last opened, saved or put back: the base for
+    /// merging, and what a failed check puts back.
     private var savedText = ""
     private var savedData = Data()
 
@@ -78,7 +79,7 @@ public final class EditedFile {
     /// Uploads `text`, unless the server's copy changed since it was opened.
     /// Saving over `conflict` writes over the server's copy it found without
     /// checking again. `check` runs after writing; when it throws, the
-    /// previous version is put back.
+    /// version written over is put back.
     public func save(_ text: String, over conflict: Conflict? = nil, check: (@Sendable () async throws -> Void)?) async throws -> SaveResult {
         guard let data = TextCodec.encode(text, as: format) else { return .unencodable }
         if conflict == nil {
@@ -88,7 +89,7 @@ public final class EditedFile {
                 return .conflict(Conflict(base: savedText, mine: text, server: server, modified: current.modified))
             }
         }
-        let previous = savedData
+        let replaced = conflict.map { (text: $0.theirs ?? savedText, data: $0.server) } ?? (text: savedText, data: savedData)
         try await provider.write(item.path, data: data)
         if let check {
             do {
@@ -96,7 +97,8 @@ public final class EditedFile {
             } catch {
                 var restoreError: (any Error)?
                 do {
-                    try await provider.write(item.path, data: previous)
+                    try await provider.write(item.path, data: replaced.data)
+                    (savedText, savedData) = replaced
                 } catch let failure {
                     restoreError = failure
                 }
