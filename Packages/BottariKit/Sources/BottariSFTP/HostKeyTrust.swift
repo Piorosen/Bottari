@@ -230,27 +230,16 @@ struct OpenSSHKnownHosts {
     }
 
     /// What the lists say about `presented` (`type base64`) for `host`, which
-    /// is `name` or `[name]:port` as `SFTPEndpoint.hostKeyID` writes it.
+    /// is `name` or `[name]:port` as `SFTPEndpoint.hostKeyID` writes it. A
+    /// revocation on any line outranks every other line, as in `ssh`.
     func verdict(for presented: String, host: String) -> Verdict {
+        let listed = entries.filter { Self.matches(host, $0.hosts) }
+        if listed.contains(where: { $0.marker == "@revoked" && $0.key == presented }) { return .revoked }
+        let keys = listed.filter { $0.marker == nil }.map(\.key)
+        if keys.contains(presented) { return .trusted }
         let type = presented.split(separator: " ").first.map(String.init) ?? ""
-        var expected: String?
-        var others: [String] = []
-        for entry in entries where Self.matches(host, entry.hosts) {
-            switch entry.marker {
-            case "@revoked" where entry.key == presented:
-                return .revoked
-            case nil where entry.key == presented:
-                return .trusted
-            case nil where entry.key.hasPrefix(type + " "):
-                expected = expected ?? entry.key
-            case nil:
-                others.append(entry.key)
-            default:
-                continue
-            }
-        }
-        if let expected { return .changed(expected: expected) }
-        return others.isEmpty ? .unknown : .otherKinds(known: others)
+        if let expected = keys.first(where: { $0.hasPrefix(type + " ") }) { return .changed(expected: expected) }
+        return keys.isEmpty ? .unknown : .otherKinds(known: keys)
     }
 
     /// Whether `host` is one of the comma-separated `patterns`, or matches

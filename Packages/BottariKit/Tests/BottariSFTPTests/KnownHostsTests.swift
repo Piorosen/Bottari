@@ -35,6 +35,22 @@ import Testing
         #expect(list.verdict(for: ed, host: "web.example.com") == .unknown)
     }
 
+    @Test func aSystemWideRevocationOutranksTheUsersOwnLine() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bt-kh-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let user = folder.appending(path: "known_hosts")
+        let system = folder.appending(path: "ssh_known_hosts")
+        try "prod.example.com \(ed)\n".write(to: user, atomically: true, encoding: .utf8)
+        try "@revoked * \(ed)\n".write(to: system, atomically: true, encoding: .utf8)
+        let store = KnownHosts(fileURL: nil, openSSHFiles: [user, system])
+        let prod = SFTPEndpoint(host: "prod.example.com", username: "me")
+
+        #expect(!store.check(ed, for: prod))
+        #expect(store.takeRejection(for: prod) == .hostKeyRevoked(host: "prod.example.com"))
+        #expect(store.trustedKey(for: prod) == nil)
+    }
+
     @Test(.enabled(if: OpenSSH.isAvailable)) func hashedNamesAsSSHKeygenWritesThem() throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
