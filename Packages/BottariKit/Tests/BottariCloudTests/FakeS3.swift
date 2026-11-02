@@ -14,6 +14,8 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
         var copiesFail = false
         /// An object someone else writes while the next copy runs.
         var landsDuringCopy: (key: String, data: Data)?
+        /// Listings carry keys as they are even when asked to URL-encode them.
+        var ignoresEncodingType = false
     }
 
     static let state = Mutex<[String: Bucket]>([:])
@@ -31,6 +33,10 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
 
     static func land(_ key: String, _ data: Data, duringNextCopyIn bucket: String) {
         state.withLock { $0[bucket, default: Bucket()].landsDuringCopy = (key, data) }
+    }
+
+    static func ignoreEncodingType(in bucket: String) {
+        state.withLock { $0[bucket, default: Bucket()].ignoresEncodingType = true }
     }
 
     static func put(_ key: String, _ data: Data, in bucket: String) {
@@ -151,17 +157,26 @@ final class FakeS3: URLProtocol, @unchecked Sendable {
         let page = entries.dropFirst(start).prefix(2)
         let truncated = start + page.count < entries.count
         let objects = Self.bucket(bucket).objects
-        var xml = "<ListBucketResult><Prefix>\(prefix)</Prefix><IsTruncated>\(truncated)</IsTruncated>"
+        let encodes = query["encoding-type"] == "url" && !Self.bucket(bucket).ignoresEncodingType
+        let key = { (text: String) in encodes ? Self.urlEncode(text) : Self.escape(text) }
+        var xml = "<ListBucketResult><Prefix>\(key(prefix))</Prefix><IsTruncated>\(truncated)</IsTruncated>"
+        if encodes { xml += "<EncodingType>url</EncodingType>" }
         if truncated { xml += "<NextContinuationToken>\(start + page.count)</NextContinuationToken>" }
         for entry in page {
             if entry.isPrefix {
-                xml += "<CommonPrefixes><Prefix>\(Self.escape(entry.value))</Prefix></CommonPrefixes>"
+                xml += "<CommonPrefixes><Prefix>\(key(entry.value))</Prefix></CommonPrefixes>"
             } else {
                 let object = objects[entry.value]!
-                xml += "<Contents><Key>\(Self.escape(entry.value))</Key><Size>\(object.data.count)</Size><LastModified>2026-10-23T05:00:00.000Z</LastModified></Contents>"
+                xml += "<Contents><Key>\(key(entry.value))</Key><Size>\(object.data.count)</Size><LastModified>2026-10-23T05:00:00.000Z</LastModified></Contents>"
             }
         }
         respond(200, xml: xml + "</ListBucketResult>")
+    }
+
+    /// As S3 encodes keys for `encoding-type=url`: a space becomes "+".
+    private static func urlEncode(_ text: String) -> String {
+        let kept = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~/ ")
+        return text.addingPercentEncoding(withAllowedCharacters: kept)!.replacingOccurrences(of: " ", with: "+")
     }
 
     /// Signs a copy of the request with the same date and headers and compares.

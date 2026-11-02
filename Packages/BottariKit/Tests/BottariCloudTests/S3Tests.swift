@@ -157,6 +157,26 @@ import Testing
         }
     }
 
+    @Test func keysXMLCannotCarryListWithTheRest() async throws {
+        FakeS3.put("a/bad\u{1}name", Data("1".utf8), in: bucket)
+        FakeS3.put("a/sub/y.txt", Data("y".utf8), in: bucket)
+        FakeS3.put("a/two\rlines", Data("2".utf8), in: bucket)
+        FakeS3.put("a/z.txt", Data("z".utf8), in: bucket)
+        let provider = provider
+
+        let items = try await provider.list("/a")
+        #expect(Set(items.map(\.name)) == ["bad\u{1}name", "sub", "two\rlines", "z.txt"])
+        let twoLines = try #require(items.first { $0.name.hasPrefix("two") })
+        #expect(try await provider.readData(twoLines.path) == Data("2".utf8))
+    }
+
+    @Test func aListingThatCannotBeReadFails() async throws {
+        FakeS3.ignoreEncodingType(in: bucket)
+        FakeS3.put("a/bad\u{1}name", Data("1".utf8), in: bucket)
+        FakeS3.put("a/z.txt", Data("z".utf8), in: bucket)
+        await #expect(throws: ProviderError.self) { try await provider.list("/a") }
+    }
+
     @Test func aWrongSecretIsRefused() async throws {
         let wrong = S3Provider(configuration: S3Configuration(bucket: bucket, accessKey: FakeS3.signer.accessKey), secretKey: "nope", session: FakeS3.session())
         await #expect(throws: ProviderError.permissionDenied(.root)) { try await wrong.list(.root) }

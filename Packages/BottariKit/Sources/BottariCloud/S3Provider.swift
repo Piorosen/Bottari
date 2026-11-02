@@ -355,18 +355,31 @@ public struct S3Provider: FileProvider {
         var token: String?
         var pages = 0
         repeat {
-            var query = [("list-type", "2"), ("prefix", prefix)]
+            // A key can hold characters XML cannot carry, so keys come URL-encoded.
+            var query = [("list-type", "2"), ("prefix", prefix), ("encoding-type", "url")]
             if let delimiter { query.append(("delimiter", delimiter)) }
             if let token { query.append(("continuation-token", token)) }
             var request = URLRequest(url: try configuration.url(for: "", query: query))
             let (data, _) = try await send(&request, path: RemotePath("/" + prefix))
             let page = S3XML.parse(data)
-            listing.folders += page.values["Prefix", default: []].filter { $0 != prefix }
-            listing.objects += page.objects
+            guard page.isWhole else { throw ProviderError.io(String(localized: "S3 응답이 올바르지 않습니다")) }
+            let encoded = page.values["EncodingType"]?.first == "url"
+            listing.folders += try page.values["Prefix", default: []].map { try Self.listed($0, encoded: encoded) }.filter { $0 != prefix }
+            listing.objects += try page.objects.map { (try Self.listed($0.key, encoded: encoded), $0.size, $0.modified) }
             token = page.values["IsTruncated"]?.first == "true" ? page.values["NextContinuationToken"]?.first : nil
             pages += 1
         } while token != nil && pages < maxPages
         return listing
+    }
+
+    /// A key or prefix as a listing gives it: URL-encoded, a space as "+",
+    /// if the store did as asked.
+    private static func listed(_ text: String, encoded: Bool) throws -> String {
+        guard encoded else { return text }
+        guard let key = text.replacingOccurrences(of: "+", with: " ").removingPercentEncoding else {
+            throw ProviderError.io(String(localized: "S3 응답이 올바르지 않습니다"))
+        }
+        return key
     }
 
     @discardableResult
@@ -436,12 +449,14 @@ struct S3XML {
     var root: String?
     var values: [String: [String]] = [:]
     var objects: [(key: String, size: Int64?, modified: Date?)] = []
+    /// Whether the parser read to the end; it stops at a character XML cannot carry.
+    var isWhole = false
 
     static func parse(_ data: Data) -> S3XML {
         let delegate = Collector()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
-        parser.parse()
+        delegate.result.isWhole = parser.parse()
         return delegate.result
     }
 
