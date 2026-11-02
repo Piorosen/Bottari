@@ -76,6 +76,33 @@ import Testing
         }
     }
 
+    /// Each password typed into the sheet is kept or not as its own toggle
+    /// said, whatever is typed after it.
+    @Test func onlyTheTypedSecretsChosenToBeKeptAreSaved() throws {
+        let bastion = site("bastion", .password)
+        let target = site("prod", .password, via: ["bastion"])
+        let stored = InMemorySecretStore()
+        var typed = TypedSecrets()
+        typed.set("prod pw", for: target.passwordKey, keeping: false)
+        typed.set("bastion pw", for: bastion.passwordKey, keeping: true)
+
+        let plan = try target.connectionPlan(sites: [bastion, target], sshConfig: config, secrets: typed.over(stored), readFile: readFile)
+        #expect(plan.credential == .password("prod pw"))
+        #expect(plan.hops.map(\.credential) == [.password("bastion pw")])
+
+        typed.keep(in: stored)
+        #expect(try stored.secret(for: target.passwordKey) == nil)
+        #expect(try stored.secret(for: bastion.passwordKey) == "bastion pw")
+
+        var later = TypedSecrets()
+        later.set("prod pw", for: target.passwordKey, keeping: true)
+        later.set("bastion pw", for: bastion.passwordKey, keeping: false)
+        let other = InMemorySecretStore()
+        later.keep(in: other)
+        #expect(try other.secret(for: target.passwordKey) == "prod pw")
+        #expect(try other.secret(for: bastion.passwordKey) == nil)
+    }
+
     @Test func keyFilesAreReadWithTheirStoredPassphrase() throws {
         let prod = site("prod", .keyFile(path: "/keys/prod"))
         let secrets = InMemorySecretStore([prod.passphraseKey: "pp"])

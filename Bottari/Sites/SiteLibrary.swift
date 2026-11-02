@@ -177,13 +177,12 @@ final class SiteLibrary {
     }
 
     /// Opens whatever the site is: an SFTP server, an S3 bucket or a Google Drive.
-    /// `typedSecrets` (Keychain key → value) were just typed by the user: they
-    /// win over stored ones, and are stored once the connection works unless
-    /// `keepingTypedSecrets` is false.
-    func connect(_ site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true) async throws -> any FileProvider {
+    /// `typedSecrets` were just typed by the user: they win over stored ones,
+    /// and those the user chose to keep are stored once the connection works.
+    func connect(_ site: SavedSite, typedSecrets: TypedSecrets = TypedSecrets()) async throws -> any FileProvider {
         switch site.kind {
         case .sftp:
-            return try await connectSFTP(site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
+            return try await connectSFTP(site, typedSecrets: typedSecrets)
         case .s3(let settings):
             return try await connectS3(site, settings, typedSecrets: typedSecrets)
         case .googleDrive(let settings):
@@ -191,7 +190,7 @@ final class SiteLibrary {
         }
     }
 
-    private func connectS3(_ site: SavedSite, _ settings: SavedSite.S3Settings, typedSecrets: [String: String]) async throws -> S3Provider {
+    private func connectS3(_ site: SavedSite, _ settings: SavedSite.S3Settings, typedSecrets: TypedSecrets) async throws -> S3Provider {
         let stored = secrets
         let key = site.s3SecretKey
         let secret = try await Task.detached { try typedSecrets[key] ?? stored.readableSecret(for: key) }.value
@@ -203,9 +202,7 @@ final class SiteLibrary {
         )
         // Fail here, with the reason, rather than in an empty pane.
         _ = try await provider.list(.root)
-        if let typed = typedSecrets[key] {
-            await Task.detached { try? stored.setSecret(typed, for: key) }.value
-        }
+        await Task.detached { typedSecrets.keep(in: stored) }.value
         return provider
     }
 
@@ -273,7 +270,7 @@ final class SiteLibrary {
 
     /// A running Bottari-only tunnel that covers the site's host adds its
     /// server as the first jump, unless `takingDetours` is false (the tunnel's own connection).
-    func connectSFTP(_ site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true, takingDetours: Bool = true) async throws -> SFTPFileProvider {
+    func connectSFTP(_ site: SavedSite, typedSecrets: TypedSecrets = TypedSecrets(), takingDetours: Bool = true) async throws -> SFTPFileProvider {
         let sites = sites
         let sshConfig = sshConfig
         let stored = secrets
@@ -281,7 +278,7 @@ final class SiteLibrary {
         // Key files and the Keychain are read off the main thread: the Keychain
         // may stop to ask the user for permission.
         var plan = try await Task.detached {
-            try site.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: TypedSecrets(typed: typedSecrets, stored: stored))
+            try site.connectionPlan(sites: sites, sshConfig: sshConfig, secrets: typedSecrets.over(stored))
         }.value
         if let detour {
             let via = try await Task.detached {
@@ -296,17 +293,7 @@ final class SiteLibrary {
             via: plan.hops,
             displayName: site.name
         )
-        if keepingTypedSecrets, !typedSecrets.isEmpty {
-            await Task.detached {
-                for (key, value) in typedSecrets {
-                    do {
-                        try stored.setSecret(value, for: key)
-                    } catch {
-                        Log.app.error("키체인에 저장하지 못함: \(key): \(error.localizedDescription)")
-                    }
-                }
-            }.value
-        }
+        await Task.detached { typedSecrets.keep(in: stored) }.value
         return provider
     }
 
@@ -330,20 +317,6 @@ struct KeyImportCandidate: Identifiable {
     let summary: SSHKeyFileSummary?
     /// Saved sites and not-yet-saved hosts that log in with it.
     let users: [String]
-}
-
-/// Secrets the user just typed, in front of the stored ones.
-private struct TypedSecrets: SecretStore {
-    let typed: [String: String]
-    let stored: any SecretStore
-
-    func secret(for key: String) throws -> String? {
-        try typed[key] ?? stored.secret(for: key)
-    }
-
-    func setSecret(_ value: String?, for key: String) throws {
-        try stored.setSecret(value, for: key)
-    }
 }
 
 struct CloudConnectError: LocalizedError {

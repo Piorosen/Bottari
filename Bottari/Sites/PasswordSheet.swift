@@ -21,7 +21,7 @@ struct PasswordRequest: Identifiable {
     /// it is the other way in.
     var keyFolder: RemotePath?
     /// Passwords already typed on the way here, e.g. a jump host's.
-    let typed: [String: String]
+    let typed: TypedSecrets
     let failed: ((any Error) -> Void)?
     let then: ((PaneModel) async -> Void)?
 
@@ -30,7 +30,7 @@ struct PasswordRequest: Identifiable {
         site: SavedSite,
         side: PaneSide,
         error: any Error,
-        typed: [String: String],
+        typed: TypedSecrets,
         sites: [SavedSite],
         failed: ((any Error) -> Void)?,
         then: ((PaneModel) async -> Void)?

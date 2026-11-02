@@ -123,12 +123,12 @@ final class PaneModel {
     /// passwords the user just typed for it (see `SiteLibrary.connect`).
     /// A connect overtaken by a newer one (the user clicked elsewhere
     /// meanwhile) closes what it opened and throws `CancellationError`.
-    func connect(to site: SavedSite, typedSecrets: [String: String] = [:], keepingTypedSecrets: Bool = true) async throws {
+    func connect(to site: SavedSite, typedSecrets: TypedSecrets = TypedSecrets()) async throws {
         placeGeneration += 1
         let generation = placeGeneration
         connectingSite = site
         defer { if generation == placeGeneration { connectingSite = nil } }
-        let provider = try await library.connect(site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
+        let provider = try await library.connect(site, typedSecrets: typedSecrets)
         guard generation == placeGeneration else {
             await AppServices.connections.release(provider)
             throw CancellationError()

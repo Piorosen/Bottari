@@ -50,7 +50,7 @@ enum SnapshotRenderer {
             for (file, error) in [("password-missing", SiteConnectError.passwordMissing(site: nas.name, key: nas.passwordKey) as any Error),
                                   ("password-keys", SFTPConnectError.authenticationFailed),
                                   ("password-key-unreadable", SiteConnectError.keyFileUnreadable(path: "~/.ssh/id_ed25519", site: prod.name, key: prod.passwordKey))] {
-                if let request = PasswordRequest(site: file == "password-missing" ? nas : prod, side: .left, error: error, typed: [:], sites: library.sites, failed: nil, then: nil) {
+                if let request = PasswordRequest(site: file == "password-missing" ? nas : prod, side: .left, error: error, typed: TypedSecrets(), sites: library.sites, failed: nil, then: nil) {
                     await render(
                         PasswordSheet(request: request) { _, _ in }.background(Palette.panel),
                         size: CGSize(width: 400, height: file == "password-key-unreadable" ? 320 : 260), appearance: appearance,

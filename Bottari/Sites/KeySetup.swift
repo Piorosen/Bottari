@@ -13,7 +13,7 @@ struct KeySetupRequest: Identifiable {
     /// Offered after a password login, rather than asked for in the connection manager.
     let isOffer: Bool
     /// Passwords typed on the way, for connecting anew when there is no `provider`.
-    var typed: [String: String] = [:]
+    var typed = TypedSecrets()
 }
 
 /// When to offer a key after a password login.
@@ -28,7 +28,7 @@ enum KeySetupOffers {
 
     /// The site logged in with a password: its own way, or because its key
     /// was out of reach or refused and a password was typed.
-    static func shouldOffer(for site: SavedSite, typed: [String: String]) -> Bool {
+    static func shouldOffer(for site: SavedSite, typed: TypedSecrets) -> Bool {
         guard isEnabled, site.isSFTP, !site.readOnly, !isDeclined(site.id) else { return false }
         if case .password = site.authentication { return true }
         return typed[site.passwordKey] != nil
@@ -76,7 +76,7 @@ extension SiteLibrary {
         _ site: SavedSite,
         kind: NewSSHKey.Kind,
         over provider: SFTPFileProvider?,
-        typedSecrets: [String: String] = [:],
+        typedSecrets: TypedSecrets = TypedSecrets(),
         forgettingPassword: Bool,
         progress: (KeySetupStep) -> Void
     ) async throws -> NewSSHKey {
@@ -90,7 +90,7 @@ extension SiteLibrary {
         } else {
             let opened: SFTPFileProvider
             do {
-                opened = try await connectSFTP(site, typedSecrets: typedSecrets, keepingTypedSecrets: false)
+                opened = try await connectSFTP(site, typedSecrets: typedSecrets)
             } catch let error as SiteConnectError {
                 throw KeySetupError(message: error.localizedDescription + " " + String(localized: "먼저 비밀번호로 연결한 뒤 다시 시도하십시오."))
             }
@@ -109,8 +109,10 @@ extension SiteLibrary {
         var probeSite = site
         probeSite.id = UUID()
         probeSite.authentication = .storedKey
+        var probeSecrets = TypedSecrets()
+        probeSecrets.set(key.privateKey, for: probeSite.privateKeyKey, keeping: false)
         do {
-            let probe = try await connectSFTP(probeSite, typedSecrets: [probeSite.privateKeyKey: key.privateKey], keepingTypedSecrets: false)
+            let probe = try await connectSFTP(probeSite, typedSecrets: probeSecrets)
             await probe.disconnect()
         } catch SFTPConnectError.authenticationFailed {
             throw KeySetupError(message: String(localized: "키를 서버의 ~/.ssh/authorized_keys에 넣었지만 서버가 이 키로 로그인을 받지 않습니다. sshd 설정(PubkeyAuthentication, AuthorizedKeysFile)이나 홈 폴더 권한(그룹과 다른 사용자가 쓸 수 없어야 함)을 확인하십시오. 로그인 방식은 바꾸지 않았습니다."))
@@ -131,7 +133,7 @@ extension SiteLibrary {
     /// server's `~/.ssh/authorized_keys`, before the site is deleted.
     func removeKeyFromServer(_ site: SavedSite) async throws {
         guard let key = storedKey(of: site) else { return }
-        let provider = try await connectSFTP(site, keepingTypedSecrets: false)
+        let provider = try await connectSFTP(site)
         do {
             try await provider.unauthorize(publicKey: key.publicKey)
         } catch {

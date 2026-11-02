@@ -336,12 +336,12 @@ struct SiteManagerSheet: View {
 
     private func run(_ kind: Activity) async {
         guard let site = current else { return }
-        var typed: [String: String] = [:]
+        var typed = TypedSecrets()
         if case .s3 = site.kind {
-            if !password.isEmpty { typed[site.s3SecretKey] = password }
+            if !password.isEmpty { typed.set(password, for: site.s3SecretKey, keeping: true) }
         } else {
-            if !password.isEmpty { typed[site.passwordKey] = password }
-            if !passphrase.isEmpty { typed[site.passphraseKey] = passphrase }
+            if !password.isEmpty { typed.set(password, for: site.passwordKey, keeping: true) }
+            if !passphrase.isEmpty { typed.set(passphrase, for: site.passphraseKey, keeping: true) }
         }
         activity = kind
         lastActivity = kind

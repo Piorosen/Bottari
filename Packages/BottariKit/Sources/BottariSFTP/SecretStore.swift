@@ -27,6 +27,51 @@ extension SecretStore {
     }
 }
 
+/// Passwords and passphrases the user typed for a connection, by their key in
+/// the secret store, each with the user's choice whether to keep it there.
+public struct TypedSecrets: Equatable, Sendable {
+    private var values: [String: String] = [:]
+    private var kept: Set<String> = []
+
+    public init() {}
+
+    public subscript(key: String) -> String? { values[key] }
+
+    public mutating func set(_ value: String, for key: String, keeping: Bool) {
+        values[key] = value
+        if keeping { kept.insert(key) } else { kept.remove(key) }
+    }
+
+    /// `stored`, with these in front of it.
+    public func over(_ stored: any SecretStore) -> any SecretStore {
+        Overlay(typed: values, stored: stored)
+    }
+
+    /// Saves the ones the user chose to keep, once the connection works.
+    public func keep(in store: any SecretStore) {
+        for key in kept {
+            do {
+                try store.setSecret(values[key], for: key)
+            } catch {
+                Log.app.error("키체인에 저장하지 못함: \(key): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private struct Overlay: SecretStore {
+        let typed: [String: String]
+        let stored: any SecretStore
+
+        func secret(for key: String) throws -> String? {
+            try typed[key] ?? stored.secret(for: key)
+        }
+
+        func setSecret(_ value: String?, for key: String) throws {
+            try stored.setSecret(value, for: key)
+        }
+    }
+}
+
 /// The macOS Keychain. With `synchronizable`, secrets also go to iCloud Keychain,
 /// which needs a signed app.
 public struct KeychainSecretStore: SecretStore {

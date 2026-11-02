@@ -188,15 +188,14 @@ final class Workspace {
     func connect(
         _ site: SavedSite,
         in side: PaneSide,
-        typedSecrets: [String: String] = [:],
-        keepingTypedSecrets: Bool = true,
+        typedSecrets: TypedSecrets = TypedSecrets(),
         failed: ((any Error) -> Void)? = nil,
         then: ((PaneModel) async -> Void)? = nil
     ) {
         let pane = pane(side)
         Task {
             do {
-                try await pane.connect(to: site, typedSecrets: typedSecrets, keepingTypedSecrets: keepingTypedSecrets)
+                try await pane.connect(to: site, typedSecrets: typedSecrets)
                 await then?(pane)
                 offerKey(for: site, typed: typedSecrets, over: pane.provider as? SFTPFileProvider)
             } catch is CancellationError {
@@ -215,7 +214,7 @@ final class Workspace {
 
     /// After a password got in, offers to put a key on the server instead,
     /// once per site: the server itself, or a jump host on the way.
-    private func offerKey(for site: SavedSite, typed: [String: String], over provider: SFTPFileProvider?) {
+    private func offerKey(for site: SavedSite, typed: TypedSecrets, over provider: SFTPFileProvider?) {
         guard passwordRequest == nil else { return }
         let library = pane(activeSide).library
         for candidate in [site] + library.jumpSites(of: site).reversed()
@@ -232,15 +231,15 @@ final class Workspace {
     /// Tries the connection again as it was, e.g. once the key's folder is allowed.
     func retry(_ request: PasswordRequest) {
         passwordRequest = nil
-        connect(request.site, in: request.side, typedSecrets: request.typed, keepingTypedSecrets: true, failed: request.failed, then: request.then)
+        connect(request.site, in: request.side, typedSecrets: request.typed, failed: request.failed, then: request.then)
     }
 
     /// Tries the connection again with what the user typed into the password sheet.
     func answer(_ request: PasswordRequest, with secret: String, keeping: Bool) {
         passwordRequest = nil
         var typed = request.typed
-        typed[request.key] = secret
-        connect(request.site, in: request.side, typedSecrets: typed, keepingTypedSecrets: keeping, failed: request.failed, then: request.then)
+        typed.set(secret, for: request.key, keeping: keeping)
+        connect(request.site, in: request.side, typedSecrets: typed, failed: request.failed, then: request.then)
     }
 
     /// The two panes trade places.
