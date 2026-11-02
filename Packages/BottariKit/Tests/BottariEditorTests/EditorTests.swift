@@ -1,3 +1,4 @@
+import AppKit
 import BottariCore
 import Foundation
 import Testing
@@ -153,5 +154,35 @@ struct CheckFailed: Error {}
         }
         let afterRetry = try String(contentsOf: url, encoding: .utf8)
         #expect(afterRetry == theirs)
+    }
+}
+
+@MainActor @Suite struct TextReplacementTests {
+    /// Hands the text view an undo manager, as its window does.
+    @MainActor final class Window: NSObject, NSTextViewDelegate {
+        let undo = UndoManager()
+
+        func undoManager(for view: NSTextView) -> UndoManager? { undo }
+    }
+
+    @Test func undoAfterTheWholeTextIsReplacedLeavesTheNewTextAlone() {
+        let storage = SyntaxHighlighting.makeStorage(language: "nginx", dark: false)
+        let layoutManager = NSLayoutManager()
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 400, height: 10_000))
+        layoutManager.addTextContainer(container)
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), textContainer: container)
+        textView.allowsUndo = true
+        let window = Window()
+        window.undo.groupsByEvent = false
+        textView.delegate = window
+        textView.string = "hello world"
+        window.undo.beginUndoGrouping()
+        textView.insertText("XYZ", replacementRange: NSRange(location: 0, length: 0))
+        window.undo.endUndoGrouping()
+
+        textView.replaceAllText(with: "server text here")
+        window.undo.undo()
+        #expect(textView.string == "server text here")
     }
 }
