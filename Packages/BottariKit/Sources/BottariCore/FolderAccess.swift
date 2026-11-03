@@ -33,7 +33,7 @@ public final class FolderAccess: @unchecked Sendable {
         var kept: [Data] = []
         for bookmark in defaults.array(forKey: key) as? [Data] ?? [] {
             var isStale = false
-            guard let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], bookmarkDataIsStale: &isStale),
+            guard let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutMounting], bookmarkDataIsStale: &isStale),
                   url.startAccessingSecurityScopedResource() else {
                 if Self.isOnAbsentVolume(bookmark) { kept.append(bookmark) }
                 continue

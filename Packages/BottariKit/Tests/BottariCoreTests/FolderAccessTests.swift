@@ -26,20 +26,45 @@ private struct ScratchDisk {
     }
 
     func pullOut() throws {
-        try Self.hdiutil(["detach", "-quiet", mountPoint.path])
+        try eject()
         try Data(contentsOf: image).write(to: away)
         try FileManager.default.removeItem(at: image)
     }
 
+    /// Unmounts the disk and leaves the image where it is, like a disk image
+    /// the user opened once or a server share: something that can be mounted.
+    func eject() throws {
+        try Self.hdiutil(["detach", "-quiet", mountPoint.path])
+    }
+
+    /// Where the image is mounted now, by whatever mounted it.
+    func mountPoints() throws -> [String] {
+        let info = try PropertyListSerialization.propertyList(from: Self.hdiutil(["info", "-plist"]), format: nil) as? [String: Any]
+        return (info?["images"] as? [[String: Any]] ?? [])
+            .filter { ($0["image-path"] as? String).map { URL(fileURLWithPath: $0).resolvingSymlinksInPath() } == image.resolvingSymlinksInPath() }
+            .flatMap { ($0["system-entities"] as? [[String: Any]] ?? []).compactMap { $0["mount-point"] as? String } }
+    }
+
+    func ejectEverywhere() throws {
+        for point in try mountPoints() {
+            try Self.hdiutil(["detach", "-quiet", point])
+        }
+    }
+
     static let isAvailable = FileManager.default.isExecutableFile(atPath: "/usr/bin/hdiutil")
 
-    private static func hdiutil(_ arguments: [String]) throws {
+    @discardableResult
+    private static func hdiutil(_ arguments: [String]) throws -> Data {
         let process = Process()
+        let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = arguments
+        process.standardOutput = output
         try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else { throw CocoaError(.fileReadUnknown) }
+        return data
     }
 }
 
@@ -80,6 +105,28 @@ private struct ScratchDisk {
         let pluggedInAgain = FolderAccess(defaults: defaults, sandboxed: true)
         pluggedInAgain.restore()
         #expect(pluggedInAgain.paths == [RemotePath(onDisk.path), RemotePath(onMac.path)].sorted { $0.string < $1.string })
+    }
+
+    /// Launching opens the folders allowed before; one on a disk that is not
+    /// mounted stays that way, rather than Bottari mounting it.
+    @Test(.enabled(if: ScratchDisk.isAvailable), .timeLimit(.minutes(1)))
+    func launchingMountsNoDisk() throws {
+        let scratch = try scratchFolder()
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let suite = "io.github.piorosen.bottari.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let disk = try ScratchDisk(in: scratch)
+        defer { try? disk.ejectEverywhere() }
+        let onDisk = disk.mountPoint.appending(path: "photos")
+        try FileManager.default.createDirectory(at: onDisk, withIntermediateDirectories: true)
+        FolderAccess(defaults: defaults, sandboxed: true).remember(onDisk)
+        try disk.eject()
+
+        FolderAccess(defaults: defaults, sandboxed: true).restore()
+
+        let mounted = try disk.mountPoints()
+        #expect(mounted == [])
     }
 
     @Test(.timeLimit(.minutes(1)))
