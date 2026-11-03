@@ -124,6 +124,41 @@ import Testing
         await stopAll()
     }
 
+    @MainActor @Test func aResumedMoveFromAServerLeavesALinkedFoldersTargetAlone() async throws {
+        let server = try await TestSFTPServer.start()
+        let mac = FileManager.default.temporaryDirectory.appending(path: "bottari-resume-link-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: mac, withIntermediateDirectories: true)
+        try server.makeDirectory("/target")
+        try server.makeFile("/target/a.txt", "a")
+        try FileManager.default.createSymbolicLink(atPath: server.url("/link").path, withDestinationPath: server.url("/target").path)
+        defer { try? FileManager.default.removeItem(at: mac) }
+        let provider = try await connect(server)
+        let record = TransferRecord(
+            id: UUID(), kind: .move, items: ["/link"],
+            source: .init(place: "site:nas", name: "NAS"), destination: .init(place: "local", name: "Mac"),
+            folder: RemotePath(mac.path), policy: .ask, verifiesChecksums: false,
+            done: [], unfinished: [], totalFiles: 1, totalBytes: 1, transferredBytes: 0, savedAt: Date()
+        )
+
+        let job: TransferJob
+        do {
+            job = try await ended(await TransferQueue().resume(record, from: TransferEndpoint(provider, place: "site:nas"), to: TransferEndpoint(LocalFileProvider(), place: "local")))
+        } catch {
+            await provider.disconnect()
+            await server.stop()
+            throw error
+        }
+        let kept = try? server.contents("/target/a.txt")
+        let link = try? FileManager.default.destinationOfSymbolicLink(atPath: server.url("/link").path)
+        let target = server.url("/target").path
+        await provider.disconnect()
+        await server.stop()
+
+        #expect(kept == "a")
+        #expect(link == target)
+        #expect(job.skippedFiles == 1)
+    }
+
     /// Mac → first server, first → second server, then a move from the second back to the Mac.
     @MainActor
     func transfer(between a: SFTPFileProvider, _ b: SFTPFileProvider, firstRoot: URL, secondRoot: URL, folder: URL, photo: Data) async throws {

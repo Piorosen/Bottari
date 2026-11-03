@@ -126,7 +126,13 @@ public struct SFTPFileProvider: FileProvider {
 
     public func stat(_ path: RemotePath) async throws -> FileItem {
         do {
-            return Self.item(path, try await link.retrying { try await $0.sftp.getAttributes(at: path.string) })
+            let (target, own) = try await link.retrying { connection in
+                let sftp = connection.sftp
+                async let target = sftp.getAttributes(at: path.string)
+                async let own = sftp.getLinkAttributes(at: path.string)
+                return try await (target, own)
+            }
+            return Self.item(path, target, isSymbolicLink: own.permissions.map { $0 & 0o170000 } == 0o120000)
         } catch {
             throw Self.translate(error, path)
         }
