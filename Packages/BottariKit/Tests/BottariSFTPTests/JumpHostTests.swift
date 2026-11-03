@@ -206,7 +206,7 @@ import Testing
         #expect(try nas.credential(secrets: InMemorySecretStore(), sshDirectory: "/Users/me/.ssh", readFile: { _ in nil }) == .defaultKeys([]))
         #expect(try nas.credential(secrets: InMemorySecretStore(), readFile: { files[$0] }) == .defaultKeys([]))
         // With nothing to offer, the connection says where the keys should be.
-        #expect(throws: SFTPConnectError.noDefaultKeys) { try SFTPCredential.defaultKeys([]).authenticationAttempts(username: "me") }
+        #expect(throws: SFTPConnectError.noDefaultKeys) { try SFTPCredential.defaultKeys([]).authenticationOffers(username: "me") }
     }
 
     @Test func jumpLoopsAreRefused() {

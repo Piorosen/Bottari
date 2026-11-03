@@ -68,7 +68,8 @@ struct TestFailure: Error, CustomStringConvertible {
     init(_ description: String) { self.description = description }
 }
 
-/// `sshd` as the current user, letting in the given public keys.
+/// `sshd` as the current user, letting in the given public keys. `extraConfig`
+/// comes first, so it can override a default (sshd keeps a keyword's first value).
 final class OpenSSHServer {
     let folder: URL
     let port: Int
@@ -96,7 +97,7 @@ final class OpenSSHServer {
         var lastError: (any Error)?
         for port in ports {
             let config = folder.appending(path: "sshd_config")
-            try ([
+            try (extraConfig + [
                 "Port \(port)",
                 "ListenAddress 127.0.0.1",
                 "HostKey \(hostKey.path)",
@@ -106,7 +107,7 @@ final class OpenSSHServer {
                 "StrictModes no",
                 "PasswordAuthentication no",
                 "KbdInteractiveAuthentication no",
-            ] + extraConfig + (extraConfig.contains { $0.hasPrefix("Subsystem") } ? [] : ["Subsystem sftp /usr/libexec/sftp-server"])).joined(separator: "\n").appending("\n").write(to: config, atomically: true, encoding: .utf8)
+            ] + (extraConfig.contains { $0.hasPrefix("Subsystem") } ? [] : ["Subsystem sftp /usr/libexec/sftp-server"])).joined(separator: "\n").appending("\n").write(to: config, atomically: true, encoding: .utf8)
             let process = Process()
             process.executableURL = URL(fileURLWithPath: OpenSSH.sshd)
             process.arguments = ["-D", "-f", config.path, "-E", folder.appending(path: "sshd.log").path]

@@ -39,23 +39,22 @@ public enum SFTPCredential: Equatable, Sendable {
     /// to offer: keys first and a password after, as `ssh` does.
     indirect case fallback(SFTPCredential, then: SFTPCredential)
 
-    /// One authentication method per connection attempt, tried in order until
-    /// one is accepted.
-    func authenticationAttempts(username: String) throws -> [SSHAuthenticationMethod] {
+    /// What to offer the server, in order, on one connection.
+    func authenticationOffers(username: String) throws -> [NIOSSHUserAuthenticationOffer] {
         switch self {
         case .fallback(let first, let then):
-            let firstAttempts = (try? first.authenticationAttempts(username: username)) ?? []
-            return firstAttempts + (try then.authenticationAttempts(username: username))
+            let firstOffers = (try? first.authenticationOffers(username: username)) ?? []
+            return firstOffers + (try then.authenticationOffers(username: username))
         case .password(let password):
-            return [.passwordBased(username: username, password: password)]
+            return [NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .password(.init(password: password)))]
         case .privateKey(let text, let passphrase):
-            return try PrivateKeyFile(text, passphrase: passphrase).attempts(username: username)
+            return try PrivateKeyFile(text, passphrase: passphrase).offers(username: username)
         case .defaultKeys(let texts):
-            let attempts = texts.flatMap { text in
-                (try? PrivateKeyFile(text, passphrase: nil).attempts(username: username)) ?? []
+            let offers = texts.flatMap { text in
+                (try? PrivateKeyFile(text, passphrase: nil).offers(username: username)) ?? []
             }
-            guard !attempts.isEmpty else { throw SFTPConnectError.noDefaultKeys }
-            return attempts
+            guard !offers.isEmpty else { throw SFTPConnectError.noDefaultKeys }
+            return offers
         }
     }
 }
@@ -347,10 +346,10 @@ final class SFTPConnection: @unchecked Sendable {
     }
 
     /// Opens one SSH session, over TCP or inside a direct-tcpip channel of
-    /// `previous` (the session with `jumpHost`), trying each authentication
-    /// attempt the credential offers. Bottari opens the channel itself either
-    /// way, so it can hear every byte the server sends and tell a quiet
-    /// connection from a dead one.
+    /// `previous` (the session with `jumpHost`), offering what the credential
+    /// holds in turn until the server takes one. Bottari opens the channel
+    /// itself either way, so it can hear every byte the server sends and tell
+    /// a quiet connection from a dead one.
     private static func connect(
         _ hop: SSHHop,
         through previous: SSHClient?,
@@ -359,54 +358,41 @@ final class SFTPConnection: @unchecked Sendable {
         group: MultiThreadedEventLoopGroup,
         timeout: TimeAmount
     ) async throws -> (client: SSHClient, channel: Channel, heartbeat: Heartbeat) {
-        let attempts = try hop.credential.authenticationAttempts(username: hop.endpoint.username)
-        var refused = false
-        for (index, method) in attempts.enumerated() {
-            var opened: Channel?
-            do {
-                let heartbeat = Heartbeat()
-                let channel = try await openChannel(to: hop, through: previous, group: group, timeout: timeout, heartbeat: heartbeat)
-                opened = channel
-                let tracker = AuthenticationTracker(method, channel: channel)
-                let attempt = UncheckedSendable(SSHAuthenticationMethod.custom(tracker))
-                do {
-                    // Citadel adds the session's handlers synchronously, which NIO
-                    // only allows on the channel's own event loop, so run the call there.
-                    let client = try await withTaskExecutorPreference(EventLoopTaskExecutor(channel.eventLoop)) {
-                        try await SSHClient.connect(
-                            on: channel,
-                            settings: SSHClientSettings(
-                                host: hop.endpoint.host,
-                                port: hop.endpoint.port,
-                                authenticationMethod: { attempt.value },
-                                hostKeyValidator: hostKeys.validator(for: hop.endpoint)
-                            )
-                        )
-                    }
-                    return (client, channel, heartbeat)
-                } catch {
-                    if tracker.isExhausted { throw SFTPConnectError.authenticationFailed }
-                    throw error
-                }
-            } catch {
-                try? await opened?.close()
-                let reason = SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error, dialling: hop.endpoint, behind: jumpHost)
-                if case SFTPConnectError.authenticationFailed = reason {
-                    Log.connection.info("\(hop.endpoint.hostKeyID): 인증 방법 \(index + 1)/\(attempts.count) 거부됨")
-                    refused = true
-                    continue
-                }
-                // A server that has refused a key may stop taking connections
-                // from here for a while (sshd's PerSourcePenalties, fail2ban):
-                // the login is what failed, not the network.
-                if refused, case SFTPConnectError.closedBeforeLogin = reason {
-                    Log.connection.info("\(hop.endpoint.hostKeyID): 키 거부 뒤 서버가 연결을 받지 않음")
-                    throw SFTPConnectError.authenticationFailed
-                }
-                throw reason
-            }
+        let offers = try hop.credential.authenticationOffers(username: hop.endpoint.username)
+        let heartbeat = Heartbeat()
+        let channel: Channel
+        do {
+            channel = try await openChannel(to: hop, through: previous, group: group, timeout: timeout, heartbeat: heartbeat)
+        } catch {
+            throw SFTPConnectError.wrap(error, dialling: hop.endpoint, behind: jumpHost)
         }
-        throw SFTPConnectError.authenticationFailed
+        let login = AuthenticationTracker(offers, host: hop.endpoint.hostKeyID, channel: channel)
+        let method = UncheckedSendable(SSHAuthenticationMethod.custom(login))
+        do {
+            // Citadel adds the session's handlers synchronously, which NIO
+            // only allows on the channel's own event loop, so run the call there.
+            let client = try await withTaskExecutorPreference(EventLoopTaskExecutor(channel.eventLoop)) {
+                try await SSHClient.connect(
+                    on: channel,
+                    settings: SSHClientSettings(
+                        host: hop.endpoint.host,
+                        port: hop.endpoint.port,
+                        authenticationMethod: { method.value },
+                        hostKeyValidator: hostKeys.validator(for: hop.endpoint)
+                    )
+                )
+            }
+            return (client, channel, heartbeat)
+        } catch {
+            try? await channel.close()
+            if login.isExhausted { throw SFTPConnectError.authenticationFailed }
+            // Once it has refused enough offers (MaxAuthTries), sshd hangs up
+            // instead of answering the next: the login failed, not the network.
+            if login.wasRefused, case .closedBeforeLogin? = SFTPConnectError.networkFailure(error, dialling: hop.endpoint) {
+                throw SFTPConnectError.authenticationFailed
+            }
+            throw SFTPConnectError.wrap(hostKeys.rejection(for: hop.endpoint) ?? error, dialling: hop.endpoint, behind: jumpHost)
+        }
     }
 
     /// A TCP connection to the hop, or a channel to it through `previous`,
@@ -667,28 +653,38 @@ private final class HoldUntilSSHStarts: ChannelDuplexHandler, @unchecked Sendabl
     }
 }
 
-/// Watches a login inside a jump host channel. NIOSSH reports a rejected login as
-/// a pipeline error, but nothing in a nested session closes the channel on it, so
-/// Citadel would wait for its 10 second login timeout. On the first offer this adds
-/// a handler that closes the channel on such an error and remembers why.
+/// Offers each way of logging in on one connection until the server takes
+/// one, as `ssh` does: sshd counts every refusal against MaxAuthTries, but
+/// punishes the address (PerSourcePenalties) only for a connection that ends
+/// without a login. NIOSSH reports a refused login as a pipeline error, but
+/// nothing in a nested session closes the channel on it, so Citadel would
+/// wait for its 10 second login timeout. On the first offer this adds a
+/// handler that closes the channel on such an error.
 final class AuthenticationTracker: NIOSSHClientUserAuthenticationDelegate, @unchecked Sendable {
-    private let method: SSHAuthenticationMethod
+    private var offers: [NIOSSHUserAuthenticationOffer]
+    private let total: Int
+    private let host: String
     private let channel: Channel
     private let lock = NSLock()
+    private var offered = 0
+    private var refused = 0
     private var exhausted = false
-    private var watching = false
 
-    init(_ method: SSHAuthenticationMethod, channel: Channel) {
-        self.method = method
+    init(_ offers: [NIOSSHUserAuthenticationOffer], host: String, channel: Channel) {
+        self.offers = offers
+        total = offers.count
+        self.host = host
         self.channel = channel
     }
 
+    /// The server refused every offer it could take.
     var isExhausted: Bool {
         lock.withLock { exhausted }
     }
 
-    func markExhausted() {
-        lock.withLock { exhausted = true }
+    /// The server refused at least one offer.
+    var wasRefused: Bool {
+        lock.withLock { refused > 0 }
     }
 
     func nextAuthenticationType(
@@ -696,32 +692,43 @@ final class AuthenticationTracker: NIOSSHClientUserAuthenticationDelegate, @unch
         nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>
     ) {
         // Called on the channel's event loop, after the SSH handlers are in place.
-        if !watching {
-            watching = true
-            try? channel.pipeline.syncOperations.addHandler(LoginFailureWatcher(tracker: self))
+        let promise = nextChallengePromise.assumeIsolated()
+        if offered == 0 {
+            try? channel.pipeline.syncOperations.addHandler(LoginFailureWatcher())
+        } else {
+            lock.withLock { refused += 1 }
+            Log.connection.info("\(host): 인증 방법 \(offered)/\(total) 거부됨")
         }
-        method.nextAuthenticationType(availableMethods: availableMethods, nextChallengePromise: nextChallengePromise)
+        while !offers.isEmpty {
+            let offer = offers.removeFirst()
+            guard availableMethods.contains(Self.method(of: offer)) else { continue }
+            offered += 1
+            promise.succeed(offer)
+            return
+        }
+        lock.withLock { exhausted = true }
+        nextChallengePromise.fail(SSHClientError.allAuthenticationOptionsFailed)
+    }
+
+    private static func method(of offer: NIOSSHUserAuthenticationOffer) -> NIOSSHAvailableUserAuthenticationMethods {
+        switch offer.offer {
+        case .privateKey: .publicKey
+        case .password: .password
+        case .hostBased: .hostBased
+        case .none: []
+        }
     }
 }
 
+/// Closes the channel once the login is refused for good, so a nested session
+/// does not wait out Citadel's login timeout.
 private final class LoginFailureWatcher: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = ByteBuffer
-    private let tracker: AuthenticationTracker
-
-    init(tracker: AuthenticationTracker) {
-        self.tracker = tracker
-    }
 
     func errorCaught(context: ChannelHandlerContext, error: any Error) {
         // Only a refused login means the sign-in methods ran out; a channel
         // that could not be made in time is a network problem, not a wrong key.
-        let refused: Bool = switch error {
-        case is AuthenticationFailed: true
-        case let error as SSHClientError: error != .channelCreationFailed
-        default: false
-        }
-        if refused {
-            tracker.markExhausted()
+        if let error = error as? SSHClientError, error != .channelCreationFailed {
             context.close(promise: nil)
         }
         context.fireErrorCaught(error)

@@ -1,5 +1,4 @@
 import _CryptoExtras
-import Citadel
 import CommonCrypto
 import Crypto
 import Foundation
@@ -35,28 +34,29 @@ enum PrivateKeyFile {
         }
     }
 
-    /// One authentication attempt per way to offer the key. RSA goes with
-    /// SHA-512 first, then SHA-256 (servers and appliances that know only
-    /// that one), and SHA-1 for servers too old for either.
-    func attempts(username: String) -> [SSHAuthenticationMethod] {
-        switch self {
-        case .ed25519(let key): [.ed25519(username: username, privateKey: key)]
-        case .p256(let key): [.p256(username: username, privateKey: key)]
-        case .p384(let key): [.p384(username: username, privateKey: key)]
-        case .p521(let key): [.p521(username: username, privateKey: key)]
+    /// The key, each way it can be offered. RSA goes with SHA-512 first,
+    /// then SHA-256 (servers and appliances that know only that one), and
+    /// SHA-1 for servers too old for either.
+    func offers(username: String) -> [NIOSSHUserAuthenticationOffer] {
+        let keys: [NIOSSHPrivateKey] = switch self {
+        case .ed25519(let key): [NIOSSHPrivateKey(ed25519Key: key)]
+        case .p256(let key): [NIOSSHPrivateKey(p256Key: key)]
+        case .p384(let key): [NIOSSHPrivateKey(p384Key: key)]
+        case .p521(let key): [NIOSSHPrivateKey(p521Key: key)]
         case .rsa(let key, let body):
             [
-                Self.offer(OfferedPrivateKey<RSASHA512Kind>(body: body) { data in
+                OfferedPrivateKey<RSASHA512Kind>(body: body) { data in
                     try key.signature(for: SHA512.hash(data: data), padding: .insecurePKCS1v1_5).rawRepresentation
-                }, username: username),
-                Self.offer(OfferedPrivateKey<RSASHA256Kind>(body: body) { data in
+                }.asNIOSSHKey,
+                OfferedPrivateKey<RSASHA256Kind>(body: body) { data in
                     try key.signature(for: SHA256.hash(data: data), padding: .insecurePKCS1v1_5).rawRepresentation
-                }, username: username),
-                Self.offer(OfferedPrivateKey<RSASHA1Kind>(body: body) { data in
+                }.asNIOSSHKey,
+                OfferedPrivateKey<RSASHA1Kind>(body: body) { data in
                     try key.signature(for: Insecure.SHA1.hash(data: data), padding: .insecurePKCS1v1_5).rawRepresentation
-                }, username: username),
+                }.asNIOSSHKey,
             ]
         }
+        return keys.map { NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .privateKey(.init(privateKey: $0))) }
     }
 
     /// The public key blob, as the base64 part of a `.pub` file holds it.
@@ -79,10 +79,6 @@ enum PrivateKeyFile {
             blob.append(body)
         }
         return blob
-    }
-
-    static func offer<Kind>(_ key: OfferedPrivateKey<Kind>, username: String) -> SSHAuthenticationMethod {
-        .custom(SingleKeyOffer(username: username, key: key.asNIOSSHKey))
     }
 
     // MARK: - OpenSSH format
@@ -317,33 +313,6 @@ private struct DERReader {
         let (tag, value) = try next()
         guard tag == expected else { throw SFTPConnectError.unreadableKey }
         return value
-    }
-}
-
-/// Offers exactly one key. Citadel asks a custom delegate only once, so trying
-/// several keys means one connection attempt per key.
-final class SingleKeyOffer: NIOSSHClientUserAuthenticationDelegate, @unchecked Sendable {
-    let username: String
-    let key: NIOSSHPrivateKey
-
-    init(username: String, key: NIOSSHPrivateKey) {
-        self.username = username
-        self.key = key
-    }
-
-    func nextAuthenticationType(
-        availableMethods: NIOSSHAvailableUserAuthenticationMethods,
-        nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>
-    ) {
-        // NIOSSH calls delegates on the connection's event loop.
-        let promise = nextChallengePromise.assumeIsolated()
-        guard availableMethods.contains(.publicKey) else {
-            promise.succeed(nil)
-            return
-        }
-        promise.succeed(
-            NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: .privateKey(.init(privateKey: key)))
-        )
     }
 }
 

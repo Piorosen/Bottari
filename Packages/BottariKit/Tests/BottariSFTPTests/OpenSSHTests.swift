@@ -115,6 +115,79 @@ struct OpenSSHTests {
         }
     }
 
+    /// sshd 9.8 and later punishes an address for each connection that ends in
+    /// a refused login (PerSourcePenalties), so every way of logging in has to
+    /// share one connection, as `ssh` does. The three default key files are
+    /// five offers (RSA goes three ways) and leave room for a sixth within a
+    /// stock MaxAuthTries.
+    @Test func refusedDefaultKeysStillLeaveRoomForWhatComesAfter() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let known = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        try await withServer(authorizing: [known.publicKey], extraConfig: ["LogLevel VERBOSE"]) { server in
+            let provider = try await SFTPFileProvider.connect(
+                to: server.endpoint,
+                credential: .fallback(.defaultKeys(try strangers(in: folder)), then: .privateKey(known.privateKey)),
+                hostKeys: .acceptAnything
+            )
+            await provider.disconnect()
+            #expect(!server.log.contains("penalty"), "sshd log:\n\(server.log)")
+        }
+    }
+
+    /// With every default key refused, a wrong password is the sixth refusal,
+    /// at which a stock sshd (MaxAuthTries 6) hangs up instead of answering.
+    /// That is still a wrong password, not a server that takes no connections.
+    @Test func aWrongPasswordAfterTheDefaultKeysIsStillAWrongPassword() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let known = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        try await withServer(authorizing: [known.publicKey], extraConfig: ["PasswordAuthentication yes", "LogLevel VERBOSE"]) { server in
+            await #expect(throws: SFTPConnectError.authenticationFailed) {
+                _ = try await SFTPFileProvider.connect(
+                    to: server.endpoint,
+                    credential: .fallback(.defaultKeys(try strangers(in: folder)), then: .password("wrong")),
+                    hostKeys: .acceptAnything
+                )
+            }
+            #expect(server.log.contains("Failed password for"), "sshd log:\n\(server.log)")
+        }
+    }
+
+    /// An unknown key of each kind `SavedSite.defaultKeyFiles` names.
+    private func strangers(in folder: URL) throws -> [String] {
+        try [("ed25519", nil), ("ecdsa", 256), ("rsa", 2048)].map { type, bits in
+            try OpenSSH.makeKey(in: folder, type: type, bits: bits).privateKey
+        }
+    }
+
+    /// A password comes after the refused keys on the same connection, where
+    /// the penalty for them cannot reach it. sshd as a plain user cannot check
+    /// a password, but it logs the connection each refusal came on.
+    @Test func thePasswordFollowsRefusedKeysOnTheSameConnection() async throws {
+        let folder = try OpenSSH.scratch()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let known = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        let stranger = try OpenSSH.makeKey(in: folder, type: "ed25519")
+        try await withServer(authorizing: [known.publicKey], extraConfig: ["PasswordAuthentication yes", "LogLevel VERBOSE"]) { server in
+            await #expect(throws: SFTPConnectError.authenticationFailed) {
+                _ = try await SFTPFileProvider.connect(
+                    to: server.endpoint,
+                    credential: .fallback(.defaultKeys([stranger.privateKey]), then: .password("not checked")),
+                    hostKeys: .acceptAnything
+                )
+            }
+            func connections(refusing method: String) -> [Substring] {
+                server.log.split(whereSeparator: \.isNewline).filter { $0.contains("Failed \(method) for") }.compactMap { line in
+                    line.split(separator: " ").drop { $0 != "port" }.dropFirst().first
+                }
+            }
+            let keyRefusals = connections(refusing: "publickey")
+            #expect(keyRefusals.count == 1, "sshd log:\n\(server.log)")
+            #expect(connections(refusing: "password") == keyRefusals, "sshd log:\n\(server.log)")
+        }
+    }
+
     @Test func permissionsLinksAndSearchOnARealServer() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

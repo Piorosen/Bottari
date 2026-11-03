@@ -99,7 +99,7 @@ import Testing
 
     @Test func garbageKeyTextIsReportedAsUnreadable() {
         #expect(throws: SFTPConnectError.unreadableKey) {
-            _ = try SFTPCredential.privateKey("not a key").authenticationAttempts(username: "me")
+            _ = try SFTPCredential.privateKey("not a key").authenticationOffers(username: "me")
         }
     }
 
