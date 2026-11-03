@@ -77,7 +77,7 @@ enum SnapshotRenderer {
             await pane.switchProvider(to: LocalFileProvider(), site: site)
             let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path), library: library)
             await right.start()
-            let renamed = RemotePath(folder.path).appending("nginx.conf")
+            let renamed = FileItem.ID(path: RemotePath(folder.path).appending("nginx.conf"), isDirectory: false)
             right.selection = [renamed]
             right.renaming = renamed
             let workspace = Workspace(left: pane, right: right)
@@ -449,7 +449,7 @@ enum SnapshotRenderer {
         let webServer = PreviewServer(prod.name, root: web)
         let left = PaneModel(provider: LocalFileProvider(), library: library)
         await left.switchProvider(to: webServer, site: prod)
-        left.selection = [RemotePath("/var/www/site/nginx.conf")]
+        left.selection = [FileItem.ID(path: "/var/www/site/nginx.conf", isDirectory: false)]
         var home = library.sites[2]
         home.startPath = "/volume1/backup"
         let right = PaneModel(provider: LocalFileProvider(), library: library)
@@ -511,7 +511,7 @@ enum SnapshotRenderer {
         let right = PaneModel(provider: LocalFileProvider(), start: RemotePath(folder.path))
         await left.start()
         await right.start()
-        left.selection = [RemotePath(folder.path).appending("nginx.conf")]
+        left.selection = [FileItem.ID(path: RemotePath(folder.path).appending("nginx.conf"), isDirectory: false)]
         let workspace = Workspace(left: left, right: right)
         await render(
             HStack(spacing: 0) {

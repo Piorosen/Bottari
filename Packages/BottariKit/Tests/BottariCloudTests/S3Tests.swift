@@ -1,4 +1,5 @@
 import BottariCore
+import BottariTransfer
 import Foundation
 import Testing
 @testable import BottariCloud
@@ -133,6 +134,55 @@ import Testing
         FakeS3.put("a/z.txt", Data("z".utf8), in: bucket)
         // "/a" must not list itself, or walking it would never end.
         #expect(try await provider.list("/a").map(\.name) == ["z.txt"])
+    }
+
+    @Test func anObjectAndAFolderOfOneNameAreTwoItemsThatActionsTellApart() async throws {
+        let provider = provider
+        FakeS3.put("docs", Data("file".utf8), in: bucket)
+        FakeS3.put("docs/index.html", Data("<h1>".utf8), in: bucket)
+        FakeS3.put("notes", Data("file".utf8), in: bucket)
+        FakeS3.put("notes/a.txt", Data("a".utf8), in: bucket)
+        func keys() -> Set<String> { Set(FakeS3.bucket(bucket).objects.keys) }
+
+        let items = try await provider.list(.root)
+        #expect(items.map(\.name) == ["docs", "notes", "docs", "notes"])
+        #expect(Set(items.map(\.id)).count == 4)
+        let docsFolder = try #require(items.first { $0.name == "docs" && $0.isDirectory })
+        let notesFolder = try #require(items.first { $0.name == "notes" && $0.isDirectory })
+        let notesFile = try #require(items.first { $0.name == "notes" && !$0.isDirectory })
+        #expect(try await provider.readData(notesFile.path) == Data("file".utf8))
+        #expect(try await provider.list(notesFolder.path).map(\.name) == ["a.txt"])
+
+        try await provider.copy(notesFolder, to: "/copied")
+        #expect(keys() == ["docs", "docs/index.html", "notes", "notes/a.txt", "copied/", "copied/a.txt"])
+        try await provider.move(docsFolder, to: "/site")
+        #expect(keys() == ["docs", "site/", "site/index.html", "notes", "notes/a.txt", "copied/", "copied/a.txt"])
+        try await provider.delete(notesFolder)
+        #expect(keys() == ["docs", "site/", "site/index.html", "notes", "copied/", "copied/a.txt"])
+        try await provider.write("/notes/b.txt", data: Data("b".utf8))
+        try await provider.delete(notesFile)
+        #expect(keys() == ["docs", "site/", "site/index.html", "notes/b.txt", "copied/", "copied/a.txt"])
+    }
+
+    @MainActor @Test func movingAFolderToTheMacLeavesTheFileOfItsName() async throws {
+        let provider = provider
+        FakeS3.put("docs", Data("file".utf8), in: bucket)
+        FakeS3.put("docs/index.html", Data("<h1>".utf8), in: bucket)
+        let mac = FileManager.default.temporaryDirectory.appending(path: "bottari-s3-move-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: mac) }
+        try FileManager.default.createDirectory(at: mac, withIntermediateDirectories: true)
+        let folder = try #require(try await provider.list(.root).first(where: \.isDirectory))
+        let queue = TransferQueue()
+
+        let job = queue.enqueue(.move, [folder], from: TransferEndpoint(provider), to: TransferEndpoint(LocalFileProvider()), into: RemotePath(mac.path))
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !job.state.hasEnded, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(job.state == .finished)
+        #expect((try? String(contentsOf: mac.appending(path: "docs/index.html"), encoding: .utf8)) == "<h1>")
+        #expect(Set(FakeS3.bucket(bucket).objects.keys) == ["docs"])
     }
 
     @Test func aPastedSpaceOrNewlineInTheAddressStillConnects() async {

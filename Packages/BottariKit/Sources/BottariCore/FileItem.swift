@@ -8,7 +8,20 @@ public struct FileItem: Identifiable, Hashable, Sendable {
         case other
     }
 
-    public var id: RemotePath { path }
+    /// A folder and a file can share a name where folders are only key
+    /// prefixes (S3 keeps "docs" and "docs/index.html" side by side), so the
+    /// kind tells them apart.
+    public struct ID: Hashable, Sendable {
+        public let path: RemotePath
+        public let isDirectory: Bool
+
+        public init(path: RemotePath, isDirectory: Bool) {
+            self.path = path
+            self.isDirectory = isDirectory
+        }
+    }
+
+    public var id: ID { ID(path: path, isDirectory: isDirectory) }
 
     public let path: RemotePath
     public let kind: Kind

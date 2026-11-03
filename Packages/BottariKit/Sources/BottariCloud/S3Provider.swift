@@ -111,6 +111,7 @@ public struct S3Provider: FileProvider {
         return items.sorted(by: FileItem.finderOrder)
     }
 
+    /// The file, where a file and a folder share `path`.
     public func stat(_ path: RemotePath) async throws -> FileItem {
         if path.isRoot { return FileItem(path: path, kind: .directory) }
         var request = URLRequest(url: try configuration.url(for: Self.key(path)))
@@ -248,12 +249,16 @@ public struct S3Provider: FileProvider {
     }
 
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
-        _ = try await copyObjects(from, to: to)
+        try await copy(try await stat(from), to: to)
     }
 
-    private func copyObjects(_ from: RemotePath, to: RemotePath) async throws -> [String] {
+    public func copy(_ item: FileItem, to: RemotePath) async throws {
+        _ = try await copyObjects(item, to: to)
+    }
+
+    private func copyObjects(_ source: FileItem, to: RemotePath) async throws -> [String] {
+        let from = source.path
         if (try? await stat(to)) != nil { throw ProviderError.alreadyExists(to) }
-        let source = try await stat(from)
         if source.isDirectory {
             // The folder exists at the destination even if the source had no marker.
             var marker = URLRequest(url: try configuration.url(for: Self.prefix(to)))
@@ -308,18 +313,25 @@ public struct S3Provider: FileProvider {
         }
     }
 
+    public func move(_ from: RemotePath, to: RemotePath) async throws {
+        try await move(try await stat(from), to: to)
+    }
+
     /// S3 has no rename: copy, then delete the originals. Only the objects
     /// copied go, so one written into the folder meanwhile stays.
-    public func move(_ from: RemotePath, to: RemotePath) async throws {
-        for key in try await copyObjects(from, to: to) {
-            try await deleteObject(key, path: from)
+    public func move(_ item: FileItem, to: RemotePath) async throws {
+        for key in try await copyObjects(item, to: to) {
+            try await deleteObject(key, path: item.path)
         }
     }
 
     public func delete(_ path: RemotePath) async throws {
-        let item = try await stat(path)
-        for (key, _, _) in try await keys(of: item, movingTo: path) {
-            try await deleteObject(key, path: path)
+        try await delete(try await stat(path))
+    }
+
+    public func delete(_ item: FileItem) async throws {
+        for (key, _, _) in try await keys(of: item, movingTo: item.path) {
+            try await deleteObject(key, path: item.path)
         }
     }
 

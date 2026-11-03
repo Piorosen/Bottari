@@ -92,6 +92,11 @@ public protocol FileProvider: Sendable {
     func copy(_ from: RemotePath, to: RemotePath) async throws
     /// Removes an item permanently, recursively for directories.
     func delete(_ path: RemotePath) async throws
+    /// Like `move(_:to:)`, `copy(_:to:)` and `delete(_:)` for a listed
+    /// item: where a file and a folder share its name, only the one it is.
+    func move(_ item: FileItem, to: RemotePath) async throws
+    func copy(_ item: FileItem, to: RemotePath) async throws
+    func delete(_ item: FileItem) async throws
     /// Moves an item to the provider's trash. Requires `.trash`.
     func trash(_ path: RemotePath) async throws
     /// Sets the permission bits (`0o755` and the like). Requires `.permissions`.
@@ -116,6 +121,18 @@ extension FileProvider {
 
     public func copy(_ from: RemotePath, to: RemotePath) async throws {
         throw ProviderError.unsupported(String(localized: "서버 내 복사"))
+    }
+
+    public func move(_ item: FileItem, to: RemotePath) async throws {
+        try await move(item.path, to: to)
+    }
+
+    public func copy(_ item: FileItem, to: RemotePath) async throws {
+        try await copy(item.path, to: to)
+    }
+
+    public func delete(_ item: FileItem) async throws {
+        try await delete(item.path)
     }
 
     public func trash(_ path: RemotePath) async throws {

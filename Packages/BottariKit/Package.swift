@@ -55,7 +55,7 @@ let package = Package(
             .product(name: "Crypto", package: "swift-crypto"),
             .product(name: "AppAuth", package: "AppAuth-iOS"),
         ]),
-        .testTarget(name: "BottariCloudTests", dependencies: ["BottariCore", "BottariCloud"]),
+        .testTarget(name: "BottariCloudTests", dependencies: ["BottariCore", "BottariCloud", "BottariTransfer"]),
         .target(name: "BottariRemote", dependencies: [
             .product(name: "SwiftTerm", package: "SwiftTerm"),
             .product(name: "RoyalVNCKit", package: "royalvnc"),

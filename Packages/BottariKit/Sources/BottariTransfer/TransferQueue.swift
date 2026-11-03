@@ -584,9 +584,9 @@ public final class TransferQueue {
                     try await destination.delete(work.destination)
                 }
                 if work.action == .rename {
-                    try await source.move(work.source.path, to: work.destination)
+                    try await source.move(work.source, to: work.destination)
                 } else {
-                    try await source.copy(work.source.path, to: work.destination)
+                    try await source.copy(work.source, to: work.destination)
                 }
             case .direct:
                 guard let directRoute, let folder = work.destination.parent else { break }
@@ -782,7 +782,7 @@ public final class TransferQueue {
         let folders = Set(job.foldersToClean).sorted { $0.components.count > $1.components.count }
         for folder in folders {
             guard let children = try? await job.source.provider.list(folder), children.isEmpty else { continue }
-            if (try? await job.source.provider.delete(folder)) != nil {
+            if (try? await job.source.provider.delete(FileItem(path: folder, kind: .directory))) != nil {
                 job.foldersToClean.removeAll { $0 == folder }
             }
         }

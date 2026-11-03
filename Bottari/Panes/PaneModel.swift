@@ -108,6 +108,14 @@ final class PaneModel {
     func items(withIDs ids: Set<FileItem.ID>) -> [FileItem] {
         (showsSearchResults ? searchResults : items).filter { ids.contains($0.id) }
     }
+
+    /// What the folder lists at `path`: of a file and a folder sharing the
+    /// name (S3), the one `isDirectory` says; otherwise whatever is there,
+    /// such as a link the listing left unfollowed.
+    private func listedID(_ path: RemotePath, isDirectory: Bool) -> FileItem.ID {
+        let here = items.filter { $0.path == path }
+        return (here.first { $0.isDirectory == isDirectory } ?? here.first)?.id ?? FileItem.ID(path: path, isDirectory: isDirectory)
+    }
     var canGoBack: Bool { !backStack.isEmpty || path.parent != nil }
     var canGoForward: Bool { !forwardStack.isEmpty }
 
@@ -235,7 +243,7 @@ final class PaneModel {
         if await load(previous) == .shown {
             backStack.removeLast()
             forwardStack.append(origin)
-            selection = [origin]
+            selection = [listedID(origin, isDirectory: true)]
         }
     }
 
@@ -253,7 +261,7 @@ final class PaneModel {
         guard let parent = path.parent else { return }
         let child = path
         await open(parent)
-        if path == parent { selection = [child] }
+        if path == parent { selection = [listedID(child, isDirectory: true)] }
     }
 
     /// Double-click or Return: folders open; files get previews and editors in later steps.
@@ -333,7 +341,7 @@ final class PaneModel {
         searchResults.removeAll { item in
             gone.contains(item.path) || gone.contains { item.path.string.hasPrefix($0.string + "/") }
         }
-        selection.subtract(paths)
+        selection = selection.filter { !gone.contains($0.path) }
     }
 
     /// Opens the folder holding a search result, with the result selected.
@@ -434,8 +442,9 @@ final class PaneModel {
             return
         }
         await reload()
-        selection = [folder]
-        renaming = folder
+        let created = listedID(folder, isDirectory: true)
+        selection = [created]
+        renaming = created
     }
 
     func beginRenaming() {
@@ -452,7 +461,7 @@ final class PaneModel {
         }
         let target = parent.appending(name)
         do {
-            try await provider.move(item.path, to: target)
+            try await provider.move(item, to: target)
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -465,7 +474,7 @@ final class PaneModel {
             }
         }
         await reload()
-        selection = [target]
+        selection = [listedID(target, isDirectory: item.isDirectory)]
     }
 
     /// Which items under a chosen folder a permission change reaches.
@@ -525,8 +534,9 @@ final class PaneModel {
         }
         endSearch()
         await reload()
-        selection = [link]
-        renaming = link
+        let made = listedID(link, isDirectory: item.isDirectory)
+        selection = [made]
+        renaming = made
     }
 
     /// Moves items to the trash where the provider has one, otherwise deletes them.
@@ -539,7 +549,7 @@ final class PaneModel {
                 if trash {
                     try await provider.trash(item.path)
                 } else {
-                    try await provider.delete(item.path)
+                    try await provider.delete(item)
                 }
                 removed.append(item.path)
             } catch {
@@ -559,7 +569,7 @@ final class PaneModel {
         await runOnServer {
             try await server.compress(chosen.map(\.path), into: archive)
         }
-        selection = [archive]
+        selection = [listedID(archive, isDirectory: false)]
     }
 
     /// Unpacks an archive into a new folder named after it.
@@ -570,7 +580,7 @@ final class PaneModel {
         await runOnServer {
             try await server.extract(archive.path, into: folder)
         }
-        selection = [folder]
+        selection = [listedID(folder, isDirectory: true)]
     }
 
     private func runOnServer(_ work: () async throws -> Void) async {
