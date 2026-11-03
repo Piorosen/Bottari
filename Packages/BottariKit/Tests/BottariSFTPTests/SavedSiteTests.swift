@@ -140,8 +140,6 @@ import Testing
         #expect(saved == #"{"agent":{}}"#)
     }
 
-    /// A key file brought into one Mac's Keychain changes the site on every
-    /// Mac. Another Mac, without that copy, still logs in with the file.
     @Test func aKeyFileKeptOnOneMacStillLogsInFromTheFileOnAnother() throws {
         let path = "~/.ssh/id_ed25519"
         let site = SavedSite(name: "prod", endpoint: SFTPEndpoint(host: "prod", username: "me"), authentication: .keyFile(path: path))
@@ -150,14 +148,11 @@ import Testing
         let otherMac = InMemorySecretStore([site.passphraseKey: "pp"])
 
         #expect(try synced.credential(secrets: otherMac, readFile: { $0 == UserHome.expand(path) ? "PROD KEY" : nil }) == .privateKey("PROD KEY", passphrase: "pp"))
-        // With the file out of reach as well, the folder can be allowed or a password typed.
         #expect(throws: SiteConnectError.keyFileUnreadable(path: path, site: "prod", key: site.passwordKey)) {
             try synced.credential(secrets: otherMac, readFile: { _ in nil })
         }
     }
 
-    /// sites.json syncs between Macs that may run the previous build: each
-    /// reads what the other writes for a key kept in the Keychain.
     @Test func keptKeysReadTheSameInThePreviousBuild() throws {
         let previousBuild = #"{"storedKey":{}}"#
         let thisBuild = try JSONEncoder().encode(SavedSite.Authentication.storedKey(copiedFrom: "~/.ssh/id_ed25519"))
@@ -250,7 +245,6 @@ import Testing
     }
 }
 
-/// `SavedSite.Authentication` as the previous build declares it.
 private enum PreviousAuthentication: Codable, Equatable {
     case defaultKeys
     case keyFile(path: String)

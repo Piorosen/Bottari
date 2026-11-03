@@ -31,13 +31,10 @@ private struct ScratchDisk {
         try FileManager.default.removeItem(at: image)
     }
 
-    /// Unmounts the disk and leaves the image where it is, like a disk image
-    /// the user opened once or a server share: something that can be mounted.
     func eject() throws {
         try Self.hdiutil(["detach", "-quiet", mountPoint.path])
     }
 
-    /// Where the image is mounted now, by whatever mounted it.
     func mountPoints() throws -> [String] {
         let info = try PropertyListSerialization.propertyList(from: Self.hdiutil(["info", "-plist"]), format: nil) as? [String: Any]
         return (info?["images"] as? [[String: Any]] ?? [])
@@ -107,8 +104,6 @@ private struct ScratchDisk {
         #expect(pluggedInAgain.paths == [RemotePath(onDisk.path), RemotePath(onMac.path)].sorted { $0.string < $1.string })
     }
 
-    /// Launching opens the folders allowed before; one on a disk that is not
-    /// mounted stays that way, rather than Bottari mounting it.
     @Test(.enabled(if: ScratchDisk.isAvailable), .timeLimit(.minutes(1)))
     func launchingMountsNoDisk() throws {
         let scratch = try scratchFolder()

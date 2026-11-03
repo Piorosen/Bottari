@@ -149,13 +149,9 @@ public struct SFTPFileProvider: FileProvider {
         }
     }
 
-    /// Links followed in a row before giving up, as Linux's SYMLOOP_MAX.
     static let linksFollowedAtMost = 40
 
-    /// `path` with its links followed, or nil when the server's realpath
-    /// gives back no absolute path. OpenSSH's realpath follows links, but
-    /// some servers' only clean up the text, so each step of what it returns
-    /// is asked whether it is a link, and the first one found is followed here.
+    /// OpenSSH's realpath follows links, but some servers' only clean up the text.
     static func resolvingLinks(_ path: RemotePath, on sftp: SFTPClient) async throws -> RemotePath? {
         var path = path
         for _ in 0...linksFollowedAtMost {
@@ -255,7 +251,6 @@ public struct SFTPFileProvider: FileProvider {
         return real
     }
 
-    /// False also when the server's lstat does not say what `path` is.
     private static func isNotALink(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
         let own = try await sftp.getLinkAttributes(at: path.string)
         return own.fileType != nil && !own.isSymbolicLink
@@ -744,9 +739,7 @@ public struct SFTPFileProvider: FileProvider {
 }
 
 private extension SFTPFileAttributes {
-    /// The file-type bits of the mode, nil when the server sent no mode.
     var fileType: UInt32? { permissions.map { $0 & 0o170000 } }
 
-    /// Only meaningful for attributes from lstat, which describe a link itself.
     var isSymbolicLink: Bool { fileType == 0o120000 }
 }

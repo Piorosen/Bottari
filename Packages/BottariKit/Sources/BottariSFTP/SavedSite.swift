@@ -147,7 +147,6 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         if case .sftp = kind { true } else { false }
     }
 
-    /// Whether it logs in with a key kept in the secret store.
     public var usesStoredKey: Bool {
         if case .storedKey = authentication { true } else { false }
     }

@@ -109,9 +109,6 @@ final class PaneModel {
         (showsSearchResults ? searchResults : items).filter { ids.contains($0.id) }
     }
 
-    /// What the folder lists at `path`: of a file and a folder sharing the
-    /// name (S3), the one `isDirectory` says; otherwise whatever is there,
-    /// such as a link the listing left unfollowed.
     private func listedID(_ path: RemotePath, isDirectory: Bool) -> FileItem.ID {
         let here = items.filter { $0.path == path }
         let listed = here.first { $0.isDirectory == isDirectory } ?? here.first

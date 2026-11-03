@@ -4,8 +4,6 @@ import SwiftUI
 
 @main
 enum Launch {
-    /// The app is hosting a test run, which gets a bare application: no
-    /// windows, no menu bar item, and nothing of the user's loaded or saved.
     static let hostsTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     static func main() {
@@ -127,8 +125,6 @@ struct BottariApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Snapshots, the showcase or a test run: sample data only, and nothing
-    /// of the user's read or saved.
     static var leavesUserDataAlone: Bool {
         if Launch.hostsTests { return true }
         #if DEBUG

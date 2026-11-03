@@ -3,7 +3,6 @@ import BottariCore
 import BottariSFTP
 import Foundation
 
-/// A folder of its own in the temporary folder, removed by `remove()`.
 struct ScratchFolder {
     let url = FileManager.default.temporaryDirectory.appending(path: "BottariTests-\(UUID().uuidString)", directoryHint: .isDirectory)
 
@@ -17,7 +16,6 @@ struct ScratchFolder {
         return folder
     }
 
-    /// Saved sites kept in this folder, secrets in memory, no ~/.ssh/config.
     func siteLibrary() -> SiteLibrary {
         SiteLibrary(
             store: SiteStore(fileURL: url.appending(path: "sites.json")),
@@ -31,7 +29,6 @@ struct ScratchFolder {
     }
 }
 
-/// A server, played by a folder on the Mac.
 nonisolated struct StandInServer: FileProvider {
     let name: String
     let folder: URL

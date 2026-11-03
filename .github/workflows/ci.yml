@@ -68,7 +68,6 @@ jobs:
           cp -R "$shots" "$RUNNER_TEMP/snapshots"
           cat "$RUNNER_TEMP"/snapshots/*-check.txt
           ! grep -h '^FAIL' "$RUNNER_TEMP"/snapshots/*-check.txt
-      # BottariTests, hosted by the Debug app.
       - name: App tests
         run: |
           xcodebuild -project Bottari.xcodeproj -scheme Bottari -configuration Debug \

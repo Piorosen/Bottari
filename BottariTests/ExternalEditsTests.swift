@@ -4,8 +4,6 @@ import Foundation
 import Testing
 
 struct ExternalEditsTests {
-    /// Nothing watches a copy once Bottari quits, so a server file's copy,
-    /// secrets and all, does not stay behind on the Mac.
     @Test func quittingEndsTheSessionsAndDeletesTheCopies() async throws {
         let scratch = try ScratchFolder()
         defer { scratch.remove() }
@@ -27,7 +25,6 @@ struct ExternalEditsTests {
         #expect(FileManager.default.fileExists(atPath: copy.path) == false)
     }
 
-    /// Copies a run that crashed left behind go at the next launch.
     @Test func launchingDeletesCopiesLeftBehind() throws {
         let scratch = try ScratchFolder()
         defer { scratch.remove() }

@@ -442,8 +442,6 @@ public final class TransferQueue {
         return free
     }
 
-    /// Adds what `job` wrote to the listings of every job writing to the same
-    /// place, so that a later item bound for the name finds it as a clash.
     private func remember(_ item: FileItem, in job: TransferJob) {
         guard let parent = item.path.parent else { return }
         for other in jobs where other.destination.provider.locationID == job.destination.provider.locationID {
@@ -484,7 +482,6 @@ public final class TransferQueue {
         }
     }
 
-    /// Whether a running item of any job is bound for `destination` in the place `job` writes to.
     private func isWriting(to destination: RemotePath, in job: TransferJob) -> Bool {
         jobs.contains { $0.destination.provider.locationID == job.destination.provider.locationID && $0.isWriting(to: destination) }
     }

@@ -34,9 +34,8 @@ enum PrivateKeyFile {
         }
     }
 
-    /// The key, each way it can be offered. RSA goes with SHA-512 first,
-    /// then SHA-256 (servers and appliances that know only that one), and
-    /// SHA-1 for servers too old for either.
+    /// RSA goes with SHA-512 first, then SHA-256 (servers and appliances that
+    /// know only that one), and SHA-1 for servers too old for either.
     func offers(username: String) -> [NIOSSHUserAuthenticationOffer] {
         let keys: [NIOSSHPrivateKey] = switch self {
         case .ed25519(let key): [NIOSSHPrivateKey(ed25519Key: key)]

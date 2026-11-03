@@ -421,10 +421,9 @@ final class Workspace {
 
     // MARK: - Drag and drop
 
-    /// What is being dragged out of a pane, and from where: the pane may show
-    /// another server by the time it is dropped. Drags carry only a token,
-    /// under a type other apps cannot see; the items themselves stay here,
-    /// since remote files have no file URL to hand over.
+    /// What is being dragged out of a pane. Drags carry only a token, under a
+    /// type other apps cannot see; the items themselves stay here, since
+    /// remote files have no file URL to hand over.
     private struct PaneDrag {
         let token: String
         let pane: PaneModel

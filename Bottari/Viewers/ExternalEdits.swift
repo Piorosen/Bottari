@@ -41,9 +41,7 @@ final class ExternalEdits {
     }
 
     private(set) var sessions: [Session] = []
-    /// Where the copies are kept, one folder per session.
     private let folder: URL
-    /// Opens a file in the app the Mac opens it with.
     private let openFile: (URL) -> Void
 
     init(folder: URL, openFile: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
@@ -121,8 +119,6 @@ final class ExternalEdits {
         AppServices.connections.closeUnused()
     }
 
-    /// Ends every session and deletes the copies, with any a crashed run left
-    /// behind: after a quit nothing watches them or sends their changes.
     func endAll() {
         sessions.forEach(finish)
         try? FileManager.default.removeItem(at: folder)

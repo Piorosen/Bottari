@@ -137,7 +137,6 @@ struct OpenSSHTests {
 
     /// With every default key refused, a wrong password is the sixth refusal,
     /// at which a stock sshd (MaxAuthTries 6) hangs up instead of answering.
-    /// That is still a wrong password, not a server that takes no connections.
     @Test func aWrongPasswordAfterTheDefaultKeysIsStillAWrongPassword() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -154,16 +153,14 @@ struct OpenSSHTests {
         }
     }
 
-    /// An unknown key of each kind `SavedSite.defaultKeyFiles` names.
     private func strangers(in folder: URL) throws -> [String] {
         try [("ed25519", nil), ("ecdsa", 256), ("rsa", 2048)].map { type, bits in
             try OpenSSH.makeKey(in: folder, type: type, bits: bits).privateKey
         }
     }
 
-    /// A password comes after the refused keys on the same connection, where
-    /// the penalty for them cannot reach it. sshd as a plain user cannot check
-    /// a password, but it logs the connection each refusal came on.
+    /// sshd as a plain user cannot check a password, but it logs the
+    /// connection each refusal came on.
     @Test func thePasswordFollowsRefusedKeysOnTheSameConnection() async throws {
         let folder = try OpenSSH.scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

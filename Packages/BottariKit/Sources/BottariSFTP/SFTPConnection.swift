@@ -39,7 +39,6 @@ public enum SFTPCredential: Equatable, Sendable {
     /// to offer: keys first and a password after, as `ssh` does.
     indirect case fallback(SFTPCredential, then: SFTPCredential)
 
-    /// What to offer the server, in order, on one connection.
     func authenticationOffers(username: String) throws -> [NIOSSHUserAuthenticationOffer] {
         switch self {
         case .fallback(let first, let then):
@@ -346,8 +345,7 @@ final class SFTPConnection: @unchecked Sendable {
     }
 
     /// Opens one SSH session, over TCP or inside a direct-tcpip channel of
-    /// `previous` (the session with `jumpHost`), offering what the credential
-    /// holds in turn until the server takes one. Bottari opens the channel
+    /// `previous` (the session with `jumpHost`). Bottari opens the channel
     /// itself either way, so it can hear every byte the server sends and tell
     /// a quiet connection from a dead one.
     private static func connect(
@@ -653,13 +651,10 @@ private final class HoldUntilSSHStarts: ChannelDuplexHandler, @unchecked Sendabl
     }
 }
 
-/// Offers each way of logging in on one connection until the server takes
-/// one, as `ssh` does: sshd counts every refusal against MaxAuthTries, but
-/// punishes the address (PerSourcePenalties) only for a connection that ends
-/// without a login. NIOSSH reports a refused login as a pipeline error, but
-/// nothing in a nested session closes the channel on it, so Citadel would
-/// wait for its 10 second login timeout. On the first offer this adds a
-/// handler that closes the channel on such an error.
+/// NIOSSH reports a refused login as a pipeline error, but nothing in a
+/// nested session closes the channel on it, so Citadel would wait for its 10
+/// second login timeout. On the first offer this adds a handler that closes
+/// the channel on such an error.
 final class AuthenticationTracker: NIOSSHClientUserAuthenticationDelegate, @unchecked Sendable {
     private var offers: [NIOSSHUserAuthenticationOffer]
     private let total: Int
@@ -677,12 +672,10 @@ final class AuthenticationTracker: NIOSSHClientUserAuthenticationDelegate, @unch
         self.channel = channel
     }
 
-    /// The server refused every offer it could take.
     var isExhausted: Bool {
         lock.withLock { exhausted }
     }
 
-    /// The server refused at least one offer.
     var wasRefused: Bool {
         lock.withLock { refused > 0 }
     }
@@ -720,8 +713,6 @@ final class AuthenticationTracker: NIOSSHClientUserAuthenticationDelegate, @unch
     }
 }
 
-/// Closes the channel once the login is refused for good, so a nested session
-/// does not wait out Citadel's login timeout.
 private final class LoginFailureWatcher: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = ByteBuffer
 

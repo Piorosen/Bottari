@@ -1,8 +1,7 @@
 import AppKit
 
-/// A plain-text view whose lines break with "\n" alone, as an opened file's
-/// text does, so what it shows and counts is what will be saved: text pasted
-/// or dropped with CRLF or CR line breaks comes in with "\n".
+/// A plain-text view whose lines break with "\n" alone: text pasted or
+/// dropped with CRLF or CR line breaks comes in with "\n".
 open class LineFeedTextView: NSTextView {
     /// Paste asks for plain text by its old name, NSStringPboardType.
     private static let plainText: Set<NSPasteboard.PasteboardType> = [.string, .init("NSStringPboardType")]

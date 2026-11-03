@@ -137,10 +137,6 @@ public struct LocalFileProvider: FileProvider {
         }
     }
 
-    /// Adds `source`'s extended attributes (Finder tags, Spotlight comments)
-    /// to `destination`, keeping any it already has, such as a quarantine
-    /// flag, which copyfile(3) would remove. Best effort: the system may
-    /// refuse to set an attribute it keeps for itself.
     private static func copyExtendedAttributes(from source: RemotePath, to destination: RemotePath) {
         let length = listxattr(source.string, nil, 0, XATTR_NOFOLLOW)
         guard length > 0 else { return }
