@@ -421,12 +421,15 @@ final class Workspace {
 
     // MARK: - Drag and drop
 
-    /// What is being dragged out of a pane. Drags carry only a token, under a
-    /// type other apps cannot see; the items themselves stay here, since
-    /// remote files have no file URL to hand over.
+    /// What is being dragged out of a pane, and from where: the pane may show
+    /// another server by the time it is dropped. Drags carry only a token,
+    /// under a type other apps cannot see; the items themselves stay here,
+    /// since remote files have no file URL to hand over.
     private struct PaneDrag {
         let token: String
         let pane: PaneModel
+        let provider: any FileProvider
+        let site: SavedSite?
         let items: [FileItem]
     }
 
@@ -438,7 +441,7 @@ final class Workspace {
         let pane = pane(side)
         let items = pane.selection.contains(item.id) ? pane.selectedItems : [item]
         let token = UUID().uuidString
-        Self.currentDrag = PaneDrag(token: token, pane: pane, items: items)
+        Self.currentDrag = PaneDrag(token: token, pane: pane, provider: pane.provider, site: pane.site, items: items)
         let provider = pane.provider.isLocal ? NSItemProvider(object: URL(fileURLWithPath: item.path.string) as NSURL) : NSItemProvider()
         provider.registerDataRepresentation(forTypeIdentifier: UTType.bottariPaneItems.identifier, visibility: .ownProcess) { completion in
             completion(Data(token.utf8), nil)
@@ -471,8 +474,8 @@ final class Workspace {
                 request(TransferRequest(
                     kind: kind,
                     items: drag.items,
-                    source: drag.pane.provider,
-                    sourceSite: drag.pane.site,
+                    source: drag.provider,
+                    sourceSite: drag.site,
                     destination: destination.provider,
                     destinationSite: destination.site,
                     folder: destination.path
@@ -505,7 +508,7 @@ final class Workspace {
     func dropIntoBundle(_ providers: [NSItemProvider]) -> Bool {
         Task {
             if let drag = await Self.paneDrag(in: providers) {
-                BottariBundle.shared.add(drag.items, from: drag.pane.provider, site: drag.pane.site)
+                BottariBundle.shared.add(drag.items, from: drag.provider, site: drag.site)
                 return
             }
             let local = LocalFileProvider()
