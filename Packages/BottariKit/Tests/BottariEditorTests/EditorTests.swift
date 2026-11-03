@@ -126,6 +126,30 @@ struct CheckFailed: Error {}
         #expect(keptBytes == theirs)
     }
 
+    @Test func savingKeepsTheFilesTagsCommentAndPermissions() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (file, url, text) = try await open("listen 80;\n")
+        try (url as NSURL).setResourceValue(["Work"], forKey: .tagNamesKey)
+        let comment = Array("keep me".utf8)
+        try #require(setxattr(url.path, "com.apple.metadata:kMDItemComment", comment, comment.count, 0, 0) == 0)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+
+        guard case .saved = try await file.save(text + "listen 443;\n", check: nil) else {
+            Issue.record("the save did not go through")
+            return
+        }
+
+        let saved = try String(contentsOf: url, encoding: .utf8)
+        #expect(saved == "listen 80;\nlisten 443;\n")
+        let tags = try URL(fileURLWithPath: url.path).resourceValues(forKeys: [.tagNamesKey]).tagNames
+        #expect(tags == ["Work"])
+        var read = [UInt8](repeating: 0, count: 64)
+        let count = getxattr(url.path, "com.apple.metadata:kMDItemComment", &read, read.count, 0, 0)
+        #expect(read.prefix(max(count, 0)).elementsEqual(comment))
+        let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        #expect(mode == 0o600)
+    }
+
     @Test func aFailedCheckAfterAMergePutsBackTheServersNewerCopy() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         let (file, url, _) = try await open("a\nb\nc\n")

@@ -124,6 +124,7 @@ public struct LocalFileProvider: FileProvider {
             if let existing = try? fm.attributesOfItem(atPath: path.string),
                let mode = existing[.posixPermissions] {
                 try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: temp.string)
+                Self.copyExtendedAttributes(from: path, to: temp)
             }
             guard rename(temp.string, path.string) == 0 else {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
@@ -133,6 +134,25 @@ public struct LocalFileProvider: FileProvider {
             // (a folder in the way, no permission), so a resume would not help.
             try? fm.removeItem(atPath: temp.string)
             throw Self.translate(error, path)
+        }
+    }
+
+    /// Adds `source`'s extended attributes (Finder tags, Spotlight comments)
+    /// to `destination`, keeping any it already has, such as a quarantine
+    /// flag, which copyfile(3) would remove. Best effort: the system may
+    /// refuse to set an attribute it keeps for itself.
+    private static func copyExtendedAttributes(from source: RemotePath, to destination: RemotePath) {
+        let length = listxattr(source.string, nil, 0, XATTR_NOFOLLOW)
+        guard length > 0 else { return }
+        var names = [CChar](repeating: 0, count: length)
+        let listed = listxattr(source.string, &names, length, XATTR_NOFOLLOW)
+        guard listed > 0 else { return }
+        for name in names.prefix(listed).split(separator: 0).map({ String(cString: Array($0) + [0]) }) {
+            let size = getxattr(source.string, name, nil, 0, 0, XATTR_NOFOLLOW)
+            guard size >= 0 else { continue }
+            var value = [UInt8](repeating: 0, count: size)
+            guard getxattr(source.string, name, &value, size, 0, XATTR_NOFOLLOW) == size else { continue }
+            setxattr(destination.string, name, value, size, 0, XATTR_NOFOLLOW)
         }
     }
 
