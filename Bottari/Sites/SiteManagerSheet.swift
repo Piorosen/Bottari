@@ -111,7 +111,7 @@ struct SiteManagerSheet: View {
             presenting: pendingDelete
         ) { site in
             Button("삭제", role: .destructive) { delete(site) }
-            if site.authentication == .storedKey, site.removableKey(in: library.secrets) != nil {
+            if site.usesStoredKey, site.removableKey(in: library.secrets) != nil {
                 Button("서버의 authorized_keys에서도 지우고 삭제", role: .destructive) {
                     Task {
                         do {
@@ -127,7 +127,7 @@ struct SiteManagerSheet: View {
                 }
             }
         } message: { site in
-            Text(site.authentication == .storedKey
+            Text(site.usesStoredKey
                 ? String(localized: "키체인에 저장된 비밀번호, 키 암호와 Bottari 키도 함께 삭제됩니다. 서버의 ~/.ssh/authorized_keys에 넣은 키는 따로 지우지 않으면 남습니다.")
                 : String(localized: "키체인에 저장된 비밀번호와 키 암호도 함께 삭제됩니다."))
         }
@@ -855,7 +855,7 @@ private struct SiteForm: View {
                 let fresh: SavedSite.Authentication = switch kind {
                 case .defaultKeys: .defaultKeys
                 case .keyFile: .keyFile(path: "~/.ssh/id_ed25519")
-                case .storedKey: .storedKey
+                case .storedKey: .storedKey(copiedFrom: nil)
                 case .password: .password
                 }
                 site.authentication = authenticationsSetAside[kind] ?? fresh

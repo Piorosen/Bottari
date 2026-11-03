@@ -9,9 +9,10 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
         case defaultKeys
         /// An OpenSSH private key file. Its passphrase, if any, is in the secret store.
         case keyFile(path: String)
-        /// A key Bottari made for the site and keeps in the secret store, one
-        /// per Mac: the site syncs, the key stays where it was made.
-        case storedKey
+        /// A key kept in the secret store, one per Mac: the site syncs, the key
+        /// stays where it was made or brought in. One copied from a key file
+        /// keeps its path, for the Macs without the copy.
+        case storedKey(copiedFrom: String?)
         /// A password kept in the secret store.
         case password
 
@@ -144,6 +145,11 @@ public struct SavedSite: Identifiable, Codable, Hashable, Sendable {
 
     public var isSFTP: Bool {
         if case .sftp = kind { true } else { false }
+    }
+
+    /// Whether it logs in with a key kept in the secret store.
+    public var usesStoredKey: Bool {
+        if case .storedKey = authentication { true } else { false }
     }
 
     /// A site for an `~/.ssh/config` host: its first IdentityFile that exists,
@@ -369,9 +375,10 @@ extension SavedSite {
             }
             // An unreadable passphrase is asked for again, like a missing one.
             keys = .privateKey(text, passphrase: try secrets.readableSecret(for: passphraseKey))
-        case .storedKey:
-            guard let text = try secrets.readableSecret(for: privateKeyKey) else {
+        case .storedKey(let file):
+            guard let text = try secrets.readableSecret(for: privateKeyKey) ?? file.flatMap({ readFile(UserHome.expand($0)) }) else {
                 if let password = try password ?? secrets.readableSecret(for: passwordKey) { return .password(password) }
+                if let file { throw SiteConnectError.keyFileUnreadable(path: file, site: name, key: passwordKey) }
                 throw SiteConnectError.storedKeyMissing(site: name, key: passwordKey)
             }
             // A key brought in from a file keeps the passphrase saved for it.
@@ -429,7 +436,8 @@ extension SavedSite {
     public func keepingKey(_ text: String, in secrets: any SecretStore) throws -> SavedSite {
         try secrets.setSecret(text, for: privateKeyKey)
         var site = self
-        site.authentication = .storedKey
+        let file: String? = if case .keyFile(let path) = authentication { path } else { nil }
+        site.authentication = .storedKey(copiedFrom: file)
         return site
     }
 

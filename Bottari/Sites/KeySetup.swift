@@ -72,7 +72,7 @@ extension SiteLibrary {
 
         try secrets.setSecret(key.privateKey, for: site.privateKeyKey)
         var updated = self.site(site.id) ?? site
-        updated.authentication = .storedKey
+        updated.authentication = .storedKey(copiedFrom: nil)
         update(updated)
         if forgettingPassword {
             try? secrets.setSecret(nil, for: site.passwordKey)

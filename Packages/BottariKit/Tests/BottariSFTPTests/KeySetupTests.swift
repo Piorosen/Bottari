@@ -66,7 +66,7 @@ struct KeySetupTests {
         let server = try await OpenSSHServer.start(authorizing: [own.publicKey])
         defer { server.stop() }
         let authorized = server.folder.appending(path: "authorized_keys")
-        let site = SavedSite(name: "box", endpoint: server.endpoint, authentication: .storedKey)
+        let site = SavedSite(name: "box", endpoint: server.endpoint, authentication: .storedKey(copiedFrom: nil))
         let secrets = InMemorySecretStore()
         func connect(_ site: SavedSite, _ typed: TypedSecrets) async throws -> SFTPFileProvider {
             let plan = try site.connectionPlan(sites: [], sshConfig: SSHConfig(text: "", directory: ""), secrets: typed.over(secrets))
@@ -122,7 +122,7 @@ struct KeySetupTests {
         defer { server.stop() }
         let jump = try await TestSFTPServer.start(forwarding: true)
         let bastion = SavedSite(name: "bastion", endpoint: jump.endpoint, authentication: .password)
-        let site = SavedSite(name: "box", endpoint: server.endpoint, authentication: .storedKey, proxyJump: ["bastion"])
+        let site = SavedSite(name: "box", endpoint: server.endpoint, authentication: .storedKey(copiedFrom: nil), proxyJump: ["bastion"])
         let secrets = InMemorySecretStore([site.privateKeyKey: own.privateKey])
         func connect(_ site: SavedSite, _ typed: TypedSecrets) async throws -> SFTPFileProvider {
             let plan = try site.connectionPlan(sites: [bastion, site], sshConfig: SSHConfig(text: "", directory: ""), secrets: typed.over(secrets))

@@ -319,7 +319,7 @@ struct ConnectionSettings: View {
                     .buttonStyle(PanelButtonStyle())
                     .fixedSize()
                     .disabled(declinesForgotten)
-                    let keyed = AppServices.sites.sites.filter { $0.authentication == .storedKey }
+                    let keyed = AppServices.sites.sites.filter(\.usesStoredKey)
                     if !keyed.isEmpty {
                         Rectangle().fill(Palette.line).frame(height: 1)
                         ForEach(keyed) { site in

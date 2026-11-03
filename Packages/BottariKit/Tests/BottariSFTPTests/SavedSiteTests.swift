@@ -140,6 +140,34 @@ import Testing
         #expect(saved == #"{"agent":{}}"#)
     }
 
+    /// A key file brought into one Mac's Keychain changes the site on every
+    /// Mac. Another Mac, without that copy, still logs in with the file.
+    @Test func aKeyFileKeptOnOneMacStillLogsInFromTheFileOnAnother() throws {
+        let path = "~/.ssh/id_ed25519"
+        let site = SavedSite(name: "prod", endpoint: SFTPEndpoint(host: "prod", username: "me"), authentication: .keyFile(path: path))
+        let kept = try site.keepingKey("PROD KEY", in: InMemorySecretStore())
+        let synced = try JSONDecoder().decode(SavedSite.self, from: JSONEncoder().encode(kept))
+        let otherMac = InMemorySecretStore([site.passphraseKey: "pp"])
+
+        #expect(try synced.credential(secrets: otherMac, readFile: { $0 == UserHome.expand(path) ? "PROD KEY" : nil }) == .privateKey("PROD KEY", passphrase: "pp"))
+        // With the file out of reach as well, the folder can be allowed or a password typed.
+        #expect(throws: SiteConnectError.keyFileUnreadable(path: path, site: "prod", key: site.passwordKey)) {
+            try synced.credential(secrets: otherMac, readFile: { _ in nil })
+        }
+    }
+
+    /// sites.json syncs between Macs that may run the previous build: each
+    /// reads what the other writes for a key kept in the Keychain.
+    @Test func keptKeysReadTheSameInThePreviousBuild() throws {
+        let previousBuild = #"{"storedKey":{}}"#
+        let thisBuild = try JSONEncoder().encode(SavedSite.Authentication.storedKey(copiedFrom: "~/.ssh/id_ed25519"))
+
+        #expect(String(decoding: thisBuild, as: UTF8.self) == #"{"storedKey":{"copiedFrom":"~\/.ssh\/id_ed25519"}}"#)
+        #expect(try JSONDecoder().decode(PreviousAuthentication.self, from: thisBuild) == .storedKey)
+        #expect(try JSONDecoder().decode(SavedSite.Authentication.self, from: Data(previousBuild.utf8)) == .storedKey(copiedFrom: nil))
+        #expect(String(decoding: try JSONEncoder().encode(SavedSite.Authentication.storedKey(copiedFrom: nil)), as: UTF8.self) == previousBuild)
+    }
+
     @Test func cloudSitesRoundTrip() throws {
         var s3 = SavedSite.S3Settings()
         s3.bucket = "assets"
@@ -219,5 +247,18 @@ import Testing
         #expect(try store.secret(for: key) == "changed")
         try store.setSecret(nil, for: key)
         #expect(try store.secret(for: key) == nil)
+    }
+}
+
+/// `SavedSite.Authentication` as the previous build declares it.
+private enum PreviousAuthentication: Codable, Equatable {
+    case defaultKeys
+    case keyFile(path: String)
+    case storedKey
+    case password
+
+    private enum CodingKeys: String, CodingKey {
+        case defaultKeys = "agent"
+        case keyFile, storedKey, password
     }
 }

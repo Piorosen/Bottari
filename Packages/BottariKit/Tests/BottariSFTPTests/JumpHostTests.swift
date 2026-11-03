@@ -177,7 +177,7 @@ import Testing
     }
 
     @Test func storedKeysComeFromTheSecretStoreOfThisMac() throws {
-        let nas = site("nas", .storedKey)
+        let nas = site("nas", .storedKey(copiedFrom: nil))
         #expect(try nas.credential(secrets: InMemorySecretStore([nas.privateKeyKey: "BOTTARI KEY"])) == .privateKey("BOTTARI KEY", passphrase: nil))
         // Made on another Mac: a password is asked for, to make one here.
         #expect(throws: SiteConnectError.storedKeyMissing(site: "nas", key: nas.passwordKey)) {
@@ -192,7 +192,7 @@ import Testing
         let prod = site("prod", .keyFile(path: "/keys/prod"))
         let secrets = InMemorySecretStore([prod.passphraseKey: "pp"])
         let kept = try prod.keepingKey("PROD KEY", in: secrets)
-        #expect(kept.authentication == .storedKey)
+        #expect(kept.authentication == .storedKey(copiedFrom: "/keys/prod"))
         #expect(kept.id == prod.id)
         #expect(try kept.credential(secrets: secrets, readFile: { _ in nil }) == .privateKey("PROD KEY", passphrase: "pp"))
     }

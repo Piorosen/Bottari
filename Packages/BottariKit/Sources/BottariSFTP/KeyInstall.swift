@@ -44,7 +44,7 @@ extension SavedSite {
         progress(.checking)
         var probeSite = self
         probeSite.id = UUID()
-        probeSite.authentication = .storedKey
+        probeSite.authentication = .storedKey(copiedFrom: nil)
         var probeSecrets = typed
         probeSecrets.set(key.privateKey, for: probeSite.privateKeyKey, keeping: false)
         let probe: SFTPFileProvider
