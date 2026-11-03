@@ -375,6 +375,44 @@ import Testing
             }
         }
     }
+
+    @Test func aLinkThatCannotBeDeletedLeavesWhatItPointsToWhereRealpathKeepsLinks() async throws {
+        try await withConnection { server, provider in
+            let locked = server.url("/locked")
+            try server.makeDirectory("/project")
+            try server.makeFile("/project/keep.txt", "keep")
+            try server.makeDirectory("/locked")
+            try FileManager.default.createSymbolicLink(atPath: server.url("/locked/ext").path, withDestinationPath: server.url("/project").path)
+            try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+            try #require(try await provider.realPath("/locked/ext") == "/locked/ext")
+
+            await #expect(throws: ProviderError.self) {
+                try await provider.delete("/locked/ext")
+            }
+
+            #expect((try? server.contents("/project/keep.txt")) == "keep")
+            #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: server.url("/locked/ext").path)) == server.url("/project").path)
+        }
+    }
+
+    @Test func aResumeIsNotWrittenThroughALinkAtThePartialNameWhereRealpathKeepsLinks() async throws {
+        try await withConnection { server, provider in
+            let partial = RemotePath("/up.txt").partialWritePath
+            try server.makeFile("/victim.txt", "keep")
+            try FileManager.default.createSymbolicLink(atPath: server.url(partial).path, withDestinationPath: server.url("/victim.txt").path)
+            try #require(try await provider.realPath(partial) == partial)
+
+            await #expect(throws: ProviderError.self) {
+                try await provider.write("/up.txt", from: AsyncThrowingStream { continuation in
+                    continuation.yield(Data("23".utf8))
+                    continuation.finish()
+                }, resumingAt: 2)
+            }
+
+            #expect((try? server.contents("/victim.txt")) == "keep")
+        }
+    }
 }
 
 @Suite struct SFTPTranslationTests {

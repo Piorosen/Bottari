@@ -182,6 +182,8 @@ private struct TestAuthentication: NIOSSHServerUserAuthenticationDelegate {
 
 /// Serves `root` as the SFTP file system, answering like OpenSSH's sftp-server
 /// where it matters: generic failure on name clashes, lstat for listings.
+/// Its realpath only cleans up the text and leaves links unresolved, as some
+/// servers' realpath does.
 private struct LocalDirectorySFTPDelegate: SFTPDelegate {
     let root: URL
 
@@ -219,6 +221,10 @@ private struct LocalDirectorySFTPDelegate: SFTPDelegate {
 
     func fileAttributes(atPath path: String, context: SSHContext) async throws -> SFTPFileAttributes {
         try Self.attributes(of: url(path), followingLinks: true)
+    }
+
+    func linkAttributes(atPath path: String, context: SSHContext) async throws -> SFTPFileAttributes {
+        try Self.attributes(of: url(path), followingLinks: false)
     }
 
     func openFile(

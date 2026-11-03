@@ -168,7 +168,7 @@ public struct SFTPFileProvider: FileProvider {
         let file: SFTPFile
         do {
             if offset > 0 {
-                guard try await Self.resolvesToOwnName(temp, on: sftp) else {
+                guard try await Self.isNotALink(temp, on: sftp) else {
                     throw ProviderError.io(String(localized: "이어받을 임시 파일 자리에 링크가 있습니다: \(temp.string)"))
                 }
                 // Drop anything past the point the caller resumes from.
@@ -213,11 +213,10 @@ public struct SFTPFileProvider: FileProvider {
         return RemotePath(real)
     }
 
-    private static func resolvesToOwnName(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
-        guard let parent = path.parent else { return false }
-        async let real = sftp.getRealPath(atPath: path.string)
-        async let realParent = sftp.getRealPath(atPath: parent.string)
-        return try await RemotePath(real) == RemotePath(realParent).appending(path.name)
+    /// False also when the server's lstat does not say what `path` is.
+    private static func isNotALink(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
+        let type = try await sftp.getLinkAttributes(at: path.string).permissions.map { $0 & 0o170000 }
+        return type != nil && type != 0o120000
     }
 
     /// Truncates and rewrites the file itself. Not safe against a dropped
@@ -434,7 +433,7 @@ public struct SFTPFileProvider: FileProvider {
         } catch {
             let translated = Self.translate(error, path)
             if case ProviderError.notFound = translated { throw translated }
-            guard let sftp = try? await link.live().sftp, (try? await Self.resolvesToOwnName(path, on: sftp)) == true, let children = try? await list(path) else { throw translated }
+            guard let sftp = try? await link.live().sftp, (try? await Self.isNotALink(path, on: sftp)) == true, let children = try? await list(path) else { throw translated }
             for child in children {
                 try await delete(child.path)
             }
