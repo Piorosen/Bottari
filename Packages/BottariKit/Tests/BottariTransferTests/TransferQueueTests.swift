@@ -209,6 +209,34 @@ import Testing
         #expect(mac.text("/app.log") == "from a")
     }
 
+    @Test func twoJobsBoundForOneNameTakeTurnsSoTheSecondIsAClash() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "bottari-two-jobs-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let local = LocalFileProvider()
+        let into = RemotePath(folder.path)
+        server.addFile("/a/app.log", "from a")
+        server.addFile("/b/app.log", "from b, which is longer")
+        server.state.withLock { state in
+            state.chunkSize = 1
+            state.chunkDelay = .milliseconds(2)
+        }
+        let fromA = try await server.stat("/a/app.log")
+        let fromB = try await server.stat("/b/app.log")
+
+        let first = queue.enqueue(.copy, [fromA], from: TransferEndpoint(server), to: TransferEndpoint(local), into: into, policy: .skip)
+        let second = queue.enqueue(.copy, [fromB], from: TransferEndpoint(server), to: TransferEndpoint(local), into: into, policy: .skip)
+        _ = try await finished(first)
+        _ = try await finished(second)
+
+        #expect((first.failures + second.failures).map(\.message) == [])
+        #expect(first.state == .finished && second.state == .finished)
+        #expect(first.completedFiles + second.completedFiles == 1)
+        #expect(first.skippedFiles + second.skippedFiles == 1)
+        let written = try String(contentsOfFile: into.appending("app.log").string, encoding: .utf8)
+        #expect(written == (first.completedFiles == 1 ? "from a" : "from b, which is longer"))
+    }
+
     @Test func aFileNeverReplacesAFolder() async throws {
         mac.addFile("/assets", "a file")
         server.addFolder("/assets")

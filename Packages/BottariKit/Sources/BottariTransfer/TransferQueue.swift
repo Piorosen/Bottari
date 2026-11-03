@@ -442,9 +442,13 @@ public final class TransferQueue {
         return free
     }
 
+    /// Adds what `job` wrote to the listings of every job writing to the same
+    /// place, so that a later item bound for the name finds it as a clash.
     private func remember(_ item: FileItem, in job: TransferJob) {
         guard let parent = item.path.parent else { return }
-        job.listings[parent]?[job.nameMatching.key(item.name)] = item
+        for other in jobs where other.destination.provider.locationID == job.destination.provider.locationID {
+            other.listings[parent]?[other.nameMatching.key(item.name)] = item
+        }
         job.reserved.remove(item.path)
     }
 
@@ -470,7 +474,7 @@ public final class TransferQueue {
     private func pump() {
         var active = jobs.reduce(0) { $0 + $1.running.count }
         for job in jobs where job.state == .running || job.state == .preparing {
-            while active < maxConcurrentTransfers, let next = job.pending.firstIndex(where: { !job.isWriting(to: $0.destination) }) {
+            while active < maxConcurrentTransfers, let next = job.pending.firstIndex(where: { !isWriting(to: $0.destination, in: job) }) {
                 launch(job.pending.remove(at: next), in: job)
                 active += 1
             }
@@ -478,6 +482,11 @@ public final class TransferQueue {
                 finish(job)
             }
         }
+    }
+
+    /// Whether a running item of any job is bound for `destination` in the place `job` writes to.
+    private func isWriting(to destination: RemotePath, in job: TransferJob) -> Bool {
+        jobs.contains { $0.destination.provider.locationID == job.destination.provider.locationID && $0.isWriting(to: destination) }
     }
 
     private func launch(_ work: WorkItem, in job: TransferJob) {
