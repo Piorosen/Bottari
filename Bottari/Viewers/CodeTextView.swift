@@ -116,7 +116,7 @@ struct CodeTextView: NSViewRepresentable {
 }
 
 /// Switches the colour theme when the appearance changes.
-private final class ThemedTextView: NSTextView {
+private final class ThemedTextView: LineFeedTextView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         guard let storage = textStorage else { return }

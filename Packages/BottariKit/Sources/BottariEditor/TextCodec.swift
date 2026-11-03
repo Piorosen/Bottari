@@ -92,7 +92,7 @@ public enum TextCodec {
         }
     }
 
-    private static func withLF(_ text: String) -> String {
+    static func withLF(_ text: String) -> String {
         text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }
 

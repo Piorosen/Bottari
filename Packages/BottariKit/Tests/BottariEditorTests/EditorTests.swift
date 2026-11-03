@@ -205,3 +205,29 @@ struct CheckFailed: Error {}
         #expect(textView.string == "server text here")
     }
 }
+
+@MainActor @Suite struct PastedLineBreakTests {
+    @Test func pastedCRLFAndCRLinesComeInWithTheEditorsLineBreaks() {
+        let textView = LineFeedTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        textView.isRichText = false
+        textView.allowsUndo = true
+        let window = TextReplacementTests.Window()
+        window.undo.groupsByEvent = false
+        textView.delegate = window
+        textView.string = "x\n"
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.declareTypes([.string], owner: nil)
+        pasteboard.setString("a\r\nb\rc", forType: .string)
+
+        window.undo.beginUndoGrouping()
+        #expect(textView.readSelection(from: pasteboard))
+        window.undo.endUndoGrouping()
+
+        #expect(textView.string == "x\na\nb\nc")
+        #expect(textView.selectedRange() == NSRange(location: 7, length: 0))
+        window.undo.undo()
+        #expect(textView.string == "x\n")
+    }
+}
