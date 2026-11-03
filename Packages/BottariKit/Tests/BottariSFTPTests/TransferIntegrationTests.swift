@@ -159,6 +159,30 @@ import Testing
         #expect(job.skippedFiles == 1)
     }
 
+    @MainActor @Test func movingAFileOverItselfThroughALinkedFolderKeepsItWhereRealpathKeepsLinks() async throws {
+        let server = try await TestSFTPServer.start()
+        try server.makeDirectory("/d")
+        try server.makeFile("/d/a.txt", "a")
+        try FileManager.default.createSymbolicLink(atPath: server.url("/link").path, withDestinationPath: "d")
+        let provider = try await connect(server)
+        let job: TransferJob
+        do {
+            try #require(try await provider.link.live().sftp.getRealPath(atPath: "/link") == "/link")
+            let item = try await provider.stat("/d/a.txt")
+            job = try await ended(TransferQueue().enqueue(.move, [item], from: TransferEndpoint(provider), to: TransferEndpoint(provider), into: "/link", policy: .overwrite))
+        } catch {
+            await provider.disconnect()
+            await server.stop()
+            throw error
+        }
+        let kept = try? server.contents("/d/a.txt")
+        await provider.disconnect()
+        await server.stop()
+
+        #expect(kept == "a")
+        #expect(job.failures.map(\.message) == [])
+    }
+
     /// Mac → first server, first → second server, then a move from the second back to the Mac.
     @MainActor
     func transfer(between a: SFTPFileProvider, _ b: SFTPFileProvider, firstRoot: URL, secondRoot: URL, folder: URL, photo: Data) async throws {

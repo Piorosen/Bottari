@@ -385,7 +385,7 @@ import Testing
             try FileManager.default.createSymbolicLink(atPath: server.url("/locked/ext").path, withDestinationPath: server.url("/project").path)
             try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
             defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
-            try #require(try await provider.realPath("/locked/ext") == "/locked/ext")
+            try #require(try await provider.link.live().sftp.getRealPath(atPath: "/locked/ext") == "/locked/ext")
 
             await #expect(throws: ProviderError.self) {
                 try await provider.delete("/locked/ext")
@@ -396,12 +396,27 @@ import Testing
         }
     }
 
+    @Test func savingThroughALinkWritesTheFileItPointsToWhereRealpathKeepsLinks() async throws {
+        try await withConnection { server, provider in
+            try server.makeDirectory("/dotfiles")
+            try server.makeFile("/dotfiles/zshrc", "old")
+            try FileManager.default.createSymbolicLink(atPath: server.url("/.zshrc").path, withDestinationPath: "dotfiles/zshrc")
+            try #require(try await provider.link.live().sftp.getRealPath(atPath: "/.zshrc") == "/.zshrc")
+
+            try await provider.write("/.zshrc", data: Data("new".utf8))
+
+            #expect(try server.contents("/dotfiles/zshrc") == "new")
+            #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: server.url("/.zshrc").path)) == "dotfiles/zshrc")
+            #expect(try await provider.realPath("/.zshrc") == "/dotfiles/zshrc")
+        }
+    }
+
     @Test func aResumeIsNotWrittenThroughALinkAtThePartialNameWhereRealpathKeepsLinks() async throws {
         try await withConnection { server, provider in
             let partial = RemotePath("/up.txt").partialWritePath
             try server.makeFile("/victim.txt", "keep")
             try FileManager.default.createSymbolicLink(atPath: server.url(partial).path, withDestinationPath: server.url("/victim.txt").path)
-            try #require(try await provider.realPath(partial) == partial)
+            try #require(try await provider.link.live().sftp.getRealPath(atPath: partial.string) == partial.string)
 
             await #expect(throws: ProviderError.self) {
                 try await provider.write("/up.txt", from: AsyncThrowingStream { continuation in

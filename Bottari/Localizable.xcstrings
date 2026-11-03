@@ -4179,6 +4179,16 @@
         }
       }
     },
+    "링크가 너무 많이 이어집니다: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many links in a row: %@"
+          }
+        }
+      }
+    },
     "마우스 · 키보드": {
       "localizations": {
         "en": {

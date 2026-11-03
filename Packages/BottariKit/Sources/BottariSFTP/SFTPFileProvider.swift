@@ -140,10 +140,47 @@ public struct SFTPFileProvider: FileProvider {
 
     public func realPath(_ path: RemotePath) async throws -> RemotePath {
         do {
-            return RemotePath(try await link.retrying { try await $0.sftp.getRealPath(atPath: path.string) })
+            return try await link.retrying { connection in
+                if let real = try await Self.resolvingLinks(path, on: connection.sftp) { return real }
+                return RemotePath(try await connection.sftp.getRealPath(atPath: path.string))
+            }
         } catch {
             throw Self.translate(error, path)
         }
+    }
+
+    /// Links followed in a row before giving up, as Linux's SYMLOOP_MAX.
+    static let linksFollowedAtMost = 40
+
+    /// `path` with its links followed, or nil when the server's realpath
+    /// gives back no absolute path. OpenSSH's realpath follows links, but
+    /// some servers' only clean up the text, so each step of what it returns
+    /// is asked whether it is a link, and the first one found is followed here.
+    static func resolvingLinks(_ path: RemotePath, on sftp: SFTPClient) async throws -> RemotePath? {
+        var path = path
+        for _ in 0...linksFollowedAtMost {
+            let answer = try await sftp.getRealPath(atPath: path.string)
+            guard answer.hasPrefix("/") else { return nil }
+            let real = RemotePath(answer)
+            let steps = Array(real.lineage.dropFirst())
+            let firstLink = try await withThrowingTaskGroup(of: Int?.self) { group in
+                for (index, step) in steps.enumerated() {
+                    group.addTask {
+                        let type = try await sftp.getLinkAttributes(at: step.string).permissions.map { $0 & 0o170000 }
+                        return type == 0o120000 ? index : nil
+                    }
+                }
+                var links: [Int] = []
+                for try await index in group { if let index { links.append(index) } }
+                return links.min()
+            }
+            guard let firstLink else { return real }
+            let link = steps[firstLink]
+            let target = try await sftp.readSymbolicLink(at: link.string)
+            let rest = real.components.dropFirst(firstLink + 1).joined(separator: "/")
+            path = (target.hasPrefix("/") ? RemotePath(target) : (link.parent ?? .root).appending(target)).appending(rest)
+        }
+        throw ProviderError.io(String(localized: "링크가 너무 많이 이어집니다: \(path.string)"))
     }
 
     public func read(_ path: RemotePath, range: Range<Int64>?) -> AsyncThrowingStream<Data, any Error> {
@@ -214,9 +251,9 @@ public struct SFTPFileProvider: FileProvider {
     /// or `path` itself when it is no link or does not exist yet.
     static func followingLinks(_ path: RemotePath, on sftp: SFTPClient) async -> RemotePath {
         guard (try? await sftp.getAttributes(at: path.string)) != nil,
-              let real = try? await sftp.getRealPath(atPath: path.string), real.hasPrefix("/")
+              let real = try? await resolvingLinks(path, on: sftp)
         else { return path }
-        return RemotePath(real)
+        return real
     }
 
     /// False also when the server's lstat does not say what `path` is.
