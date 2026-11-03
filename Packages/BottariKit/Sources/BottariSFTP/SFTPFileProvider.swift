@@ -132,7 +132,7 @@ public struct SFTPFileProvider: FileProvider {
                 async let own = sftp.getLinkAttributes(at: path.string)
                 return try await (target, own)
             }
-            return Self.item(path, target, isSymbolicLink: own.permissions.map { $0 & 0o170000 } == 0o120000)
+            return Self.item(path, target, isSymbolicLink: own.isSymbolicLink)
         } catch {
             throw Self.translate(error, path)
         }
@@ -166,8 +166,7 @@ public struct SFTPFileProvider: FileProvider {
             let firstLink = try await withThrowingTaskGroup(of: Int?.self) { group in
                 for (index, step) in steps.enumerated() {
                     group.addTask {
-                        let type = try await sftp.getLinkAttributes(at: step.string).permissions.map { $0 & 0o170000 }
-                        return type == 0o120000 ? index : nil
+                        try await sftp.getLinkAttributes(at: step.string).isSymbolicLink ? index : nil
                     }
                 }
                 var links: [Int] = []
@@ -258,8 +257,8 @@ public struct SFTPFileProvider: FileProvider {
 
     /// False also when the server's lstat does not say what `path` is.
     private static func isNotALink(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
-        let type = try await sftp.getLinkAttributes(at: path.string).permissions.map { $0 & 0o170000 }
-        return type != nil && type != 0o120000
+        let own = try await sftp.getLinkAttributes(at: path.string)
+        return own.fileType != nil && !own.isSymbolicLink
     }
 
     /// Truncates and rewrites the file itself. Not safe against a dropped
@@ -742,4 +741,12 @@ public struct SFTPFileProvider: FileProvider {
         default: .io(message.isEmpty ? String(localized: "SFTP 오류: \(String(describing: code))") : message)
         }
     }
+}
+
+private extension SFTPFileAttributes {
+    /// The file-type bits of the mode, nil when the server sent no mode.
+    var fileType: UInt32? { permissions.map { $0 & 0o170000 } }
+
+    /// Only meaningful for attributes from lstat, which describe a link itself.
+    var isSymbolicLink: Bool { fileType == 0o120000 }
 }

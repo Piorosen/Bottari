@@ -114,7 +114,8 @@ final class PaneModel {
     /// such as a link the listing left unfollowed.
     private func listedID(_ path: RemotePath, isDirectory: Bool) -> FileItem.ID {
         let here = items.filter { $0.path == path }
-        return (here.first { $0.isDirectory == isDirectory } ?? here.first)?.id ?? FileItem.ID(path: path, isDirectory: isDirectory)
+        let listed = here.first { $0.isDirectory == isDirectory } ?? here.first
+        return listed?.id ?? FileItem.ID(path: path, isDirectory: isDirectory)
     }
     var canGoBack: Bool { !backStack.isEmpty || path.parent != nil }
     var canGoForward: Bool { !forwardStack.isEmpty }
