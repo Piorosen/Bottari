@@ -8,7 +8,7 @@ import Observation
 /// watched, and uploaded again each time the other app saves them.
 @Observable
 final class ExternalEdits {
-    static let shared = ExternalEdits()
+    static let shared = ExternalEdits(folder: URL.cachesDirectory.appending(path: "io.github.piorosen.bottari/editing"))
 
     @Observable
     final class Session: Identifiable {
@@ -41,7 +41,15 @@ final class ExternalEdits {
     }
 
     private(set) var sessions: [Session] = []
-    private let folder = URL.cachesDirectory.appending(path: "io.github.piorosen.bottari/editing")
+    /// Where the copies are kept, one folder per session.
+    private let folder: URL
+    /// Opens a file in the app the Mac opens it with.
+    private let openFile: (URL) -> Void
+
+    init(folder: URL, openFile: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+        self.folder = folder
+        self.openFile = openFile
+    }
 
     func uses(_ provider: any FileProvider) -> Bool {
         guard let server = provider as? SFTPFileProvider else { return false }
@@ -52,11 +60,11 @@ final class ExternalEdits {
     /// read-only site's files open without uploading; PROD asks once first.
     func start(item: FileItem, provider: any FileProvider, site: SavedSite?) {
         if provider.isLocal {
-            NSWorkspace.shared.open(URL(fileURLWithPath: item.path.string))
+            openFile(URL(fileURLWithPath: item.path.string))
             return
         }
         if let existing = sessions.first(where: { $0.item.path == item.path && $0.provider.locationID == provider.locationID }) {
-            NSWorkspace.shared.open(existing.localURL)
+            openFile(existing.localURL)
             return
         }
         if site?.confirmsWrites == true, site?.readOnly != true {
@@ -113,6 +121,13 @@ final class ExternalEdits {
         AppServices.connections.closeUnused()
     }
 
+    /// Ends every session and deletes the copies, with any a crashed run left
+    /// behind: after a quit nothing watches them or sends their changes.
+    func endAll() {
+        sessions.forEach(finish)
+        try? FileManager.default.removeItem(at: folder)
+    }
+
     /// Uploads despite the server's copy having changed.
     func uploadAnyway(_ session: Session) {
         session.blockedByServerChange = false
@@ -130,7 +145,7 @@ final class ExternalEdits {
             session.localModified = modificationDate(of: session.localURL)
             watch(session)
             session.status = session.site?.readOnly == true ? String(localized: "읽기 전용 · 업로드 안 함") : String(localized: "편집 중 · 저장 시 업로드")
-            NSWorkspace.shared.open(session.localURL)
+            openFile(session.localURL)
         } catch {
             session.status = String(localized: "열 수 없음: \(error.localizedDescription)")
         }
