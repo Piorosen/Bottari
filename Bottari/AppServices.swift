@@ -31,7 +31,7 @@ enum AppServices {
     static let transferRecords = TransferRecords(
         fileURL: supportDirectory.appending(path: "transfers.json"),
         queue: transfers,
-        saves: !AppDelegate.isRenderingSnapshots
+        saves: !AppDelegate.leavesUserDataAlone
     )
 
     static let connections = ConnectionKeeper()

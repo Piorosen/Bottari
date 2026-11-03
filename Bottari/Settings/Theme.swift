@@ -144,9 +144,9 @@ final class ThemeStore {
     private init() {
         // Snapshots draw the default look (or the preset `-showcaseTheme N`
         // names) and leave the user's files alone.
-        current = AppDelegate.isRenderingSnapshots ? Self.showcasePreset
+        current = AppDelegate.leavesUserDataAlone ? Self.showcasePreset
             : (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Theme.self, from: $0) } ?? Theme.presets[0].theme
-        if !AppDelegate.isRenderingSnapshots { reloadSaved() }
+        if !AppDelegate.leavesUserDataAlone { reloadSaved() }
     }
 
     private static var showcasePreset: Theme {
@@ -295,7 +295,7 @@ final class ThemeStore {
     }
 
     private func save() {
-        guard !AppDelegate.isRenderingSnapshots else { return }
+        guard !AppDelegate.leavesUserDataAlone else { return }
         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? Self.encoder.encode(current).write(to: file, options: .atomic)
         settingsChanged()

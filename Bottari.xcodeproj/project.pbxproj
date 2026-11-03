@@ -16,14 +16,30 @@
 		B0771A0000000000000000A7 /* BottariCloud in Frameworks */ = {isa = PBXBuildFile; productRef = B0771A0000000000000000C7 /* BottariCloud */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		B0771A000000000000000271 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B0771A000000000000000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B0771A000000000000000040;
+			remoteInfo = Bottari;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		B0771A000000000000000010 /* Bottari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bottari.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0771A000000000000000210 /* BottariTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BottariTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B0771A000000000000000020 /* Bottari */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Bottari;
+			sourceTree = "<group>";
+		};
+		B0771A000000000000000220 /* BottariTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BottariTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -43,6 +59,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B0771A000000000000000230 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -50,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				B0771A000000000000000020 /* Bottari */,
+				B0771A000000000000000220 /* BottariTests */,
 				B0771A000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -58,6 +82,7 @@
 			isa = PBXGroup;
 			children = (
 				B0771A000000000000000010 /* Bottari.app */,
+				B0771A000000000000000210 /* BottariTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +120,27 @@
 			productReference = B0771A000000000000000010 /* Bottari.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B0771A000000000000000240 /* BottariTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0771A000000000000000260 /* Build configuration list for PBXNativeTarget "BottariTests" */;
+			buildPhases = (
+				B0771A000000000000000241 /* Sources */,
+				B0771A000000000000000230 /* Frameworks */,
+				B0771A000000000000000242 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B0771A000000000000000272 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B0771A000000000000000220 /* BottariTests */,
+			);
+			name = BottariTests;
+			productName = BottariTests;
+			productReference = B0771A000000000000000210 /* BottariTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -107,6 +153,10 @@
 				TargetAttributes = {
 					B0771A000000000000000040 = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					B0771A000000000000000240 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = B0771A000000000000000040;
 					};
 				};
 			};
@@ -129,12 +179,20 @@
 			projectRoot = "";
 			targets = (
 				B0771A000000000000000040 /* Bottari */,
+				B0771A000000000000000240 /* BottariTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		B0771A000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0771A000000000000000242 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -173,7 +231,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B0771A000000000000000241 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B0771A000000000000000272 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B0771A000000000000000040 /* Bottari */;
+			targetProxy = B0771A000000000000000271 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B0771A000000000000000052 /* Debug */ = {
@@ -296,6 +369,38 @@
 			};
 			name = Release;
 		};
+		B0771A000000000000000261 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari.appstore.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Bottari.app/Contents/MacOS/Bottari";
+			};
+			name = Debug;
+		};
+		B0771A000000000000000262 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.piorosen.bottari.appstore.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Bottari.app/Contents/MacOS/Bottari";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -313,6 +418,15 @@
 			buildConfigurations = (
 				B0771A000000000000000061 /* Debug */,
 				B0771A000000000000000062 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0771A000000000000000260 /* Build configuration list for PBXNativeTarget "BottariTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0771A000000000000000261 /* Debug */,
+				B0771A000000000000000262 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

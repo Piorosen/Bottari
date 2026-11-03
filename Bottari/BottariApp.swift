@@ -3,6 +3,20 @@ import BottariCore
 import SwiftUI
 
 @main
+enum Launch {
+    /// The app is hosting a test run, which gets a bare application: no
+    /// windows, no menu bar item, and nothing of the user's loaded or saved.
+    static let hostsTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
+    static func main() {
+        if hostsTests {
+            NSApplication.shared.run()
+        } else {
+            BottariApp.main()
+        }
+    }
+}
+
 struct BottariApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
@@ -22,7 +36,7 @@ struct BottariApp: App {
             }
             #endif
             // Rendering snapshots lists no real folders at all.
-            if !AppDelegate.isRenderingSnapshots {
+            if !AppDelegate.leavesUserDataAlone {
                 MainWindow()
                     .themed()
             }
@@ -77,7 +91,7 @@ struct BottariApp: App {
         MenuBarExtra(
             String(localized: "Bottari 터널"),
             systemImage: TunnelStore.shared.activeCount > 0 ? "point.3.filled.connected.trianglepath.dotted" : "point.3.connected.trianglepath.dotted",
-            isInserted: Binding(get: { !AppDelegate.isRenderingSnapshots && !TunnelStore.shared.profiles.isEmpty }, set: { _ in })
+            isInserted: Binding(get: { !AppDelegate.leavesUserDataAlone && !TunnelStore.shared.profiles.isEmpty }, set: { _ in })
         ) {
             TunnelMenu()
         }
@@ -113,12 +127,14 @@ struct BottariApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Snapshots or the showcase: sample data only, and nothing saved.
-    static var isRenderingSnapshots: Bool {
+    /// Snapshots, the showcase or a test run: sample data only, and nothing
+    /// of the user's read or saved.
+    static var leavesUserDataAlone: Bool {
+        if Launch.hostsTests { return true }
         #if DEBUG
-        SnapshotRenderer.outputDirectory != nil || SnapshotRenderer.isShowcase
+        return SnapshotRenderer.outputDirectory != nil || SnapshotRenderer.isShowcase
         #else
-        false
+        return false
         #endif
     }
 
@@ -143,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Quitting mid-transfer is fine, since the transfer carries on next time,
     /// but say so first.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !Self.isRenderingSnapshots else { return .terminateNow }
+        guard !Self.leavesUserDataAlone else { return .terminateNow }
         let unsaved = Viewers.unsavedEditors.map(\.item.name) + ExternalEdits.shared.unsent.map(\.item.name)
         if !unsaved.isEmpty {
             let alert = NSAlert()
@@ -170,7 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        guard !Self.isRenderingSnapshots else { return }
+        guard !Self.leavesUserDataAlone else { return }
         AppServices.transferRecords.saveNow()
     }
 }

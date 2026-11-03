@@ -19,7 +19,7 @@ struct Sidebar: View {
     ]
 
     /// Pictures of sample data name no real Mac.
-    private static let computerName = AppDelegate.isRenderingSnapshots
+    private static let computerName = AppDelegate.leavesUserDataAlone
         ? "MacBook Pro"
         : SCDynamicStoreCopyComputerName(nil, nil) as String? ?? String(localized: "이 Mac")
 

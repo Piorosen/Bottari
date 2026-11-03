@@ -194,7 +194,7 @@ final class Keymap {
         didSet {
             guard saved != oldValue else { return }
             Self.refreshMenus()
-            guard !AppDelegate.isRenderingSnapshots else { return }
+            guard !AppDelegate.leavesUserDataAlone else { return }
             UserDefaults.standard.set(try? JSONEncoder().encode(saved), forKey: Self.key)
             settingsChanged()
         }
@@ -228,7 +228,7 @@ final class Keymap {
     ]
 
     private init() {
-        saved = AppDelegate.isRenderingSnapshots ? Saved() : UserDefaults.standard.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) } ?? Saved()
+        saved = AppDelegate.leavesUserDataAlone ? Saved() : UserDefaults.standard.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) } ?? Saved()
     }
 
     /// Switching the base layout keeps shortcuts the user set by hand; picking
