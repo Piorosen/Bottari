@@ -109,10 +109,10 @@ final class PaneModel {
         (showsSearchResults ? searchResults : items).filter { ids.contains($0.id) }
     }
 
-    private func listedID(_ path: RemotePath, isDirectory: Bool) -> FileItem.ID {
+    private func listedID(_ path: RemotePath, preferringDirectory: Bool) -> FileItem.ID {
         let here = items.filter { $0.path == path }
-        let listed = here.first { $0.isDirectory == isDirectory } ?? here.first
-        return listed?.id ?? FileItem.ID(path: path, isDirectory: isDirectory)
+        let listed = here.first { $0.isDirectory == preferringDirectory } ?? here.first
+        return listed?.id ?? FileItem.ID(path: path, isDirectory: preferringDirectory)
     }
     var canGoBack: Bool { !backStack.isEmpty || path.parent != nil }
     var canGoForward: Bool { !forwardStack.isEmpty }
@@ -241,7 +241,7 @@ final class PaneModel {
         if await load(previous) == .shown {
             backStack.removeLast()
             forwardStack.append(origin)
-            selection = [listedID(origin, isDirectory: true)]
+            selection = [listedID(origin, preferringDirectory: true)]
         }
     }
 
@@ -259,7 +259,7 @@ final class PaneModel {
         guard let parent = path.parent else { return }
         let child = path
         await open(parent)
-        if path == parent { selection = [listedID(child, isDirectory: true)] }
+        if path == parent { selection = [listedID(child, preferringDirectory: true)] }
     }
 
     /// Double-click or Return: folders open; files get previews and editors in later steps.
@@ -440,7 +440,7 @@ final class PaneModel {
             return
         }
         await reload()
-        let created = listedID(folder, isDirectory: true)
+        let created = listedID(folder, preferringDirectory: true)
         selection = [created]
         renaming = created
     }
@@ -472,7 +472,7 @@ final class PaneModel {
             }
         }
         await reload()
-        selection = [listedID(target, isDirectory: item.isDirectory)]
+        selection = [listedID(target, preferringDirectory: item.isDirectory)]
     }
 
     /// Which items under a chosen folder a permission change reaches.
@@ -532,7 +532,7 @@ final class PaneModel {
         }
         endSearch()
         await reload()
-        let made = listedID(link, isDirectory: item.isDirectory)
+        let made = listedID(link, preferringDirectory: item.isDirectory)
         selection = [made]
         renaming = made
     }
@@ -567,7 +567,7 @@ final class PaneModel {
         await runOnServer {
             try await server.compress(chosen.map(\.path), into: archive)
         }
-        selection = [listedID(archive, isDirectory: false)]
+        selection = [listedID(archive, preferringDirectory: false)]
     }
 
     /// Unpacks an archive into a new folder named after it.
@@ -578,7 +578,7 @@ final class PaneModel {
         await runOnServer {
             try await server.extract(archive.path, into: folder)
         }
-        selection = [listedID(folder, isDirectory: true)]
+        selection = [listedID(folder, preferringDirectory: true)]
     }
 
     private func runOnServer(_ work: () async throws -> Void) async {

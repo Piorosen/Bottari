@@ -19,7 +19,7 @@ struct ExternalEditsTests {
         let copy = try #require(opened.first)
         #expect(FileManager.default.fileExists(atPath: copy.path))
 
-        edits.endAll()
+        edits.endAllAndDeleteCopies()
 
         #expect(edits.sessions.isEmpty)
         #expect(FileManager.default.fileExists(atPath: copy.path) == false)
@@ -33,7 +33,7 @@ struct ExternalEditsTests {
         try FileManager.default.createDirectory(at: leftover.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("API_KEY=secret".utf8).write(to: leftover)
 
-        ExternalEdits(folder: folder, openFile: { _ in }).endAll()
+        ExternalEdits(folder: folder, openFile: { _ in }).endAllAndDeleteCopies()
 
         #expect(FileManager.default.fileExists(atPath: leftover.path) == false)
     }

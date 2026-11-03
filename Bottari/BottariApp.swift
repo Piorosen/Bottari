@@ -149,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ThemeStore.shared.applyAppearance()
         SettingsSync.shared.start()
         _ = AppServices.transferRecords
-        ExternalEdits.shared.endAll()
+        ExternalEdits.shared.endAllAndDeleteCopies()
     }
 
     /// Edits not yet on their server would be lost, so quitting asks first.
@@ -185,6 +185,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         guard !Self.leavesUserDataAlone else { return }
         AppServices.transferRecords.saveNow()
-        ExternalEdits.shared.endAll()
+        ExternalEdits.shared.endAllAndDeleteCopies()
     }
 }

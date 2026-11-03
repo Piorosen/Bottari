@@ -353,7 +353,7 @@ public final class TransferQueue {
                 fail(item, error.localizedDescription, retry: rescan, in: job)
                 return
             }
-            remember(FileItem(path: destination, kind: .directory), in: job)
+            remember(FileItem(path: destination, kind: .directory), inEveryJobWritingWhere: job)
             job.listings[destination] = [:]
             await planContents(of: item, into: destination, in: job, throughMac: throughMac)
         }
@@ -442,9 +442,9 @@ public final class TransferQueue {
         return free
     }
 
-    private func remember(_ item: FileItem, in job: TransferJob) {
+    private func remember(_ item: FileItem, inEveryJobWritingWhere job: TransferJob) {
         guard let parent = item.path.parent else { return }
-        for other in jobs where other.destination.provider.locationID == job.destination.provider.locationID {
+        for other in jobs(writingWhere: job) {
             other.listings[parent]?[other.nameMatching.key(item.name)] = item
         }
         job.reserved.remove(item.path)
@@ -472,7 +472,7 @@ public final class TransferQueue {
     private func pump() {
         var active = jobs.reduce(0) { $0 + $1.running.count }
         for job in jobs where job.state == .running || job.state == .preparing {
-            while active < maxConcurrentTransfers, let next = job.pending.firstIndex(where: { !isWriting(to: $0.destination, in: job) }) {
+            while active < maxConcurrentTransfers, let next = job.pending.firstIndex(where: { !isWriting(to: $0.destination, inAnyJobWritingWhere: job) }) {
                 launch(job.pending.remove(at: next), in: job)
                 active += 1
             }
@@ -482,8 +482,12 @@ public final class TransferQueue {
         }
     }
 
-    private func isWriting(to destination: RemotePath, in job: TransferJob) -> Bool {
-        jobs.contains { $0.destination.provider.locationID == job.destination.provider.locationID && $0.isWriting(to: destination) }
+    private func isWriting(to destination: RemotePath, inAnyJobWritingWhere job: TransferJob) -> Bool {
+        jobs(writingWhere: job).contains { $0.isWriting(to: destination) }
+    }
+
+    private func jobs(writingWhere job: TransferJob) -> [TransferJob] {
+        jobs.filter { $0.destination.provider.locationID == job.destination.provider.locationID }
     }
 
     private func launch(_ work: WorkItem, in job: TransferJob) {
@@ -608,7 +612,7 @@ public final class TransferQueue {
             case .scan:
                 break
             }
-            remember(FileItem(path: work.destination, kind: work.source.kind, size: work.source.size, modified: work.source.modified), in: job)
+            remember(FileItem(path: work.destination, kind: work.source.kind, size: work.source.size, modified: work.source.modified), inEveryJobWritingWhere: job)
             if job.kind == .move, work.action == .stream || work.action == .direct {
                 do {
                     try await source.delete(work.source.path)

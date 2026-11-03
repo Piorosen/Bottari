@@ -138,18 +138,7 @@ public struct LocalFileProvider: FileProvider {
     }
 
     private static func copyExtendedAttributes(from source: RemotePath, to destination: RemotePath) {
-        let length = listxattr(source.string, nil, 0, XATTR_NOFOLLOW)
-        guard length > 0 else { return }
-        var names = [CChar](repeating: 0, count: length)
-        let listed = listxattr(source.string, &names, length, XATTR_NOFOLLOW)
-        guard listed > 0 else { return }
-        for name in names.prefix(listed).split(separator: 0).map({ String(cString: Array($0) + [0]) }) {
-            let size = getxattr(source.string, name, nil, 0, 0, XATTR_NOFOLLOW)
-            guard size >= 0 else { continue }
-            var value = [UInt8](repeating: 0, count: size)
-            guard getxattr(source.string, name, &value, size, 0, XATTR_NOFOLLOW) == size else { continue }
-            setxattr(destination.string, name, value, size, 0, XATTR_NOFOLLOW)
-        }
+        copyfile(source.string, destination.string, nil, copyfile_flags_t(COPYFILE_XATTR | COPYFILE_NOFOLLOW))
     }
 
     private static func followingLinks(_ path: RemotePath) -> RemotePath {

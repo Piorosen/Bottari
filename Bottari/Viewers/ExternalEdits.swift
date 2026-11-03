@@ -119,7 +119,7 @@ final class ExternalEdits {
         AppServices.connections.closeUnused()
     }
 
-    func endAll() {
+    func endAllAndDeleteCopies() {
         sessions.forEach(finish)
         try? FileManager.default.removeItem(at: folder)
     }

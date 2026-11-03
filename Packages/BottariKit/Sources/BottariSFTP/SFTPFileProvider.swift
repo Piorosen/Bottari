@@ -206,7 +206,7 @@ public struct SFTPFileProvider: FileProvider {
         let file: SFTPFile
         do {
             if offset > 0 {
-                guard try await Self.isNotALink(temp, on: sftp) else {
+                guard try await Self.isKnownNotALink(temp, on: sftp) else {
                     throw ProviderError.io(String(localized: "이어받을 임시 파일 자리에 링크가 있습니다: \(temp.string)"))
                 }
                 // Drop anything past the point the caller resumes from.
@@ -251,7 +251,7 @@ public struct SFTPFileProvider: FileProvider {
         return real
     }
 
-    private static func isNotALink(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
+    private static func isKnownNotALink(_ path: RemotePath, on sftp: SFTPClient) async throws -> Bool {
         let own = try await sftp.getLinkAttributes(at: path.string)
         return own.fileType != nil && !own.isSymbolicLink
     }
@@ -470,7 +470,7 @@ public struct SFTPFileProvider: FileProvider {
         } catch {
             let translated = Self.translate(error, path)
             if case ProviderError.notFound = translated { throw translated }
-            guard let sftp = try? await link.live().sftp, (try? await Self.isNotALink(path, on: sftp)) == true, let children = try? await list(path) else { throw translated }
+            guard let sftp = try? await link.live().sftp, (try? await Self.isKnownNotALink(path, on: sftp)) == true, let children = try? await list(path) else { throw translated }
             for child in children {
                 try await delete(child.path)
             }
